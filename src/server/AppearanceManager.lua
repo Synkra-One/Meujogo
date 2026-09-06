@@ -35,6 +35,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local AssetRegistry = require(ReplicatedStorage.Modules.AssetRegistry)
+local LoadoutData = require(ReplicatedStorage.Modules.LoadoutData)
 
 local AppearanceManager = {}
 
@@ -108,16 +109,33 @@ local roleAppearanceHandlers: { [string]: (Model) -> () } = {
 ]]
 function AppearanceManager.ApplyAppearance(player: Player)
 	local role = player:GetAttribute("Role")
-	if type(role) ~= "string" then
-		return
-	end
-
 	local character = player.Character
 	if not character then
 		return
 	end
 
-	local handler = roleAppearanceHandlers[role]
+	local existing = character:FindFirstChild("LoadoutVest")
+	if existing then existing:Destroy() end
+	local skin = LoadoutData.GetSkin(player:GetAttribute("SkinId"))
+	local torso = findTorso(character)
+	if skin and skin.Color and torso and role ~= GameConfig.Roles.Monster then
+		local vest = Instance.new("Part")
+		vest.Name = "LoadoutVest"
+		vest.Size = torso.Size * Vector3.new(1.04, 0.8, 1.12)
+		vest.CFrame = torso.CFrame
+		vest.Color = skin.Color
+		vest.Material = Enum.Material.Fabric
+		vest.CanCollide = false
+		vest.CanTouch = false
+		vest.CanQuery = false
+		vest.Massless = true
+		vest.Parent = character
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0 = torso
+		weld.Part1 = vest
+		weld.Parent = vest
+	end
+	local handler = if type(role) == "string" then roleAppearanceHandlers[role] else nil
 	if handler then
 		handler(character)
 	end
@@ -125,6 +143,12 @@ end
 
 local function watchPlayer(player: Player)
 	player.CharacterAdded:Connect(function()
+		AppearanceManager.ApplyAppearance(player)
+	end)
+	player.CharacterAppearanceLoaded:Connect(function()
+		AppearanceManager.ApplyAppearance(player)
+	end)
+	player:GetAttributeChangedSignal("SkinId"):Connect(function()
 		AppearanceManager.ApplyAppearance(player)
 	end)
 

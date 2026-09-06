@@ -104,8 +104,8 @@
         "StartPrompt": {
           "$className": "ProximityPrompt",
           "$properties": {
-            "ActionText": "Iniciar Partida",
-            "ObjectText": "Lobby",
+            "ActionText": "Entrar na sala",
+            "ObjectText": "Preparação da partida",
             "MaxActivationDistance": 10
           }
         }

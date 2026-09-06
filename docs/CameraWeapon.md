@@ -1,5 +1,8 @@
 # CameraWeapon — câmera de ombro + armas em terceira pessoa
 
+> Histórico: este controlador foi removido. A integração atual, somente da
+> pistola, está em [PistolaOTS.md](PistolaOTS.md). Não siga os passos de instalação abaixo.
+
 Sistema unificado nascido da fusão de dois módulos que estavam na pasta do jogo:
 
 | Origem | O que foi aproveitado | O que foi descartado |

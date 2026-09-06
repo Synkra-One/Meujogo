@@ -85,7 +85,7 @@ GameConfig.Bandagem = {
 	MoveCancelDistance = 6, -- se CancelOnMove: quanto pode andar antes de cancelar
 
 	-- Animação "Healing (L4D2)" reeditada e republicada na conta do dono.
-	AnimationId = "rbxassetid://88341578553227",
+	AnimationId = "rbxassetid://87240791271451",
 	AnimationFadeTime = 0.2,
 }
 
@@ -377,6 +377,8 @@ GameConfig.Confront = {
 --------------------------------------------------------------------------------
 
 GameConfig.Round = {
+	-- A contagem só corre com o mínimo de participantes e todos prontos.
+	WaitingCountdown = 10,
 	-- Monstro vence quando a quantidade de Sobreviventes VIVOS chega a este
 	-- número (0 = precisa eliminar todos). Espião não conta como Sobrevivente.
 	MonsterWinsAtSurvivorsAlive = 0,
@@ -506,6 +508,10 @@ GameConfig.Testing = {
 	-- (WeaponSpawner.lua / GameConfig.Firearms.WorldSpawns).
 	-- Pra depurar sem procurar arma no mapa, ponha { "Glock17" } aqui.
 	GiveTestWeapons = {} :: { string },
+
+	-- Bancada à direita do LobbySpawn: uma Glock17 e caixa de 34 cartuchos.
+	-- Arma de treino só causa dano no alvo. false remove a bancada no próximo Play.
+	LobbyPistol = true,
 }
 
 return GameConfig

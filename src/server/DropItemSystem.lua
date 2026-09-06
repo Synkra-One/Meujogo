@@ -67,6 +67,7 @@ local function makeGroundReady(tool: Tool)
 	if handle then
 		tool:SetAttribute("_DropOrigCanCollide", handle.CanCollide)
 		tool:SetAttribute("_DropOrigCanTouch", handle.CanTouch)
+		tool:SetAttribute("_DropOrigAnchored", handle.Anchored)
 		handle.CanCollide = true
 		handle.CanTouch = false
 	end
@@ -77,11 +78,14 @@ local function restoreFromGround(tool: Tool)
 	if handle then
 		local origCollide = tool:GetAttribute("_DropOrigCanCollide")
 		local origTouch = tool:GetAttribute("_DropOrigCanTouch")
+		local origAnchored = tool:GetAttribute("_DropOrigAnchored")
 		handle.CanCollide = if type(origCollide) == "boolean" then origCollide else false
 		handle.CanTouch = if type(origTouch) == "boolean" then origTouch else true
+		handle.Anchored = if type(origAnchored) == "boolean" then origAnchored else false
 	end
 	tool:SetAttribute("_DropOrigCanCollide", nil)
 	tool:SetAttribute("_DropOrigCanTouch", nil)
+	tool:SetAttribute("_DropOrigAnchored", nil)
 	tool:SetAttribute("_Dropped", nil)
 end
 
@@ -114,8 +118,22 @@ local function attachPickupPrompt(tool: Tool)
 		end
 
 		local backpack = player:FindFirstChildOfClass("Backpack")
-		if not backpack then
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if not backpack or not root or not root:IsA("BasePart") or not humanoid or humanoid.Health <= 0
+			or (root.Position - handle.Position).Magnitude > PICKUP_DISTANCE + 2 then
 			return
+		end
+		if tool:GetAttribute("LobbyTestWeapon") == true then
+			if player:GetAttribute("InRound") == true or player:GetAttribute("InWaitingRoom") == true then return end
+			local count = 0
+			for _, item in backpack:GetChildren() do if item:IsA("Tool") then count += 1 end end
+			if character and character:FindFirstChildOfClass("Tool") then count += 1 end
+			if count >= 3 then
+				Remotes.LobbyMessage:FireClient(player, "Libere um dos 3 espaços da mochila para pegar a pistola.")
+				return
+			end
 		end
 
 		prompt:Destroy()
@@ -138,7 +156,15 @@ function DropItemSystem.PlaceInWorld(tool: Tool, cframe: CFrame, parent: Instanc
 
 	local handle = getHandle(tool)
 	if handle then
-		handle.CFrame = cframe
+		-- PrimaryPart = Handle faz GetPivot()/PivotTo() usarem o Handle como
+		-- referência exata -- sem isso, o pivot padrão de um Model vem do
+		-- bounding box (não do Handle), e a Tool acaba deslocada/rotacionada
+		-- errado (podendo cravar dentro do chão, invisível e impossível de
+		-- pegar, mesmo com o WeldConstraint segurando as peças certinho).
+		if not tool.PrimaryPart then
+			tool.PrimaryPart = handle
+		end
+		tool:PivotTo(cframe)
 		handle.AssemblyLinearVelocity = Vector3.zero
 	end
 

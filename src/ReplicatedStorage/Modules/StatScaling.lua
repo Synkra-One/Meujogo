@@ -24,10 +24,17 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
 local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
+local LoadoutData = require(ReplicatedStorage.Modules.LoadoutData)
 
 local StatScaling = {}
 
 local CFG = GameConfig.Characters
+
+local function perkMultiplier(player: Player?, key: string): number
+	if not player or player:GetAttribute("InRound") ~= true then return 1 end
+	local perk = LoadoutData.GetPerk(player:GetAttribute("PerkId"))
+	return if perk then (perk :: any)[key] or 1 else 1
+end
 
 -- Prefixo dos Attributes no Player (ver CharacterStatsApplier).
 StatScaling.AttributePrefix = "Stat_"
@@ -91,7 +98,7 @@ end
 
 --[[ Stamina -> quanto de fôlego volta por segundo. ]]
 function StatScaling.StaminaRegen(player: Player?): number
-	return StatScaling.Lerp(StatScaling.Of(player, "Stamina"), CFG.StaminaRegen)
+	return StatScaling.Lerp(StatScaling.Of(player, "Stamina"), CFG.StaminaRegen) * perkMultiplier(player, "StaminaRegen")
 end
 
 --[[ Compostura -> vida máxima. ]]
@@ -101,7 +108,7 @@ end
 
 --[[ Compostura -> multiplicador do dano RECEBIDO (menor = mais resistente). ]]
 function StatScaling.DamageTakenMultiplier(player: Player?): number
-	return StatScaling.Lerp(StatScaling.Of(player, "Compostura"), CFG.DamageTaken)
+	return StatScaling.Lerp(StatScaling.Of(player, "Compostura"), CFG.DamageTaken) * perkMultiplier(player, "DamageTaken")
 end
 
 --[[ Força -> multiplicador do dano CAUSADO. ]]
@@ -116,7 +123,7 @@ end
 
 --[[ Reparo -> multiplicador de progresso de objetivo (Jangada / Rádio). ]]
 function StatScaling.RepairMultiplier(player: Player?): number
-	return StatScaling.Lerp(StatScaling.Of(player, "Reparo"), CFG.RepairSpeed)
+	return StatScaling.Lerp(StatScaling.Of(player, "Reparo"), CFG.RepairSpeed) * perkMultiplier(player, "Repair")
 end
 
 --[[ Sorte -> multiplicador da QUANTIDADE de itens que sai de uma caixa. ]]

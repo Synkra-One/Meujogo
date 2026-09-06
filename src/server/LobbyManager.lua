@@ -1,7 +1,7 @@
 --!strict
 --[[
 	LobbyManager
-	Dono do ciclo "Lobby -> Ilha -> Lobby".
+	Cuida do lobby e dos teleportes: Lobby -> Sala de espera -> Ilha -> Lobby.
 
 	SPAWN INICIAL: "LobbySpawn" é a ÚNICA SpawnLocation do jogo -- os pontos
 	da ilha (IlhaSpawns) são Parts comuns, não SpawnLocations. O próprio
@@ -25,11 +25,11 @@
 
 	FLUXO
 	  1) Jogador interage com o Part "IniciarPartida" (ProximityPrompt).
-	  2) Validam-se, nesta ordem: autorização (modo de teste, ver abaixo),
-	     partida já em andamento, jogadores de menos, jogadores de mais.
-	     Qualquer falha manda uma LobbyMessage só pra quem interagiu.
-	  3) Se passou: task.spawn(RoundManager.StartRound) -- StartRound
-	     BLOQUEIA até a partida acabar, por isso o task.spawn.
+	  2) WaitingRoomManager valida a abertura pelo host, a fase e as vagas;
+	     teleporta apenas quem interagiu para a sala de espera.
+	  3) Na sala, cada participante escolhe personagem, skin e perk e marca
+	     Pronto. Com o mínimo e todos prontos, inicia a contagem. Só os membros
+	     da sala são enviados a RoundManager.StartRound(participants).
 	  4) RoundManager.RoundPrepared dispara logo depois do LoadCharacter de
 	     todo mundo (ainda no Lobby, já que LoadCharacter manda pra
 	     LobbySpawn) -- aí sim teleportamos: Monstro pro marcador
@@ -40,11 +40,12 @@
 	     (default.project.json) só entra como fallback, se não achar praia
 	     nenhuma (ex: ilha ainda não foi gerada).
 	  5) RoundManager.RoundEnded dispara com o resultado; depois de
-	     GameConfig.Round.IntermissionDuration segundos, todo mundo recebe
+	     GameConfig.Round.IntermissionDuration segundos, os participantes recebem
 	     LoadCharacter() de novo, o que já os manda de volta pro Lobby.
 
 	MODO DE TESTE (TEMPORÁRIO): só quem estiver em ALLOWED_STARTER_USER_IDS
-	pode acionar "IniciarPartida". Lista vazia = NINGUÉM inicia (mais seguro
+	pode abrir a sala. Depois de aberta, qualquer jogador pode entrar nela.
+	Lista vazia = NINGUÉM abre (mais seguro
 	como padrão do que liberar geral por acidente). Preencha com seu
 	Roblox UserId antes de testar sozinho, e esvazie a lista (ou remova a
 	checagem) quando quiser liberar pra qualquer jogador.
@@ -59,8 +60,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
 local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
-local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local RoundManager = require(script.Parent.RoundManager)
+local WaitingRoomManager = require(script.Parent.WaitingRoomManager)
 
 local LobbyManager = {}
 
@@ -135,6 +136,10 @@ local function ensureLobbyExists()
 		prompt.RequiresLineOfSight = false
 		prompt.Parent = startPart
 	end
+	local prompt = startPart:FindFirstChildOfClass("ProximityPrompt") :: ProximityPrompt
+	prompt.ActionText = "Entrar na sala"
+	prompt.ObjectText = "Preparação da partida"
+	prompt.RequiresLineOfSight = false
 
 	print(string.format("[LobbyManager] Lobby confirmado em (%.0f, %.0f, %.0f).", LOBBY_ORIGIN.X, LOBBY_ORIGIN.Y, LOBBY_ORIGIN.Z))
 end
@@ -280,9 +285,14 @@ local function teleportToIsland(players: { Player })
 end
 
 local function returnEveryoneToLobby()
-	for _, player in Players:GetPlayers() do
-		player:LoadCharacter() -- única SpawnLocation do jogo é a do Lobby
+	local participants = WaitingRoomManager.Reset()
+	for _, player in participants do
+		if player.Parent == Players then
+			local ok, err = pcall(function() player:LoadCharacter() end)
+			if not ok then warn("[LobbyManager] Falha ao retornar ao lobby: " .. tostring(err)) end
+		end
 	end
+	WaitingRoomManager.OpenLobby()
 end
 
 --------------------------------------------------------------------------------
@@ -290,38 +300,7 @@ end
 --------------------------------------------------------------------------------
 
 local function onIniciarPartidaTriggered(player: Player)
-	if not isAuthorizedToStart(player) then
-		Remotes.LobbyMessage:FireClient(player, "Só o host pode iniciar a partida (modo de teste).")
-		return
-	end
-
-	if RoundManager.IsRoundActive() then
-		Remotes.LobbyMessage:FireClient(player, "Já tem uma partida em andamento.")
-		return
-	end
-
-	local playerCount = #Players:GetPlayers()
-
-	-- GameConfig.Testing.SoloStart (temporário) deixa começar sozinho.
-	if not GameConfig.Testing.SoloStart and playerCount < GameConfig.Players.Min then
-		local missing = GameConfig.Players.Min - playerCount
-		Remotes.LobbyMessage:FireClient(
-			player,
-			string.format("Faltam %d jogador(es) para iniciar (mínimo %d).", missing, GameConfig.Players.Min)
-		)
-		return
-	end
-
-	if playerCount > GameConfig.Players.Max then
-		local excess = playerCount - GameConfig.Players.Max
-		Remotes.LobbyMessage:FireClient(
-			player,
-			string.format("Jogadores demais: tire %d (máximo %d).", excess, GameConfig.Players.Max)
-		)
-		return
-	end
-
-	task.spawn(RoundManager.StartRound)
+	WaitingRoomManager.Join(player, isAuthorizedToStart(player))
 end
 
 local function setupIniciarPartidaPrompt()

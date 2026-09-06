@@ -71,6 +71,8 @@ safeInit("RoundManager", require(script.RoundManager))
 -- CharacterStatsApplier ANTES de DamageSystem: publica os Attributes "Stat_*"
 -- que o DamageSystem lê pra MaxHealth (Compostura) já no primeiro spawn.
 safeInit("CharacterStatsApplier", require(script.CharacterStatsApplier))
+safeInit("WaitingRoomManager", require(script.WaitingRoomManager))
+safeInit("TestRigSwap", require(script.TestRigSwap))
 safeInit("StaminaSystem", require(script.StaminaSystem))
 -- DamageSystem antes de FirearmServer/WeaponSystem: os dois roteiam o dano por
 -- ele (require no topo já resolve o módulo; Init() só liga MaxHealth + regen).
@@ -93,6 +95,7 @@ safeInit("WeaponSystem", require(script.WeaponSystem))
 safeInit("FirearmServer", require(script.FirearmServer))
 -- Depois de AmmoSystem + DropItemSystem: usa CreatePickup e PlaceInWorld.
 safeInit("WeaponSpawner", require(script.WeaponSpawner))
+safeInit("LobbyFiringRange", require(script.LobbyFiringRange))
 -- Depois de CharacterStatsApplier: o sorteio da caixa lê a Sorte publicada.
 safeInit("LootCrateSystem", require(script.LootCrateSystem))
 safeInit("SoundManager", require(script.SoundManager))

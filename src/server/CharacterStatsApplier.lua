@@ -5,7 +5,7 @@
 
 	DUAS METADES:
 
-	1) REGISTRO DE ESCOLHA (lobby)
+	1) REGISTRO DE ESCOLHA (sala de espera)
 	   Remotes.SelectCharacter (cliente) -> valida id + exclusividade -> guarda
 	   -> reemite Remotes.CharacterRoster pra todo mundo (a UI desabilita os
 	   cards tomados em tempo real). Dois jogadores nunca ficam com o mesmo
@@ -49,6 +49,7 @@ local StatScaling = require(ReplicatedStorage.Modules.StatScaling)
 local RoundManager = require(script.Parent.RoundManager)
 
 local CharacterStatsApplier = {}
+CharacterStatsApplier.SelectionChanged = Instance.new("BindableEvent")
 
 -- characterId -> Player que pegou. Fonte da verdade da exclusividade.
 local takenBy: { [string]: Player } = {}
@@ -68,6 +69,8 @@ local function buildRoster(): { [string]: number }
 	end
 	return roster
 end
+
+CharacterStatsApplier.GetRoster = buildRoster
 
 local function broadcastRoster(only: Player?)
 	local roster = buildRoster()
@@ -91,10 +94,11 @@ local function applyToCharacter(player: Player, character: Model)
 
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if humanoid then
+		local wasFull = humanoid.Health >= humanoid.MaxHealth - 0.01
 		local maxHealth = StatScaling.MaxHealth(player)
 		humanoid.MaxHealth = maxHealth
 		-- Só sobe a vida atual se ainda estava cheia (não cura quem já apanhou).
-		if humanoid.Health >= humanoid.MaxHealth - 0.01 or humanoid.Health <= 0 then
+		if wasFull then
 			humanoid.Health = maxHealth
 		end
 	end
@@ -147,6 +151,18 @@ local function releaseChoice(player: Player)
 	choiceOf[player] = nil
 end
 
+function CharacterStatsApplier.ClearChoice(player: Player)
+	releaseChoice(player)
+	for _, statName in CharacterData.StatOrder do
+		player:SetAttribute(StatScaling.AttributePrefix .. statName, nil)
+	end
+	for _, name in { "CharacterId", "CharacterNome", "CharacterApelido", "PassivaCuraExtra", "PassivaCargaDupla", "SkinId", "PerkId" } do
+		player:SetAttribute(name, nil)
+	end
+	if player.Character then applyToCharacter(player, player.Character) end
+	broadcastRoster()
+end
+
 local function setChoice(player: Player, characterId: string): boolean
 	local owner = takenBy[characterId]
 	if owner and owner ~= player and owner.Parent then
@@ -160,24 +176,43 @@ local function setChoice(player: Player, characterId: string): boolean
 end
 
 local function onSelect(player: Player, characterId: unknown)
-	-- Trocar de personagem é só no lobby. Com a partida rodando, ignora.
-	if RoundManager.IsRoundActive() then
+	-- Apenas participantes da sala em preparação podem reservar personagens.
+	if player:GetAttribute("InWaitingRoom") ~= true
+		or ReplicatedStorage:GetAttribute("MatchState") ~= "Waiting"
+		or RoundManager.IsRoundActive() then
 		return
 	end
 	if not CharacterData.Exists(characterId) then
 		return
 	end
+	if choiceOf[player] == characterId then return end
 	if setChoice(player, characterId :: string) then
+		player:SetAttribute("MatchReady", false)
+		CharacterStatsApplier.SelectionChanged:Fire(player)
 		broadcastRoster()
+	else
+		Remotes.LobbyMessage:FireClient(player, "Esse personagem acabou de ser escolhido por outro jogador.")
+		broadcastRoster(player)
 	end
 end
 
 --[[
 	AssignMissing(players)
 	Quem entrou na partida sem escolher recebe um personagem livre sorteado.
-	Assim ninguém entra na ilha sem atributos. Chamado no RoundPrepared.
+	API auxiliar: falha sem atribuir se não houver opções livres suficientes.
 ]]
-function CharacterStatsApplier.AssignMissing(players: { Player })
+function CharacterStatsApplier.AssignMissing(players: { Player }): boolean
+	-- Nunca repetir personagens, mesmo se esta API for chamada fora da sala.
+	local missing = 0
+	local available = 0
+	for _, player in players do
+		if not choiceOf[player] then missing += 1 end
+	end
+	for _, character in CharacterData.Characters do
+		local owner = takenBy[character.Id]
+		if not owner or not owner.Parent then available += 1 end
+	end
+	if missing > available then return false end
 	local rng = Random.new()
 
 	for _, player in players do
@@ -193,26 +228,11 @@ function CharacterStatsApplier.AssignMissing(players: { Player })
 			end
 		end
 
-		if #free == 0 then
-			-- Mais jogadores que personagens: repete um (sem exclusividade).
-			-- Não deveria acontecer dentro de GameConfig.Players.Max.
-			local all = CharacterData.Characters
-			CharacterStatsApplier.ApplyCharacter(player, all[rng:NextInteger(1, #all)].Id)
-			warn(
-				string.format(
-					"[CharacterStatsApplier] Sem personagem livre pra %s (%d jogadores, %d personagens) -- repetindo um.",
-					player.Name,
-					#players,
-					#CharacterData.Characters
-				)
-			)
-			continue
-		end
-
 		setChoice(player, free[rng:NextInteger(1, #free)])
 	end
 
 	broadcastRoster()
+	return true
 end
 
 --------------------------------------------------------------------------------
@@ -249,10 +269,8 @@ function CharacterStatsApplier.Init()
 		broadcastRoster()
 	end)
 
-	-- Início de partida: quem não escolheu ganha um livre, e todo mundo tem os
-	-- atributos reaplicados no character recém-carregado.
+	-- A sala exige escolha antes de Pronto. Reaplica os atributos no respawn.
 	RoundManager.RoundPrepared.Event:Connect(function(players: { Player })
-		CharacterStatsApplier.AssignMissing(players)
 		for _, player in players do
 			local chosen = choiceOf[player]
 			if chosen then

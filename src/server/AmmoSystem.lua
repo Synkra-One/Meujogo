@@ -151,11 +151,24 @@ local function watchPickup(part: BasePart)
 		if part.Parent == nil then
 			return -- outro jogador pegou no mesmo frame
 		end
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if not root or not root:IsA("BasePart") or not humanoid or humanoid.Health <= 0
+			or (root.Position - part.Position).Magnitude > PICKUP_DISTANCE + 2 then return end
+		if part:GetAttribute("LobbyTestPickup") == true
+			and (player:GetAttribute("InRound") == true or player:GetAttribute("InWaitingRoom") == true) then return end
 		local gained = AmmoSystem.AddReserve(player, kind, qty)
 		if gained <= 0 then
 			return -- reserva cheia: a caixa FICA no chão pra quem precisar
 		end
-		part:Destroy()
+		qty -= gained
+		if qty <= 0 then
+			part:Destroy()
+		else
+			part:SetAttribute("Quantidade", qty)
+			prompt.ObjectText = string.format("%s (%d)", kind, qty)
+		end
 	end)
 
 	part.Destroying:Connect(function()

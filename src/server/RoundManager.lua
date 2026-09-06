@@ -31,11 +31,9 @@
 	de estado limpos, todo mundo recebe um character novo (LoadCharacter) e
 	os papéis são sorteados de novo.
 
-	QUEM CHAMA StartRound(): este módulo NÃO inicia partidas sozinho -- isso
-	mudou quando o LobbyManager passou a existir. StartRound() é pública e
-	fica esperando ser chamada (hoje, pelo prompt "IniciarPartida" do
-	Lobby). Ela BLOQUEIA até a partida inteira acabar, então quem chama
-	deve usar task.spawn(RoundManager.StartRound).
+	QUEM CHAMA StartRound(participants): WaitingRoomManager, após a contagem
+	com todos prontos. A lista fica congelada durante o preparo e não inclui
+	quem entra no servidor depois. A chamada bloqueia até o fim da rodada.
 
 	HOOKS PRA QUEM PRECISA SABER DO INÍCIO/FIM (ex: LobbyManager,
 	SoundManager) -- de novo, porque FireAllClients não volta pro servidor:
@@ -84,6 +82,8 @@ type Outcome = {
 }
 
 local roundActive = false
+local roundBusy = false
+local participants: { Player } = {}
 local escapeSucceeded = false
 local outcome: Outcome? = nil
 
@@ -97,7 +97,7 @@ end
 
 local function countAlive(roleName: string): number
 	local count = 0
-	for _, player in Players:GetPlayers() do
+	for _, player in participants do
 		if player:GetAttribute("Role") == roleName and isAlive(player) then
 			count += 1
 		end
@@ -215,7 +215,11 @@ local function runPhases()
 		local phase = GameConfig.Phases[phaseName]
 		local duration = phase.Default
 
-		Remotes.RoundStateChanged:FireAllClients(phaseName, os.time() + duration)
+		for _, player in participants do
+			if player.Parent == Players then
+				Remotes.RoundStateChanged:FireClient(player, phaseName, os.time() + duration)
+			end
+		end
 		RoundManager.PhaseChanged:Fire(phaseName)
 		print(string.format("[RoundManager] Fase: %s (%ds)", phaseName, duration))
 
@@ -227,16 +231,16 @@ end
 -- Preparação e resultado
 --------------------------------------------------------------------------------
 
-local function prepareRound()
+local function prepareRound(players: { Player })
 	RadioObjective.Reset()
 	RaftObjective.Reset()
 
 	escapeSucceeded = false
 	outcome = nil
 
-	local players = Players:GetPlayers()
-
 	for _, player in players do
+		if player.Parent ~= Players then continue end
+		player:SetAttribute("InRound", true)
 		player:SetAttribute("Amarrado", false)
 		-- A marca de eliminado agora vive no Player (sobrevive ao respawn do
 		-- DeathRespawnHandler do pacote de movimento), então precisa ser
@@ -245,7 +249,14 @@ local function prepareRound()
 		player:LoadCharacter()
 	end
 
-	RoleAssignment.AssignRoles(players)
+	local connected = {}
+	for _, player in players do
+		if player.Parent == Players then table.insert(connected, player) end
+	end
+	local minimum = if GameConfig.Testing.SoloStart then (if GameConfig.Testing.ForceRole then 1 else 2) else math.max(2, GameConfig.Players.Min)
+	assert(#connected >= minimum, "Jogadores insuficientes após preparar a partida.")
+	RoleAssignment.AssignRoles(connected)
+	participants = connected
 end
 
 local function printResult(result: Outcome)
@@ -268,17 +279,30 @@ end
 --------------------------------------------------------------------------------
 
 --[[
-	StartRound()
-	Roda uma partida inteira e só retorna quando ela termina. Ignora a
-	chamada se já houver partida em andamento.
+	StartRound(players)
+	Roda uma partida com a lista fechada da sala. Rejeita início concorrente
+	e personagens duplicados antes de qualquer operação que ceda execução.
 ]]
-function RoundManager.StartRound()
-	if roundActive then
-		return
+function RoundManager.StartRound(players: { Player })
+	assert(not roundBusy, "Já existe uma partida em preparação ou andamento.")
+	roundBusy = true
+	participants = table.clone(players)
+	local ok, err = pcall(function()
+		assert(#participants > 0, "A sala está vazia.")
+		local seen: { [string]: boolean } = {}
+		for _, player in participants do
+			local id = player:GetAttribute("CharacterId")
+			assert(type(id) == "string" and not seen[id], "Cada participante precisa de um personagem exclusivo.")
+			seen[id :: string] = true
+		end
+		prepareRound(participants)
+	end)
+	if not ok then
+		roundBusy = false
+		participants = {}
+		error(err)
 	end
-
-	prepareRound()
-	RoundManager.RoundPrepared:Fire(Players:GetPlayers())
+	RoundManager.RoundPrepared:Fire(participants)
 
 	roundActive = true
 	startWinCheckLoop()
@@ -294,8 +318,13 @@ function RoundManager.StartRound()
 
 	-- Remote pros clientes (esconder HUD etc.) + hook pro servidor
 	-- (LobbyManager devolver todo mundo pro Lobby).
-	Remotes.RoundEnded:FireAllClients(result.winner, result.reason)
+	for _, player in participants do
+		if player.Parent == Players then
+			Remotes.RoundEnded:FireClient(player, result.winner, result.reason)
+		end
+	end
 	RoundManager.RoundEnded:Fire(result.winner, result.reason)
+	roundBusy = false
 end
 
 --[[
@@ -309,8 +338,7 @@ end
 --[[
 	Init()
 	Conecta os hooks dos objetivos. NÃO inicia partidas sozinho -- isso é
-	responsabilidade de quem chamar StartRound() (hoje, LobbyManager, pelo
-	prompt "IniciarPartida"). Chame uma vez no boot do servidor.
+	responsabilidade de WaitingRoomManager. Chame uma vez no boot do servidor.
 ]]
 function RoundManager.Init()
 	RadioObjective.RescueCountdownStarted.Event:Connect(onRescueCountdownStarted)

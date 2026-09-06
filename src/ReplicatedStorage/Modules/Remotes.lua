@@ -53,6 +53,14 @@ end
 
 local Remotes = {}
 
+-- Client -> Server: "Sync", "Ready", "Leave", "Skin"/"Perk" + id.
+-- Server -> Client: snapshot da sala (state, endsAt, members, roster).
+Remotes.WaitingRoom = getRemote("WaitingRoom")
+
+-- Opcao secreta de teste local: cliente autorizado aperta M e pede ao servidor
+-- para vestir o rig Workspace.R6 como Character, sem expor isso para todos.
+Remotes.TestRigSwap = getRemote("TestRigSwap")
+
 --------------------------------------------------------------------------------
 -- SabotageAction
 -- Disparado por: cliente do Espião, ao interagir com um objeto Sabotável
@@ -306,43 +314,32 @@ Remotes.OpenCrate = getRemote("OpenCrate")
 
 --------------------------------------------------------------------------------
 -- FirearmShoot
--- Client -> Server (FireServer): sem argumentos. O servidor acha a arma
---   equipada do jogador, desconta 1 de Settings/Config/Ammo (autoridade do
---   servidor sobre munição), aplica cadência mínima (Delay * 0.75), toca o
---   som da arma e o flash no Muzzle (replicam pra todos).
+-- Client -> Server: tool: Tool, aimPoint: Vector3, aiming: boolean, sequence: number.
+-- Servidor valida posse, vida, espera/recarga, cadência e origem; gasta uma bala
+-- e calcula o raycast, obstáculo, dano e efeitos. Cliente nunca escolhe o alvo.
+-- Server -> Client: tool, sequence, accepted: boolean, magazine: number (ack da HUD).
 --------------------------------------------------------------------------------
 Remotes.FirearmShoot = getRemote("FirearmShoot")
 
 --------------------------------------------------------------------------------
--- FirearmHit
--- Client -> Server (FireServer):
---   position: Vector3      -- onde a bala parou (impacto ou alcance máximo)
---   instance: Instance?    -- o que acertou (nil = nada)
---   normal: Vector3?       -- normal do impacto
--- Servidor cria tracer + efeito de impacto (WeaponEffects) a partir do
---   Muzzle da PRÓPRIA Tool do jogador -- o CFrame do cano não é confiado do
---   cliente. Um pedido por bala.
+-- FirearmHit: legado reservado, sem listener no servidor.
+-- Efeitos agora nascem exclusivamente do raycast validado de FirearmShoot.
 --------------------------------------------------------------------------------
 Remotes.FirearmHit = getRemote("FirearmHit")
 
 --------------------------------------------------------------------------------
--- FirearmDamage
--- Client -> Server (FireServer):
---   targetPart: BasePart   -- parte do personagem acertada
--- Servidor valida (arma equipada, alvo com Humanoid, não é o atirador,
---   alcance) e aplica Settings/Damage por parte (Head/Torso/Limbs) ou na
---   armadura. Morte: Elimination.Eliminate + PlayerKilled (cause "Tiro").
--- Server -> Client (FireClient), só pro atirador:
---   kind: string           -- "Hit" | "Head" | "Armor" | "HeadArmor" (hitmarker)
+-- FirearmDamage: SOMENTE Server -> Client, hitmarker confirmado.
+-- kind: "Hit" | "Head" | "Armor" | "HeadArmor".
+-- Não aceita FireServer. Dano/morte passam pelo DamageSystem e Elimination.
 --------------------------------------------------------------------------------
 Remotes.FirearmDamage = getRemote("FirearmDamage")
 
 --------------------------------------------------------------------------------
 -- FirearmReload
--- Client -> Server (FireServer):
---   stage: string  -- "Start" | "MagOut" | "MagIn" | "BoltPull" | "BoltRelease" | "End" | "ShellIn"
--- Disparado pelos markers da animação de recarga. Servidor toca os sons do
---   Handle, derruba o pente, e em "End" enche Ammo (ou +1 em "ShellIn").
+-- Client -> Server: tool: Tool, action: "Start" | "Cancel".
+-- Server -> Client: tool, state: "Start" | "Done" | "Cancelled", duration?: number.
+-- Tempo e transferência de munição são do servidor. Markers não concedem munição.
+-- Desequipar/largar/morrer cancela e restaura o pente visível.
 --------------------------------------------------------------------------------
 Remotes.FirearmReload = getRemote("FirearmReload")
 

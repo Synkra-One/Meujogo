@@ -1,8 +1,8 @@
 --!strict
 --[[
 	CharacterSelectController
-	Tela de escolha de personagem (aparece no Lobby, some quando a partida
-	começa). O shell da UI está em StarterGui/CharacterSelectUI.model.json;
+	Preparação exclusiva da sala de espera: personagem, skin, perk e pronto.
+	Não abre no lobby inicial. O shell fica em StarterGui/CharacterSelectUI.model.json;
 	os CARDS são montados aqui a partir de Modules/CharacterData -- adicionar
 	um personagem novo lá faz o card aparecer sozinho, sem tocar em UI.
 
@@ -24,7 +24,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local CharacterData = require(ReplicatedStorage.Modules.CharacterData)
-local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
+local LoadoutData = require(ReplicatedStorage.Modules.LoadoutData)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local SafeWait = require(ReplicatedStorage.Modules.SafeWait)
 
@@ -36,6 +36,148 @@ local overlay = SafeWait.Child(gui, "Overlay") :: Frame
 local cardArea = SafeWait.Child(overlay, "CardArea") :: ScrollingFrame
 local footer = SafeWait.Child(overlay, "FooterText") :: TextLabel
 local closeButton = SafeWait.Child(overlay, "CloseButton") :: TextButton
+local title = SafeWait.Child(overlay, "TitleText") :: TextLabel
+local subtitle = SafeWait.Child(overlay, "SubtitleText") :: TextLabel
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+title.Text = "SALA DE ESPERA"
+title.TextSize = 23
+title.Position = UDim2.fromOffset(0, 8)
+subtitle.Position = UDim2.fromOffset(12, 44)
+subtitle.Size = UDim2.new(1, -24, 0, 32)
+subtitle.TextSize = 13
+subtitle.TextWrapped = true
+footer.Position = UDim2.new(0, 16, 1, -116)
+footer.Size = UDim2.new(1, -32, 0, 48)
+footer.TextSize = 13
+closeButton.Position = UDim2.new(0, 16, 1, -14)
+closeButton.AnchorPoint = Vector2.new(0, 1)
+closeButton.Size = UDim2.new(0.3, -16, 0, 42)
+closeButton.Text = "Ver sala"
+closeButton.TextSize = 14
+
+local function actionButton(name: string, text: string, x: number, color: Color3): TextButton
+	local button = closeButton:Clone()
+	button.Name = name
+	button.Text = text
+	button.Position = UDim2.new(x, 8, 1, -14)
+	button.Size = UDim2.new(0.35, -20, 0, 42)
+	button.BackgroundColor3 = color
+	button.Parent = overlay
+	return button
+end
+local readyButton = actionButton("ReadyButton", "Pronto", 0.3, Color3.fromRGB(43, 116, 77))
+local leaveButton = actionButton("LeaveButton", "Sair da sala", 0.65, Color3.fromRGB(112, 51, 48))
+
+-- Botão separado para reabrir também no celular, sem depender da tecla C.
+local reopenGui = Instance.new("ScreenGui")
+reopenGui.Name = "WaitingRoomShortcut"
+reopenGui.ResetOnSpawn = false
+reopenGui.DisplayOrder = 13
+reopenGui.Parent = playerGui
+local reopen = Instance.new("TextButton")
+reopen.AnchorPoint = Vector2.new(0.5, 0)
+reopen.Position = UDim2.new(0.5, 0, 0, 12)
+reopen.Size = UDim2.fromOffset(240, 42)
+reopen.BackgroundColor3 = Color3.fromRGB(37, 71, 58)
+reopen.TextColor3 = Color3.new(1, 1, 1)
+reopen.Font = Enum.Font.GothamBold
+reopen.TextSize = 14
+reopen.Text = "Preparar personagem  [C]"
+reopen.Visible = false
+reopen.Parent = reopenGui
+
+local side = Instance.new("ScrollingFrame")
+side.Name = "Preparation"
+side.BackgroundColor3 = Color3.fromRGB(19, 24, 27)
+side.BorderSizePixel = 0
+side.ScrollBarThickness = 4
+side.CanvasSize = UDim2.new()
+side.AutomaticCanvasSize = Enum.AutomaticSize.Y
+side.Parent = overlay
+local sidePadding = Instance.new("UIPadding")
+sidePadding.PaddingLeft = UDim.new(0, 12)
+sidePadding.PaddingRight = UDim.new(0, 12)
+sidePadding.PaddingTop = UDim.new(0, 10)
+sidePadding.PaddingBottom = UDim.new(0, 12)
+sidePadding.Parent = side
+local sideLayout = Instance.new("UIListLayout")
+sideLayout.Padding = UDim.new(0, 8)
+sideLayout.SortOrder = Enum.SortOrder.LayoutOrder
+sideLayout.Parent = side
+
+local function sideLabel(text: string, order: number): TextLabel
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, -4, 0, 24)
+	label.AutomaticSize = Enum.AutomaticSize.Y
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.GothamMedium
+	label.TextSize = 13
+	label.TextColor3 = Color3.fromRGB(215, 220, 216)
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.TextYAlignment = Enum.TextYAlignment.Top
+	label.TextWrapped = true
+	label.Text = text
+	label.LayoutOrder = order
+	label.Parent = side
+	return label
+end
+sideLabel("PARTICIPANTES", 1)
+local memberLabel = sideLabel("", 2)
+sideLabel("SKIN · visual do sobrevivente", 3)
+local skinButtons: { [string]: TextButton } = {}
+local perkButtons: { [string]: TextButton } = {}
+
+local function optionButton(id: string, name: string, description: string, order: number, action: string): TextButton
+	local button = Instance.new("TextButton")
+	button.Name = id
+	button.Size = UDim2.new(1, -4, 0, 58)
+	button.BackgroundColor3 = Color3.fromRGB(32, 38, 43)
+	button.BorderSizePixel = 0
+	button.Font = Enum.Font.Gotham
+	button.TextSize = 12
+	button.TextWrapped = true
+	button.TextColor3 = Color3.fromRGB(227, 231, 228)
+	button.Text = name .. "\n" .. description
+	button.LayoutOrder = order
+	button.Parent = side
+	button.Activated:Connect(function() Remotes.WaitingRoom:FireServer(action, id) end)
+	return button
+end
+for index, skin in LoadoutData.Skins do
+	skinButtons[skin.Id] = optionButton(skin.Id, skin.Nome, skin.Descricao, 3 + index, "Skin")
+end
+sideLabel("PERK · escolha um bônus", 10)
+for index, perk in LoadoutData.Perks do
+	perkButtons[perk.Id] = optionButton(perk.Id, perk.Nome, perk.Descricao, 10 + index, "Perk")
+end
+
+local function layoutPanels()
+	local width = overlay.AbsoluteSize.X
+	local bodyHeight = math.max(80, overlay.AbsoluteSize.Y - 210)
+	if width >= 900 then
+		cardArea.Position = UDim2.fromOffset(16, 84)
+		cardArea.Size = UDim2.new(0.68, -24, 0, bodyHeight)
+		side.Position = UDim2.new(0.68, 0, 0, 84)
+		side.Size = UDim2.new(0.32, -16, 0, bodyHeight)
+	else
+		cardArea.Position = UDim2.fromOffset(12, 84)
+		cardArea.Size = UDim2.new(1, -24, 0, math.floor(bodyHeight * 0.6))
+		side.Position = UDim2.fromOffset(12, 92 + math.floor(bodyHeight * 0.6))
+		side.Size = UDim2.new(1, -24, 0, math.floor(bodyHeight * 0.4) - 8)
+	end
+	local grid = cardArea:FindFirstChildOfClass("UIGridLayout")
+	if grid then
+		local areaWidth = math.max(1, cardArea.AbsoluteSize.X - 12)
+		local columns = math.max(1, math.floor((areaWidth + 14) / 264))
+		grid.CellSize = UDim2.fromOffset(math.floor((areaWidth - (columns - 1) * 14) / columns), 320)
+	end
+end
+overlay:GetPropertyChangedSignal("AbsoluteSize"):Connect(layoutPanels)
+cardArea:GetPropertyChangedSignal("AbsoluteSize"):Connect(layoutPanels)
+task.defer(layoutPanels)
 
 --------------------------------------------------------------------------------
 -- Estado
@@ -49,6 +191,8 @@ type CardRefs = {
 
 local cards: { [string]: CardRefs } = {}
 local roster: { [string]: number } = {}
+local inRoom = false
+local snapshot: any = nil
 
 --------------------------------------------------------------------------------
 -- Construção dos cards
@@ -216,6 +360,7 @@ local function buildCard(character: CharacterData.Character, order: number)
 	status.Parent = button
 
 	button.Activated:Connect(function()
+		if not inRoom then return end
 		local ownerId = roster[character.Id]
 		if ownerId and ownerId ~= LocalPlayer.UserId then
 			return -- já é de outro
@@ -235,10 +380,9 @@ end
 --------------------------------------------------------------------------------
 
 local function setVisible(visible: boolean)
-	if gui.Enabled == visible then
-		return
-	end
+	visible = visible and inRoom
 	gui.Enabled = visible
+	reopen.Visible = inRoom and not visible
 
 	-- LIBERA O CURSOR enquanto a tela está aberta. A câmera de ombro
 	-- (SmoothShiftLock, pacote de movimento) trava a mira no centro; ela lê
@@ -296,41 +440,35 @@ local function refreshCards()
 	if myPick then
 		local character = CharacterData.GetById(myPick)
 		footer.Text = string.format(
-			"Você é %s (%s). Feche e vá ao pilar Iniciar Partida — ou clique em outro card pra trocar.",
+			"%s (%s) reservado para você. Ajuste sua skin e perk e marque Pronto.",
 			character and character.Nome or myPick,
 			character and character.Apelido or ""
 		)
 		footer.TextColor3 = Color3.fromRGB(120, 220, 170)
 	else
-		footer.Text = "Escolha um personagem. Se a partida começar sem escolha, você recebe um sorteado."
+		footer.Text = "Escolha um personagem livre. Cada personagem só pode ser usado por uma pessoa nesta partida."
 		footer.TextColor3 = Color3.fromRGB(220, 190, 120)
 	end
 end
 
-Remotes.CharacterRoster.OnClientEvent:Connect(function(newRoster, roundActive)
+Remotes.CharacterRoster.OnClientEvent:Connect(function(newRoster)
 	roster = if type(newRoster) == "table" then newRoster else {}
 	refreshCards()
-	if roundActive == true then
-		setVisible(false) -- entrei no meio de uma partida
-	end
 end)
 
 --------------------------------------------------------------------------------
--- Aparece no Lobby, some na partida
+-- Só aparece para quem entrou na sala de espera
 --------------------------------------------------------------------------------
-
-local UserInputService = game:GetService("UserInputService")
-
--- No Lobby dá pra fechar (pra ir ao pilar "Iniciar Partida") e reabrir com C.
--- Enquanto a partida está rolando, a tela fica desligada de vez.
-local roundRunning = false
 
 closeButton.Activated:Connect(function()
 	setVisible(false)
 end)
+reopen.Activated:Connect(function() setVisible(true) end)
+readyButton.Activated:Connect(function() Remotes.WaitingRoom:FireServer("Ready") end)
+leaveButton.Activated:Connect(function() Remotes.WaitingRoom:FireServer("Leave") end)
 
 UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
-	if gameProcessed or roundRunning then
+	if gameProcessed or not inRoom then
 		return
 	end
 	if input.KeyCode == Enum.KeyCode.C then
@@ -338,22 +476,49 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 	end
 end)
 
--- A partida começando esconde a tela; o fim da partida (volta pro Lobby)
--- traz de volta pra quem quiser trocar de personagem.
-Remotes.RoundStateChanged.OnClientEvent:Connect(function(phase: string)
-	roundRunning = true
-	if phase == GameConfig.PhaseOrder[1] then
-		setVisible(false)
+Remotes.WaitingRoom.OnClientEvent:Connect(function(newSnapshot)
+	if type(newSnapshot) ~= "table" then return end
+	snapshot = newSnapshot
+	local wasInRoom = inRoom
+	local me = nil
+	local lines = {}
+	for _, member in snapshot.members do
+		if member.userId == LocalPlayer.UserId then me = member end
+		local character = CharacterData.GetById(member.characterId)
+		table.insert(lines, string.format("%s %s\n%s", if member.ready then "✓" else "○", member.name,
+			if character then character.Nome else "Escolhendo personagem…"))
 	end
+	inRoom = snapshot.state == "Waiting" and me ~= nil
+	roster = snapshot.roster
+	memberLabel.Text = table.concat(lines, "\n\n")
+	readyButton.Text = if me and me.ready then "Cancelar pronto" else "Pronto"
+	readyButton.BackgroundColor3 = if me and me.ready then Color3.fromRGB(139, 105, 43) else Color3.fromRGB(43, 116, 77)
+	for id, button in skinButtons do
+		button.BackgroundColor3 = if me and me.skinId == id then Color3.fromRGB(43, 92, 68) else Color3.fromRGB(32, 38, 43)
+	end
+	for id, button in perkButtons do
+		button.BackgroundColor3 = if me and me.perkId == id then Color3.fromRGB(43, 92, 68) else Color3.fromRGB(32, 38, 43)
+	end
+	refreshCards()
+	setVisible(inRoom and (not wasInRoom or gui.Enabled))
 end)
-Remotes.RoundEnded.OnClientEvent:Connect(function()
-	roundRunning = false
-	task.delay(2, function()
-		if not roundRunning then
-			setVisible(true)
-		end
-	end)
+
+RunService.Heartbeat:Connect(function()
+	if not inRoom or not snapshot then return end
+	if snapshot.endsAt > 0 then
+		local seconds = math.max(0, math.ceil(snapshot.endsAt - Workspace:GetServerTimeNow()))
+		subtitle.Text = string.format("Todos prontos · a partida começa em %ds", seconds)
+		reopen.Text = string.format("Começa em %ds · Abrir preparação", seconds)
+	elseif #snapshot.members < snapshot.minimum then
+		subtitle.Text = string.format("%d/%d jogadores · aguardando mais %d para começar", #snapshot.members, snapshot.capacity, snapshot.minimum - #snapshot.members)
+		reopen.Text = "Preparar personagem  [C]"
+	else
+		subtitle.Text = string.format("%d/%d jogadores · aguardando todos ficarem prontos", #snapshot.members, snapshot.capacity)
+		reopen.Text = "Preparar personagem  [C]"
+	end
 end)
 
 refreshCards()
-setVisible(true)
+setVisible(false)
+-- Handshake após conectar os listeners: cobre entrada tardia e cliente lento.
+Remotes.WaitingRoom:FireServer("Sync")

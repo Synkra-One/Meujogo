@@ -89,8 +89,7 @@ local animTable = {}
 -- (No longer reads Animation objects parented under this script.)
 local animNames = {
 	idle = {
-		{ id = "rbxassetid://180435571", weight = 9 },
-		{ id = "rbxassetid://180435792", weight = 1 },
+		{ id = "rbxassetid://17333854280", weight = 10 }, -- [Meujogo] idle em pe definido pelo usuario
 	},
 	walk = {
 		{ id = "rbxassetid://118726962444881", weight = 10 }, -- [Meujogo] animacao do usuario

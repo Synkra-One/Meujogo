@@ -127,6 +127,14 @@ Se ficar em R15: `Animate` e `Turning` travam pra sempre num
 `WaitForChild("Torso")` (parte que só existe em R6) — o boneco nasce e não
 anima nada.
 
+### Atalho secreto de teste do rig
+
+Para testar o boneco R6 salvo no Explorer, deixe o Model chamado exatamente
+`R6 novo` dentro do `Workspace`, com `Humanoid` e `HumanoidRootPart`. No Play,
+o UserId `11555748600` pode apertar `M`: o servidor clona esse rig e troca o
+Character do jogador por ele. O atalho e o RemoteEvent existem só para teste
+e ignoram qualquer outro UserId.
+
 ## Animações — IDs em uso
 
 Tudo nos **defaults R6 da Roblox** (públicos, garantido que carregam). O
@@ -135,7 +143,7 @@ trocar essas duas linhas em `Animate.rbxmx`.
 
 | Arquivo | Anim | ID | Origem |
 |---|---|---|---|
-| `Animate.rbxmx` (tabela `animNames` no código) | idle | `180435571` / `180435792` | Roblox R6 |
+| `Animate.rbxmx` (tabela `animNames` no código) | idle | `17333854280` | Idle em pé indicado pelo usuário |
 | | walk | `118726962444881` | **animação do usuário** |
 | | run | `87202665361349` | **animação do usuário** |
 | | jump | `125750702` | Roblox R6 |
@@ -220,10 +228,14 @@ quando cai abaixo disso.
 `src/client/CameraWeapon` (câmera de ombro, mira, recuo, HUD de arma) foi
 removido porque brigava com o `PlayerModule` do pacote pelo CFrame da câmera.
 
-No lugar entrou `src/client/PistolController.client.luau`: clique atira, `R`
-recarrega, toca as animações R6 da pistola, mira pelo **cursor** e conversa com
-o **mesmo** `FirearmServer` de antes (munição, dano, som, muzzle flash, tracer).
-Ele **não** toca em câmera, WalkSpeed nem shift lock.
+O `PistolController.client.luau` agora integra somente a Glock17: clique atira,
+botão direito mira, `R` recarrega. A HUD tem pente/reserva, progresso da recarga,
+crosshair, recuo e hitmarker confirmado. O servidor calcula o tiro e controla
+a recarga; as animações usam apenas `PistolAnimations`.
 
-O que se perdeu junto com o OTS: mira por cima do ombro, hip-fire com spread
-dinâmico, recuo de câmera, crosshair dinâmico, hitmarker e kill feed.
+A câmera de ombro continua sendo o `CustomShiftLock`. O controlador da pistola
+adiciona apenas recuo angular. `Crouching` continua dono do FOV e da velocidade:
+o atributo local `Character.FirearmAiming` pede FOV de mira e bloqueia o sprint
+enquanto se mira. Não há outro PlayerModule/Animate nem outro tween de FOV.
+
+Instalação, bancada do lobby, limitações de assets e testes: [PistolaOTS.md](PistolaOTS.md).

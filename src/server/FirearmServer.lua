@@ -1,421 +1,266 @@
 --!strict
---[[
-	FirearmServer
-	Lado servidor das armas de fogo (par do cliente PistolController). Port do
-	ServerHandler do OTS com validação básica e integrado ao jogo. O cliente
-	OTS original (CameraWeapon/WeaponController) foi REMOVIDO junto com a
-	câmera de ombro -- este lado servidor não mudou, só quem dispara os
-	remotes é que é outro:
-
-	  FirearmShoot   -> desconta munição (autoridade do servidor), toca o som
-	                    da arma e o flash no Muzzle (replicam pra todos).
-	  FirearmHit     -> tracer + impacto (WeaponEffects). O Muzzle é lido da
-	                    Tool do jogador AQUI, não confiado do cliente.
-	  FirearmDamage  -> dano por parte (Head/Torso/Limbs, Settings/Damage),
-	                    armadura (pasta "Armour" com Health), hitmarker de
-	                    volta pro atirador. O dano na vida e a morte passam
-	                    pelo DamageSystem.Apply (marca "Dead", Elimination.
-	                    Eliminate, PlayerKilled cause "Tiro"); aqui fica só o
-	                    kill feed quando Apply avisa que matou.
-	  FirearmReload  -> etapas da recarga vindas dos markers da animação
-	                    (Start/MagOut/MagIn/BoltPull/BoltRelease/End/ShellIn):
-	                    sons do Handle, pente caindo, munição.
-
-	VALIDAÇÃO (anti-abuso simples): só aceita se o jogador tiver uma arma de
-	fogo equipada; cadência mínima (Delay * 0.75); alvo precisa ter Humanoid,
-	não ser o próprio atirador e estar dentro de Config MaxRange + folga.
-	Hitscan continua no cliente (feel), como no OTS.
-
-	MODO DE TESTE: GameConfig.Testing.GiveTestWeapons = { "M4A1", ... } dá
-	essas Tools (de ReplicatedStorage/WeaponAssets/Tools) no Backpack a cada
-	spawn. nil desliga.
-
-	Uso: safeInit("FirearmServer", require(script.FirearmServer)) no boot.
-]]
-
+-- Glock17 do Digital's OTS: um pedido = um raycast no servidor.
+-- Nenhum remote aceita dano/impacto escolhido pelo cliente.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local Debris = game:GetService("Debris")
 
 local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
-local SafeWait = require(ReplicatedStorage.Modules.SafeWait)
-local SafeAttribute = require(ReplicatedStorage.Modules.SafeAttribute)
-local WeaponEffects = require(ReplicatedStorage.Modules.WeaponEffects)
+local Rules = require(ReplicatedStorage.Modules.FirearmRules)
 local Ammo = require(ReplicatedStorage.Modules.Ammo)
+local WeaponEffects = require(ReplicatedStorage.Modules.WeaponEffects)
 local DamageSystem = require(script.Parent.DamageSystem)
 local AmmoSystem = require(script.Parent.AmmoSystem)
-
+local assets = ReplicatedStorage:WaitForChild("WeaponAssets")
+local toolsFolder = assets:WaitForChild("Tools")
+local audios = assets:WaitForChild("Audios")
 local FirearmServer = {}
+local initialized = false
+local rng = Random.new()
+local lastShot: { [Player]: number } = {}
+type Reload = { tool: Tool, connections: { RBXScriptConnection } }
+local reloads: { [Player]: Reload } = {}
 
-local WeaponAssets = SafeWait.Child(ReplicatedStorage, "WeaponAssets")
-local Audios = SafeWait.Child(WeaponAssets, "Audios")
-local ToolsFolder = SafeWait.Child(WeaponAssets, "Tools")
-
-local MAX_RANGE = 1000
-local RANGE_SLACK = 60
-
-local HEAD_PARTS = { Head = true }
-local TORSO_PARTS = { Torso = true, UpperTorso = true, LowerTorso = true, HumanoidRootPart = true }
-
-local lastShotAt: { [Player]: number } = {}
-
---------------------------------------------------------------------------------
--- Helpers
---------------------------------------------------------------------------------
-
-local function isFirearm(instance: Instance): boolean
-	if not instance:IsA("Tool") then
-		return false
-	end
-	local flag = instance:FindFirstChild("Weapon")
-	if flag and flag:IsA("BoolValue") and flag.Value then
-		return true
-	end
-	return SafeAttribute.Get(instance, "Firearm") == true
-end
-
-local function getEquippedFirearm(player: Player): Tool?
+local function alive(player: Player): boolean
 	local character = player.Character
-	if not character then
-		return nil
-	end
-	for _, child in character:GetChildren() do
-		if isFirearm(child) then
-			return child :: Tool
-		end
-	end
-	return nil
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	return character ~= nil and humanoid ~= nil and humanoid.Health > 0
+		and character:GetAttribute("Eliminado") ~= true and character:FindFirstChild("Dead") == nil
+		and character:GetAttribute("Amarrado") ~= true and player:GetAttribute("Eliminado") ~= true
+		and player:GetAttribute("Amarrado") ~= true
+		and player:GetAttribute("InWaitingRoom") ~= true
 end
 
-local function settingsValue(tool: Tool, folderName: string, name: string): ValueBase?
-	local settings = tool:FindFirstChild("Settings")
-	local folder = settings and settings:FindFirstChild(folderName)
-	local value = folder and folder:FindFirstChild(name)
-	if value and value:IsA("ValueBase") then
-		return value
-	end
-	return nil
+local function equipped(player: Player, candidate: unknown): Tool?
+	if typeof(candidate) ~= "Instance" or not Rules.IsPistol(candidate :: Instance) or not alive(player) then return nil end
+	local tool = candidate :: Tool
+	return if tool.Parent == player.Character then tool else nil
 end
 
-local function numberValue(tool: Tool, folderName: string, name: string, default: number): number
-	local value = settingsValue(tool, folderName, name)
-	if value and value:IsA("NumberValue") then
-		return value.Value
-	elseif value and value:IsA("IntValue") then
-		return value.Value
-	end
-	return default
+local function setReloading(tool: Tool, value: boolean)
+	local flag = Rules.Value(tool, "Config", "Reloading")
+	if flag and flag:IsA("BoolValue") then flag.Value = value end
+	tool:SetAttribute("FirearmReloading", value)
 end
 
-local function getMuzzle(tool: Tool): BasePart?
+local function magazineVisible(tool: Tool, visible: boolean)
 	local components = tool:FindFirstChild("Components")
-	local muzzle = components and components:FindFirstChild("Muzzle")
-	if muzzle and muzzle:IsA("BasePart") then
-		return muzzle
-	end
-	return nil
+	local mag = components and components:FindFirstChild("Mag")
+	if mag and mag:IsA("BasePart") then mag.Transparency = if visible then 0 else 1 end
 end
 
-local function getRootPosition(player: Player): Vector3?
-	local character = player.Character
-	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if root and root:IsA("BasePart") then
-		return root.Position
+local function finishReload(player: Player, completed: boolean)
+	local state = reloads[player]
+	if not state then return end
+	reloads[player] = nil
+	for _, connection in state.connections do connection:Disconnect() end
+	setReloading(state.tool, false)
+	magazineVisible(state.tool, true)
+	if player.Parent == Players then
+		Remotes.FirearmReload:FireClient(player, state.tool, if completed then "Done" else "Cancelled")
 	end
-	return nil
 end
 
-local function playHandleSound(tool: Tool, name: string)
+local function handleSound(tool: Tool, name: string)
 	local handle = tool:FindFirstChild("Handle")
 	local sound = handle and handle:FindFirstChild(name)
-	if sound and sound:IsA("Sound") then
-		sound:Play()
-	end
+	if sound and sound:IsA("Sound") then sound:Play() end
 end
-
---------------------------------------------------------------------------------
--- Tiro
---------------------------------------------------------------------------------
-
-local function onShoot(player: Player)
-	local tool = getEquippedFirearm(player)
-	if not tool then
-		return
-	end
-
-	local ammo = settingsValue(tool, "Config", "Ammo")
-	if ammo and ammo:IsA("NumberValue") and ammo.Value <= 0 then
-		return
-	end
-
-	local delay = numberValue(tool, "Config", "Delay", 0.1)
-	local now = os.clock()
-	if now - (lastShotAt[player] or 0) < delay * 0.75 then
-		return
-	end
-	lastShotAt[player] = now
-
-	if ammo and ammo:IsA("NumberValue") then
-		ammo.Value -= 1
-	end
-
-	local muzzle = getMuzzle(tool)
-	if not muzzle then
-		return
-	end
-
-	local soundName = SafeAttribute.Get(tool, "SoundName")
-	local weaponsAudio = Audios:FindFirstChild("Weapons")
-	local template = weaponsAudio and weaponsAudio:FindFirstChild(if type(soundName) == "string" and soundName ~= "" then soundName else tool.Name)
-	if template and template:IsA("Sound") then
-		local sound = template:Clone()
-		sound.PlayOnRemove = false
-		sound.Parent = muzzle
-		sound:Play()
-		-- TimeLength pode ser 0 antes do áudio carregar; Ended é confiável,
-		-- e o delay longo é só rede de segurança pra som que nunca toca.
-		sound.Ended:Once(function()
-			sound:Destroy()
-		end)
-		task.delay(10, function()
-			if sound.Parent then
-				sound:Destroy()
-			end
-		end)
-	end
-
-	for _, descendant in muzzle:GetDescendants() do
-		if descendant:IsA("ParticleEmitter") then
-			descendant:Emit(10)
-		end
-	end
-end
-
-local function onHit(player: Player, position: unknown, instance: unknown, normal: unknown)
-	if typeof(position) ~= "Vector3" then
-		return
-	end
-	local tool = getEquippedFirearm(player)
-	if not tool then
-		return
-	end
-
-	local muzzle = getMuzzle(tool)
-	local head = player.Character and player.Character:FindFirstChild("Head")
-	local muzzleCFrame = if muzzle then muzzle.CFrame elseif head and head:IsA("BasePart") then head.CFrame else nil
-	if not muzzleCFrame then
-		return
-	end
-
-	if ((position :: Vector3) - muzzleCFrame.Position).Magnitude > MAX_RANGE + RANGE_SLACK then
-		return
-	end
-
-	WeaponEffects.CreateTracer(muzzleCFrame, position :: Vector3)
-
-	if typeof(instance) == "Instance" and typeof(normal) == "Vector3" then
-		WeaponEffects.CreateImpact(position :: Vector3, instance :: Instance, normal :: Vector3)
-	end
-end
-
---------------------------------------------------------------------------------
--- Dano
---------------------------------------------------------------------------------
-
-local function onDamage(player: Player, targetPart: unknown)
-	if typeof(targetPart) ~= "Instance" or not (targetPart :: Instance):IsA("BasePart") then
-		return
-	end
-	local part = targetPart :: BasePart
-
-	local model = part:FindFirstAncestorOfClass("Model")
-	local humanoid = model and model:FindFirstChildOfClass("Humanoid")
-	if not model or not humanoid or humanoid.Health <= 0 then
-		return
-	end
-	if model == player.Character then
-		return
-	end
-
-	local tool = getEquippedFirearm(player)
-	if not tool then
-		return
-	end
-
-	local shooterPosition = getRootPosition(player)
-	if not shooterPosition or (part.Position - shooterPosition).Magnitude > MAX_RANGE + RANGE_SLACK then
-		return
-	end
-
-	local damage: number
-	local isHead = HEAD_PARTS[part.Name] == true
-	if isHead then
-		damage = numberValue(tool, "Damage", "HeadDamage", 25)
-	elseif TORSO_PARTS[part.Name] then
-		damage = numberValue(tool, "Damage", "TorsoDamage", 17)
-	else
-		damage = numberValue(tool, "Damage", "LimbsDamage", 11)
-	end
-
-	-- Armadura (pasta "Armour" com NumberValue "Health") absorve primeiro.
-	local armour = model:FindFirstChild("Armour")
-	local armourHealth = armour and armour:FindFirstChild("Health")
-	if armour and armourHealth and armourHealth:IsA("NumberValue") and armourHealth.Value > 0 then
-		armourHealth.Value -= damage
-		Remotes.FirearmDamage:FireClient(player, if isHead then "HeadArmor" else "Armor")
-		if armourHealth.Value <= 0 then
-			armour:Destroy()
-			Remotes.FirearmFeed:FireClient(player, "Armour", model.Name)
-		end
-		return
-	end
-
-	-- DamageSystem aplica o dano e, se matar, marca "Dead" + Elimination +
-	-- PlayerKilled. Aqui só cuidamos do feedback específico da arma.
-	local _, died = DamageSystem.Apply(humanoid, damage, { Source = player, Cause = "Tiro" })
-	Remotes.FirearmDamage:FireClient(player, if isHead then "Head" else "Hit")
-
-	if died then
-		Remotes.FirearmFeed:FireClient(player, "Kill", model.Name)
-	end
-end
-
---------------------------------------------------------------------------------
--- Recarga
---------------------------------------------------------------------------------
 
 local function dropMagazine(tool: Tool)
 	local components = tool:FindFirstChild("Components")
 	local mag = components and components:FindFirstChild("Mag")
-	if not mag or not mag:IsA("BasePart") then
+	if not mag or not mag:IsA("BasePart") then return end
+	local clone = mag:Clone()
+	for _, child in clone:GetDescendants() do
+		if child:IsA("JointInstance") or child:IsA("WeldConstraint") then child:Destroy() end
+	end
+	clone.Anchored, clone.CanCollide, clone.CanTouch, clone.CanQuery = false, false, false, false
+	clone.Transparency = 0
+	clone.Parent = Workspace:FindFirstChild("System") or Workspace
+	Debris:AddItem(clone, 3)
+	magazineVisible(tool, false)
+end
+
+local function onReload(player: Player, candidate: unknown, action: unknown)
+	if action == "Cancel" then
+		local state = reloads[player]
+		if state and state.tool == candidate then finishReload(player, false) end
 		return
 	end
-
-	local clone = mag:Clone()
-	local weld = clone:FindFirstChildOfClass("WeldConstraint")
-	if weld then
-		weld:Destroy()
+	if action ~= "Start" then return end
+	local tool = equipped(player, candidate)
+	if not tool or reloads[player] then return end
+	local ammo = Rules.Value(tool, "Config", "Ammo")
+	if not ammo or not (ammo:IsA("NumberValue") or ammo:IsA("IntValue")) then return end
+	if Rules.ReloadAmount(ammo.Value, Ammo.GetMagazineMax(tool), Ammo.GetReserve(player, Ammo.TypeFor(tool))) <= 0 then
+		Remotes.FirearmReload:FireClient(player, tool, "Cancelled")
+		return
 	end
-	clone.Anchored = false
-	clone.CanCollide = true
-	clone.Massless = true
-	clone.Transparency = 0
-
-	local system = workspace:FindFirstChild("System")
-	local misc = system and system:FindFirstChild("Misc")
-	clone.Parent = misc or workspace
-	mag.Transparency = 1
-
-	task.delay(5, function()
-		clone:Destroy()
+	local state: Reload = { tool = tool, connections = {} }
+	reloads[player] = state
+	setReloading(tool, true)
+	table.insert(state.connections, tool.AncestryChanged:Connect(function()
+		if tool.Parent ~= player.Character then finishReload(player, false) end
+	end))
+	local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+	if humanoid then table.insert(state.connections, humanoid.Died:Connect(function() finishReload(player, false) end)) end
+	Remotes.FirearmReload:FireClient(player, tool, "Start", Rules.ReloadDuration)
+	local function stage(delay: number, callback: () -> ())
+		task.delay(delay, function()
+			if reloads[player] ~= state then return end
+			if not equipped(player, tool) then finishReload(player, false); return end
+			callback()
+		end)
+	end
+	-- Agenda autoritativa: animação privada/sem markers não prende a recarga.
+	stage(0.3, function() handleSound(tool, "MagOut"); dropMagazine(tool) end)
+	stage(1.25, function() handleSound(tool, "MagIn"); magazineVisible(tool, true) end)
+	stage(1.75, function() handleSound(tool, "BoltIn") end)
+	stage(1.95, function() handleSound(tool, "BoltOut") end)
+	stage(Rules.ReloadDuration, function()
+		local amount = Rules.ReloadAmount(ammo.Value, Ammo.GetMagazineMax(tool), Ammo.GetReserve(player, Ammo.TypeFor(tool)))
+		ammo.Value += AmmoSystem.TakeReserve(player, Ammo.TypeFor(tool), amount)
+		finishReload(player, true)
 	end)
 end
 
-local function onReload(player: Player, stage: unknown)
-	if type(stage) ~= "string" then
-		return
+local function shotEffects(tool: Tool, muzzle: BasePart)
+	local folder = audios:FindFirstChild("Weapons")
+	local template = folder and folder:FindFirstChild(tool.Name)
+	if template and template:IsA("Sound") then
+		local sound = template:Clone()
+		sound.PlayOnRemove = false
+		sound.RollOffMaxDistance = 180
+		sound.Parent = muzzle
+		sound:Play()
+		Debris:AddItem(sound, 10)
 	end
-	local tool = getEquippedFirearm(player)
-	if not tool then
-		return
-	end
-
-	local reloading = settingsValue(tool, "Config", "Reloading")
-	local ammo = settingsValue(tool, "Config", "Ammo")
-	local maxAmmo = numberValue(tool, "Config", "MaxAmmo", 30)
-
-	if stage == "Start" then
-		if reloading and reloading:IsA("BoolValue") then
-			reloading.Value = true
-		end
-	elseif stage == "MagOut" then
-		playHandleSound(tool, "MagOut")
-		dropMagazine(tool)
-	elseif stage == "MagIn" then
-		playHandleSound(tool, "MagIn")
-		local components = tool:FindFirstChild("Components")
-		local mag = components and components:FindFirstChild("Mag")
-		if mag and mag:IsA("BasePart") then
-			mag.Transparency = 0
-		end
-	elseif stage == "BoltPull" then
-		playHandleSound(tool, "BoltIn")
-	elseif stage == "BoltRelease" then
-		playHandleSound(tool, "BoltOut")
-	elseif stage == "ShellIn" then
-		-- Shotgun: entra 1 cartucho por vez, cada um sai da reserva.
-		playHandleSound(tool, "MagIn")
-		if ammo and ammo:IsA("NumberValue") and ammo.Value < maxAmmo then
-			ammo.Value += AmmoSystem.TakeReserve(player, Ammo.TypeFor(tool), 1)
-		end
-		task.delay(0.2, function()
-			if reloading and reloading:IsA("BoolValue") then
-				reloading.Value = false
-			end
-		end)
-	elseif stage == "End" then
-		-- Recarga normal: o pente só enche até onde a RESERVA dá.
-		if ammo and ammo:IsA("NumberValue") then
-			local needed = maxAmmo - ammo.Value
-			if needed > 0 then
-				ammo.Value += AmmoSystem.TakeReserve(player, Ammo.TypeFor(tool), needed)
-			end
-		end
-		if reloading and reloading:IsA("BoolValue") then
-			reloading.Value = false
-		end
+	for _, child in muzzle:GetDescendants() do
+		if child:IsA("ParticleEmitter") then child:Emit(3) end
 	end
 end
 
---------------------------------------------------------------------------------
--- Modo de teste: armas no Backpack
---------------------------------------------------------------------------------
+local function damageHit(player: Player, tool: Tool, part: Instance)
+	local model: Instance? = part
+	while model and model ~= Workspace do
+		if model:IsA("Model") and model:FindFirstChildOfClass("Humanoid") then break end
+		model = model.Parent
+	end
+	if not model or not model:IsA("Model") or model == player.Character then return end
+	local humanoid = model:FindFirstChildOfClass("Humanoid")
+	if not humanoid or not DamageSystem.IsDamageable(model) or model:FindFirstChildOfClass("ForceField") then return end
+	local trainingTarget = model:GetAttribute("FirearmTestTarget") == true
+	if tool:GetAttribute("LobbyTestWeapon") == true and not trainingTarget then return end
+	local victim = Players:GetPlayerFromCharacter(model)
+	-- Lobby/sala de espera são áreas de preparação, inclusive durante outra partida.
+	if not trainingTarget and (player:GetAttribute("InRound") ~= true
+		or (victim and (victim:GetAttribute("InRound") ~= true or victim:GetAttribute("Eliminado") == true))) then return end
+	local isHead = part.Name == "Head"
+	local torso = part.Name == "Torso" or part.Name == "UpperTorso" or part.Name == "LowerTorso" or part.Name == "HumanoidRootPart"
+	local damage = Rules.Number(tool, "Damage", if isHead then "HeadDamage" elseif torso then "TorsoDamage" else "LimbsDamage", 13)
+	local armour = model:FindFirstChild("Armour")
+	local health = armour and armour:FindFirstChild("Health")
+	if health and health:IsA("NumberValue") and health.Value > 0 then
+		health.Value = math.max(0, health.Value - damage)
+		Remotes.FirearmDamage:FireClient(player, if isHead then "HeadArmor" else "Armor")
+		return
+	end
+	local applied, died = DamageSystem.Apply(humanoid, damage, { Source = player, Cause = "Tiro" })
+	if applied > 0 then Remotes.FirearmDamage:FireClient(player, if isHead then "Head" else "Hit") end
+	if died then Remotes.FirearmFeed:FireClient(player, "Kill", model.Name) end
+end
+
+local function onShoot(player: Player, candidate: unknown, target: unknown, aimed: unknown, sequence: unknown)
+	local tool = equipped(player, candidate)
+	if not tool or typeof(target) ~= "Vector3" or type(aimed) ~= "boolean" then return end
+	local point = target :: Vector3
+	if not Rules.IsFinite(point.X) or not Rules.IsFinite(point.Y) or not Rules.IsFinite(point.Z) then return end
+	if not Rules.IsFinite(sequence) or (sequence :: number) % 1 ~= 0 or math.abs(sequence :: number) > 1e9 then return end
+	local ammo = Rules.Value(tool, "Config", "Ammo")
+	local muzzle = Rules.Muzzle(tool)
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local head = character and character:FindFirstChild("Head")
+	if not ammo or not (ammo:IsA("NumberValue") or ammo:IsA("IntValue")) or not muzzle
+		or not root or not root:IsA("BasePart") or not head or not head:IsA("BasePart") then return end
+	local now = os.clock()
+	local valid = Rules.CanShoot(now, lastShot[player], ammo.Value, reloads[player] ~= nil)
+	local delta = point - muzzle.Position
+	valid = valid and delta.Magnitude > 0.01 and delta.Magnitude <= Rules.Range + 40
+		and (muzzle.Position - root.Position).Magnitude <= 8
+	if not valid then
+		Remotes.FirearmShoot:FireClient(player, tool, sequence, false, ammo.Value)
+		return
+	end
+	lastShot[player] = now
+	ammo.Value -= 1
+	Remotes.FirearmShoot:FireClient(player, tool, sequence, true, ammo.Value)
+	local ignore: { Instance } = { character :: Model }
+	local system = Workspace:FindFirstChild("System")
+	if system then table.insert(ignore, system) end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = ignore
+	params.IgnoreWater = true
+	-- Parede entre o corpo e o cano também bloqueia o tiro.
+	local obstruction = Workspace:Raycast(head.Position, muzzle.Position - head.Position, params)
+	local spread = if aimed then Rules.AimSpread else Rules.HipSpread
+	local direction = (CFrame.lookAt(Vector3.zero, delta.Unit)
+		* CFrame.Angles(math.rad(rng:NextNumber(-spread, spread)), math.rad(rng:NextNumber(-spread, spread)), 0)).LookVector
+	local result = obstruction or Workspace:Raycast(muzzle.Position, direction * Rules.Range, params)
+	local endpoint = if result then result.Position else muzzle.Position + direction * Rules.Range
+	if result then damageHit(player, tool, result.Instance) end
+	local ok, err = pcall(function()
+		shotEffects(tool, muzzle)
+		WeaponEffects.CreateTracer(muzzle.CFrame, endpoint)
+		if result then WeaponEffects.CreateImpact(result.Position, result.Instance, result.Normal) end
+	end)
+	if not ok then warn("[FirearmServer] Efeito OTS indisponível: " .. tostring(err)) end
+end
 
 local function giveTestWeapons(player: Player)
-	local names = GameConfig.Testing.GiveTestWeapons
-	if type(names) ~= "table" then
-		return
-	end
 	local backpack = player:FindFirstChildOfClass("Backpack") or player:WaitForChild("Backpack", 5)
-	if not backpack then
-		return
-	end
-	for _, name in names do
-		local template = ToolsFolder:FindFirstChild(name)
-		if template and template:IsA("Tool") then
-			if not backpack:FindFirstChild(name) then
-				template:Clone().Parent = backpack
-			end
-		else
-			warn(string.format("[FirearmServer] Arma de teste '%s' não existe em WeaponAssets/Tools.", tostring(name)))
-		end
+	if not backpack then return end
+	for _, name in GameConfig.Testing.GiveTestWeapons do
+		local template = toolsFolder:FindFirstChild(name)
+		if template and Rules.IsPistol(template) and not backpack:FindFirstChild(name) then template:Clone().Parent = backpack end
 	end
 end
 
---------------------------------------------------------------------------------
--- Init
---------------------------------------------------------------------------------
-
 function FirearmServer.Init()
-	Remotes.FirearmShoot.OnServerEvent:Connect(onShoot)
-	Remotes.FirearmHit.OnServerEvent:Connect(onHit)
-	Remotes.FirearmDamage.OnServerEvent:Connect(onDamage)
-	Remotes.FirearmReload.OnServerEvent:Connect(onReload)
-
-	local function watchPlayer(player: Player)
-		player.CharacterAdded:Connect(function()
-			task.defer(giveTestWeapons, player)
-		end)
-		if player.Character then
-			giveTestWeapons(player)
+	if initialized then return end
+	initialized = true
+	-- Mantém meshes, welds e grip originais; a pistola não pesa no R6.
+	for _, template in toolsFolder:GetChildren() do
+		if Rules.IsPistol(template) then
+			(template :: Tool).CanBeDropped = false -- G usa o pickup validado; Backspace não perde a Tool.
+			for _, part in template:GetDescendants() do
+				if part:IsA("BasePart") then
+					part.Massless, part.Anchored, part.CanCollide = true, false, false
+					part.CanTouch, part.CanQuery = false, false
+				end
+			end
 		end
 	end
-	for _, player in Players:GetPlayers() do
-		watchPlayer(player)
+	Remotes.FirearmShoot.OnServerEvent:Connect(onShoot)
+	Remotes.FirearmReload.OnServerEvent:Connect(onReload)
+	-- FirearmHit/FirearmDamage deliberadamente sem listeners OnServerEvent.
+	local function watchPlayer(player: Player)
+		player.CharacterRemoving:Connect(function() finishReload(player, false) end)
+		player.CharacterAdded:Connect(function()
+			lastShot[player] = nil
+			task.defer(giveTestWeapons, player)
+		end)
+		if player.Character then task.defer(giveTestWeapons, player) end
 	end
+	for _, player in Players:GetPlayers() do watchPlayer(player) end
 	Players.PlayerAdded:Connect(watchPlayer)
 	Players.PlayerRemoving:Connect(function(player)
-		lastShotAt[player] = nil
+		finishReload(player, false)
+		lastShot[player] = nil
 	end)
 end
 

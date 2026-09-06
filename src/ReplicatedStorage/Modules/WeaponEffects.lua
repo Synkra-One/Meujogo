@@ -24,7 +24,7 @@ local Audios = SafeWait.Child(WeaponAssets, "Audios")
 
 local WeaponEffects = {}
 
-local TRACER_LIFETIME = 3
+local TRACER_LIFETIME = 0.25
 local IMPACT_LIFETIME = 15
 local FLESH_LIFETIME = 3
 
@@ -58,6 +58,9 @@ function WeaponEffects.CreateTracer(muzzleCFrame: CFrame, endPosition: Vector3)
 
 	local startPart = startTemplate:Clone()
 	local endPart = endTemplate:Clone()
+	for _, part in { startPart, endPart } do
+		part.Anchored, part.CanCollide, part.CanTouch, part.CanQuery = true, false, false, false
+	end
 	local beam = startPart:FindFirstChildOfClass("Beam")
 	local endAttachment = endPart:FindFirstChildOfClass("Attachment")
 	if beam and endAttachment then
@@ -71,12 +74,12 @@ function WeaponEffects.CreateTracer(muzzleCFrame: CFrame, endPosition: Vector3)
 	endPart.Parent = folder
 
 	local transparency = startPart:FindFirstChild("BeamTransparency")
-	task.delay(0.3, function()
+	task.delay(0.04, function()
 		if transparency and transparency:IsA("NumberValue") and beam then
 			transparency.Changed:Connect(function(value)
 				beam.Transparency = NumberSequence.new(value)
 			end)
-			TweenService:Create(transparency, TweenInfo.new(0.2), { Value = 1 }):Play()
+			TweenService:Create(transparency, TweenInfo.new(0.12), { Value = 1 }):Play()
 		end
 	end)
 
@@ -99,6 +102,7 @@ local function spawnImpact(templateFolderName: string, position: Vector3, normal
 	end
 
 	local impact = template:Clone()
+	impact.Massless, impact.CanCollide, impact.CanTouch, impact.CanQuery = true, false, false, false
 	impact.Anchored = weldTo == nil
 	impact.CFrame = CFrame.lookAt(position, position + normal)
 	impact.Parent = systemFolder("Impacts")

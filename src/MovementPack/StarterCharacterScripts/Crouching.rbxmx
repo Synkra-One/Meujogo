@@ -206,7 +206,13 @@ end
 -- =============================================
 -- HELPERS
 -- =============================================
+-- [Meujogo] Movimento e mira compartilham o mesmo tween de FOV.
+local movementFOV = CONFIG.DefaultFOV
 local function tweenFOV(target, duration)
+	movementFOV = target
+	if Character:GetAttribute("FirearmAiming") == true then
+		target = math.min(target, 62)
+	end
 	if fovTween then fovTween:Cancel() end
 	fovTween = TweenService:Create(
 		Camera,
@@ -215,6 +221,10 @@ local function tweenFOV(target, duration)
 	)
 	fovTween:Play()
 end
+
+Character:GetAttributeChangedSignal("FirearmAiming"):Connect(function()
+	tweenFOV(movementFOV, 0.18)
+end)
 
 local function tweenCamOffset(y, duration)
 	TweenService:Create(
@@ -295,13 +305,14 @@ local function isObstructedForStand()
 end
 
 local function canSprintNow()
+	if Character:GetAttribute("FirearmAiming") == true then return false end
 	local can = RootPart:GetAttribute("CanSprint")
 	if can == nil then return true end
 	return can == true
 end
 
 local function shouldForceStopSprint()
-	return RootPart:GetAttribute("ForceStopSprint") == true
+	return RootPart:GetAttribute("ForceStopSprint") == true or Character:GetAttribute("FirearmAiming") == true
 end
 
 -- =============================================
