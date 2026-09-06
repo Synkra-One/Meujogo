@@ -1,0 +1,680 @@
+<?xml version='1.0' encoding='utf-8'?>
+<roblox version="4"><Item class="LocalScript" referent="172">
+          <Properties>
+            <string name="Name">DeathScreenUI</string>
+            <BinaryString name="AttributesSerialize" />
+            <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+            <bool name="Disabled">false</bool>
+            <ContentId name="LinkedSource">
+              <null>
+              </null>
+            </ContentId>
+            <token name="RunContext">0</token>
+            <bool name="DefinesCapabilities">false</bool>
+            <string name="ScriptGuid">{033CCB54-8DFA-4614-9B2A-07C479BCE3A9}</string>
+            <string name="Source">local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local deathEvent = ReplicatedStorage:WaitForChild("PlayerDied")
+local whiteFadeInEvent = ReplicatedStorage:WaitForChild("WhiteFadeIn")
+local whiteFadeOutEvent = ReplicatedStorage:WaitForChild("WhiteFadeOut")
+
+local PIXEL_FONT = Font.fromName("PressStart2P")
+local FADE_TIME = 1.1
+local FROST_LEAD_TIME = 0  -- frost appears this many seconds BEFORE white screen
+local FROST_TRAIL_TIME = 0 -- frost lingers this many seconds AFTER white screen fades out
+
+--=====================================================
+-- 🔻 EDIT THESE TO MATCH YOUR FROST VIGNETTE NAMES 🔻
+--=====================================================
+
+local FROST_GUI_NAME = "FrostVignette"  -- name of your frost ScreenGui
+local FROST_FRAME_NAME = "Vignette"     -- name of the Frame/ImageLabel inside it
+
+local frostFrame = nil
+local frostIsImage = false
+
+task.spawn(function()
+	local ok, frostGui = pcall(function()
+		return playerGui:WaitForChild(FROST_GUI_NAME, 10)
+	end)
+	if ok and frostGui then
+		local frame = frostGui:FindFirstChild(FROST_FRAME_NAME, true)
+		if frame then
+			frostFrame = frame
+			frostIsImage = frame:IsA("ImageLabel") or frame:IsA("ImageButton")
+		else
+			warn("[DeathScreenUI] Could not find frost frame named '" .. FROST_FRAME_NAME .. "' inside '" .. FROST_GUI_NAME .. "'")
+		end
+	else
+		warn("[DeathScreenUI] Could not find frost ScreenGui named '" .. FROST_GUI_NAME .. "'")
+	end
+end)
+
+--=====================================================
+-- LIGHTING FX
+--=====================================================
+
+local colorCorrection = Instance.new("ColorCorrectionEffect")
+colorCorrection.Name = "DeathColorCorrection"
+colorCorrection.Saturation = 0
+colorCorrection.Brightness = 0
+colorCorrection.Contrast = 0
+colorCorrection.Parent = Lighting
+
+local blur = Instance.new("BlurEffect")
+blur.Name = "DeathBlur"
+blur.Size = 0
+blur.Parent = Lighting
+
+--=====================================================
+-- ROOT UI
+--=====================================================
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "DeathScreenGui"
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+screenGui.DisplayOrder = 1000
+screenGui.Parent = playerGui
+
+local overlay = Instance.new("Frame")
+overlay.Name = "Overlay"
+overlay.Size = UDim2.new(1, 0, 1, 0)
+overlay.BackgroundColor3 = Color3.fromRGB(10, 5, 5)
+overlay.BackgroundTransparency = 1
+overlay.BorderSizePixel = 0
+overlay.ZIndex = 5
+overlay.Visible = false
+overlay.Parent = screenGui
+
+--=====================================================
+-- HUD CORNER BRACKETS
+--=====================================================
+
+local function createBracket(cornerAnchor, posX, posY, flipX, flipY)
+	local holder = Instance.new("Frame")
+	holder.Size = UDim2.new(0, 40, 0, 40)
+	holder.Position = UDim2.new(posX, 0, posY, 0)
+	holder.AnchorPoint = cornerAnchor
+	holder.BackgroundTransparency = 1
+	holder.ZIndex = 6
+	holder.Parent = overlay
+
+	local thickness = 6
+	local length = 40
+
+	local horiz = Instance.new("Frame")
+	horiz.Size = UDim2.new(0, length, 0, thickness)
+	horiz.Position = UDim2.new(0, 0, 0, 0)
+	horiz.BackgroundColor3 = Color3.fromRGB(198, 40, 40)
+	horiz.BorderSizePixel = 0
+	horiz.BackgroundTransparency = 1
+	horiz.ZIndex = 6
+	horiz.Parent = holder
+
+	local vert = Instance.new("Frame")
+	vert.Size = UDim2.new(0, thickness, 0, length)
+	vert.Position = UDim2.new(0, 0, 0, 0)
+	vert.BackgroundColor3 = Color3.fromRGB(198, 40, 40)
+	vert.BorderSizePixel = 0
+	vert.BackgroundTransparency = 1
+	vert.ZIndex = 6
+	vert.Parent = holder
+
+	if flipX then
+		horiz.Position = UDim2.new(1, -length, 0, 0)
+		vert.Position = UDim2.new(1, -thickness, 0, 0)
+	end
+	if flipY then
+		horiz.Position = UDim2.new(horiz.Position.X.Scale, horiz.Position.X.Offset, 1, -thickness)
+		vert.Position = UDim2.new(vert.Position.X.Scale, vert.Position.X.Offset, 1, -length)
+	end
+
+	return {horiz, vert}
+end
+
+local bracketParts = {}
+for _, part in ipairs(createBracket(Vector2.new(0, 0), 0, 0, false, false)) do table.insert(bracketParts, part) end
+for _, part in ipairs(createBracket(Vector2.new(1, 0), 1, 0, true, false)) do table.insert(bracketParts, part) end
+for _, part in ipairs(createBracket(Vector2.new(0, 1), 0, 1, false, true)) do table.insert(bracketParts, part) end
+for _, part in ipairs(createBracket(Vector2.new(1, 1), 1, 1, true, true)) do table.insert(bracketParts, part) end
+
+--=====================================================
+-- BLOOD DRIPS
+--=====================================================
+
+local dripHolder = Instance.new("Frame")
+dripHolder.Size = UDim2.new(1, 0, 0, 0)
+dripHolder.BackgroundTransparency = 1
+dripHolder.ZIndex = 6
+dripHolder.Parent = overlay
+
+local drips = {}
+for i = 1, 14 do
+	local drip = Instance.new("Frame")
+	drip.Size = UDim2.new(0, 6, 0, 0)
+	drip.Position = UDim2.new(math.random(1, 99) / 100, 0, 0, 0)
+	drip.BackgroundColor3 = Color3.fromRGB(150, 15, 15)
+	drip.BorderSizePixel = 0
+	drip.ZIndex = 6
+	drip.Parent = dripHolder
+	table.insert(drips, drip)
+end
+
+--=====================================================
+-- CENTER BOX
+--=====================================================
+
+local box = Instance.new("Frame")
+box.Name = "PixelBox"
+box.AnchorPoint = Vector2.new(0.5, 0.5)
+box.Position = UDim2.new(0.5, 0, 0.5, 0)
+box.Size = UDim2.new(0, 460, 0, 220)
+box.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
+box.BackgroundTransparency = 1
+box.BorderSizePixel = 0
+box.ZIndex = 7
+box.Parent = overlay
+
+local boxStroke = Instance.new("UIStroke")
+boxStroke.Thickness = 4
+boxStroke.Color = Color3.fromRGB(198, 40, 40)
+boxStroke.Transparency = 1
+boxStroke.Parent = box
+
+--=====================================================
+-- PIXEL SKULL
+--=====================================================
+
+local skullMatrix = {
+	{0,0,1,1,1,1,0,0},
+	{0,1,1,1,1,1,1,0},
+	{1,1,2,1,1,2,1,1},
+	{1,1,2,1,1,2,1,1},
+	{1,1,1,1,1,1,1,1},
+	{0,1,1,2,2,1,1,0},
+	{0,0,1,1,1,1,0,0},
+	{0,1,0,1,1,0,1,0},
+}
+
+local skullContainer = Instance.new("Frame")
+skullContainer.Size = UDim2.new(0, 64, 0, 64)
+skullContainer.Position = UDim2.new(0.5, 0, 0, 12)
+skullContainer.AnchorPoint = Vector2.new(0.5, 0)
+skullContainer.BackgroundTransparency = 1
+skullContainer.ZIndex = 8
+skullContainer.Parent = box
+
+local skullPixels = {}
+local PIXEL_SIZE = 8
+for row = 1, #skullMatrix do
+	for col = 1, #skullMatrix[row] do
+		local value = skullMatrix[row][col]
+		if value ~= 0 then
+			local px = Instance.new("Frame")
+			px.Size = UDim2.new(0, PIXEL_SIZE, 0, PIXEL_SIZE)
+			px.Position = UDim2.new(0, (col - 1) * PIXEL_SIZE, 0, (row - 1) * PIXEL_SIZE)
+			px.BorderSizePixel = 0
+			px.ZIndex = 8
+			px.BackgroundTransparency = 1
+			if value == 1 then
+				px.BackgroundColor3 = Color3.fromRGB(235, 235, 235)
+			else
+				px.BackgroundColor3 = Color3.fromRGB(198, 40, 40)
+			end
+			px.Parent = skullContainer
+			table.insert(skullPixels, px)
+		end
+	end
+end
+
+--=====================================================
+-- GLITCH TITLE TEXT
+--=====================================================
+
+local titleHolder = Instance.new("Frame")
+titleHolder.Size = UDim2.new(1, -20, 0, 40)
+titleHolder.Position = UDim2.new(0, 10, 0, 84)
+titleHolder.BackgroundTransparency = 1
+titleHolder.ZIndex = 8
+titleHolder.Parent = box
+
+local function makeTitleCopy(color, zIndex)
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, 0, 1, 0)
+	label.BackgroundTransparency = 1
+	label.FontFace = PIXEL_FONT
+	label.Text = "YOU DIED"
+	label.TextColor3 = color
+	label.TextTransparency = 1
+	label.TextSize = 26
+	label.ZIndex = zIndex
+	label.Parent = titleHolder
+	return label
+end
+
+local cyanCopy = makeTitleCopy(Color3.fromRGB(60, 220, 255), 8)
+local redCopy = makeTitleCopy(Color3.fromRGB(255, 50, 50), 8)
+local mainCopy = makeTitleCopy(Color3.fromRGB(230, 230, 230), 9)
+
+--=====================================================
+-- COUNTDOWN + DEATH COUNTER
+--=====================================================
+
+local countdownLabel = Instance.new("TextLabel")
+countdownLabel.Size = UDim2.new(1, -20, 0, 20)
+countdownLabel.Position = UDim2.new(0, 10, 0, 140)
+countdownLabel.BackgroundTransparency = 1
+countdownLabel.FontFace = PIXEL_FONT
+countdownLabel.Text = "Respawning in 0..."
+countdownLabel.TextColor3 = Color3.fromRGB(210, 210, 210)
+countdownLabel.TextTransparency = 1
+countdownLabel.TextSize = 12
+countdownLabel.ZIndex = 8
+countdownLabel.Parent = box
+
+local deathsLabel = Instance.new("TextLabel")
+deathsLabel.Size = UDim2.new(1, -20, 0, 20)
+deathsLabel.Position = UDim2.new(0, 10, 0, 170)
+deathsLabel.BackgroundTransparency = 1
+deathsLabel.FontFace = PIXEL_FONT
+deathsLabel.Text = "Deaths: 0"
+deathsLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+deathsLabel.TextTransparency = 1
+deathsLabel.TextSize = 12
+deathsLabel.ZIndex = 8
+deathsLabel.Parent = box
+
+--=====================================================
+-- EMBERS
+--=====================================================
+
+local emberHolder = Instance.new("Frame")
+emberHolder.Size = UDim2.new(1, 0, 1, 0)
+emberHolder.BackgroundTransparency = 1
+emberHolder.ZIndex = 6
+emberHolder.Parent = overlay
+
+local embersActive = false
+
+local function startEmbers()
+	embersActive = true
+	task.spawn(function()
+		while embersActive do
+			local ember = Instance.new("Frame")
+			local size = math.random(3, 6)
+			ember.Size = UDim2.new(0, size, 0, size)
+			ember.Position = UDim2.new(math.random(1, 99) / 100, 0, 1, 10)
+			ember.BackgroundColor3 = Color3.fromRGB(255, math.random(90, 150), 30)
+			ember.BorderSizePixel = 0
+			ember.ZIndex = 6
+			ember.Parent = emberHolder
+
+			local riseDistance = math.random(150, 320)
+			local duration = math.random(2, 4)
+
+			local tween = TweenService:Create(ember, TweenInfo.new(duration, Enum.EasingStyle.Linear), {
+				Position = UDim2.new(ember.Position.X.Scale, 0, 1, -riseDistance),
+				BackgroundTransparency = 1,
+			})
+			tween:Play()
+			tween.Completed:Connect(function()
+				ember:Destroy()
+			end)
+
+			task.wait(math.random(10, 25) / 100)
+		end
+	end)
+end
+
+local function stopEmbers()
+	embersActive = false
+end
+
+--=====================================================
+-- WHITE FLASH (TOP PRIORITY)
+--=====================================================
+
+local whiteFlash = Instance.new("Frame")
+whiteFlash.Name = "WhiteFlash"
+whiteFlash.Size = UDim2.new(1, 0, 1, 0)
+whiteFlash.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+whiteFlash.BackgroundTransparency = 1
+whiteFlash.BorderSizePixel = 0
+whiteFlash.ZIndex = 9999
+whiteFlash.Parent = screenGui
+
+--=====================================================
+-- CAMERA SHAKE
+--=====================================================
+
+local function cameraShake(humanoid, duration, intensity)
+	if not humanoid then return end
+	task.spawn(function()
+		local elapsed = 0
+		while elapsed &lt; duration and humanoid.Parent do
+			local decay = 1 - (elapsed / duration)
+			humanoid.CameraOffset = Vector3.new(
+				(math.random() - 0.5) * intensity * decay,
+				(math.random() - 0.5) * intensity * decay,
+				0
+			)
+			elapsed += task.wait()
+		end
+		if humanoid.Parent then
+			humanoid.CameraOffset = Vector3.new(0, 0, 0)
+		end
+	end)
+end
+
+--=====================================================
+-- GLITCH TEXT EFFECT
+--=====================================================
+
+local function glitchTitleReveal(duration)
+	local elapsed = 0
+	local conn
+	conn = RunService.Heartbeat:Connect(function(dt)
+		elapsed += dt
+		if elapsed &gt;= duration then
+			conn:Disconnect()
+			TweenService:Create(cyanCopy, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
+			TweenService:Create(redCopy, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
+			cyanCopy.Position = UDim2.new(0, 0, 0, 0)
+			redCopy.Position = UDim2.new(0, 0, 0, 0)
+			return
+		end
+		local jitter = math.max(0, 4 * (1 - elapsed / duration))
+		cyanCopy.Position = UDim2.new(0, math.random(-jitter, jitter), 0, math.random(-jitter, jitter))
+		redCopy.Position = UDim2.new(0, math.random(-jitter, jitter), 0, math.random(-jitter, jitter))
+	end)
+end
+
+--=====================================================
+-- HELPER: tween frost frame
+--=====================================================
+
+local function tweenFrost(transparency, duration, easingDirection)
+	if not frostFrame then return end
+	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Quad, easingDirection)
+	if frostIsImage then
+		TweenService:Create(frostFrame, tweenInfo, {ImageTransparency = transparency}):Play()
+	else
+		TweenService:Create(frostFrame, tweenInfo, {BackgroundTransparency = transparency}):Play()
+	end
+end
+
+--=====================================================
+-- SOUND SETUP
+--=====================================================
+
+local deathSound = script:WaitForChild("DeathSound")
+
+--=====================================================
+-- MAIN DEATH SEQUENCE
+--=====================================================
+
+local function playDeathSequence(deathScreenTime, deathCount)
+	overlay.Visible = true
+	deathsLabel.Text = "Deaths: " .. tostring(deathCount)
+
+	-- Play death sound immediately on death
+	if deathSound then
+		deathSound:Stop()
+		deathSound.TimePosition = 0
+		deathSound:Play()
+	end
+
+	local character = player.Character
+	local humanoid = character and character:FindFirstChild("Humanoid")
+	cameraShake(humanoid, 0.5, 0.35)
+
+	TweenService:Create(colorCorrection, TweenInfo.new(0.6), {Saturation = -1, Brightness = -0.15, Contrast = 0.15}):Play()
+	TweenService:Create(blur, TweenInfo.new(0.6), {Size = 18}):Play()
+
+	local t1 = TweenInfo.new(0.5)
+	TweenService:Create(overlay, t1, {BackgroundTransparency = 0.25}):Play()
+	TweenService:Create(box, t1, {BackgroundTransparency = 0.05}):Play()
+	TweenService:Create(boxStroke, t1, {Transparency = 0}):Play()
+	TweenService:Create(countdownLabel, t1, {TextTransparency = 0}):Play()
+	TweenService:Create(deathsLabel, t1, {TextTransparency = 0}):Play()
+
+	skullContainer.Size = UDim2.new(0, 0, 0, 0)
+	for _, px in ipairs(skullPixels) do
+		TweenService:Create(px, TweenInfo.new(0.3), {BackgroundTransparency = 0}):Play()
+	end
+	TweenService:Create(skullContainer, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Size = UDim2.new(0, 64, 0, 64)
+	}):Play()
+
+	for _, part in ipairs(bracketParts) do
+		TweenService:Create(part, TweenInfo.new(0.4), {BackgroundTransparency = 0}):Play()
+	end
+
+	glitchTitleReveal(0.6)
+	TweenService:Create(mainCopy, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
+	TweenService:Create(cyanCopy, TweenInfo.new(0.1), {TextTransparency = 0.3}):Play()
+	TweenService:Create(redCopy, TweenInfo.new(0.1), {TextTransparency = 0.3}):Play()
+
+	for _, drip in ipairs(drips) do
+		task.delay(math.random(0, 40) / 100, function()
+			TweenService:Create(drip, TweenInfo.new(math.random(8, 16) / 10, Enum.EasingStyle.Quad), {
+				Size = UDim2.new(0, 6, 0, math.random(20, 90))
+			}):Play()
+		end)
+	end
+
+	startEmbers()
+
+	task.spawn(function()
+		local timeLeft = math.ceil(deathScreenTime)
+		while timeLeft &gt; 0 do
+			countdownLabel.Text = "Respawning in " .. timeLeft .. "..."
+			task.wait(1)
+			timeLeft -= 1
+		end
+	end)
+
+	-- Fade out death sound smoothly as white screen approaches
+	task.spawn(function()
+		task.wait(deathScreenTime - FADE_TIME - FROST_LEAD_TIME - 0.2)
+		if deathSound and deathSound.Playing then
+			local steps = 20
+			local stepTime = (FADE_TIME + FROST_LEAD_TIME) / steps
+			local startVolume = deathSound.Volume
+			for i = 1, steps do
+				if deathSound then
+					deathSound.Volume = startVolume * (1 - (i / steps))
+				end
+				task.wait(stepTime)
+			end
+			if deathSound then
+				deathSound:Stop()
+				deathSound.Volume = startVolume -- reset volume for next death
+			end
+		end
+	end)
+end
+
+--=====================================================
+-- WHITE FADE IN + FROST SYNC (frost leads early)
+--=====================================================
+
+local function fadeToWhite()
+	-- Frost starts fading in FIRST before white screen
+	tweenFrost(0, FADE_TIME + FROST_LEAD_TIME, Enum.EasingDirection.In)
+
+	-- Wait the lead time then start the white screen
+	task.wait(FROST_LEAD_TIME)
+
+	local whiteTween = TweenService:Create(whiteFlash, TweenInfo.new(FADE_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+		BackgroundTransparency = 0
+	})
+	whiteTween:Play()
+	whiteTween.Completed:Wait()
+
+	-- Reset all death UI hidden safely behind white screen
+	stopEmbers()
+	overlay.Visible = false
+	overlay.BackgroundTransparency = 1
+	box.BackgroundTransparency = 1
+	boxStroke.Transparency = 1
+	countdownLabel.TextTransparency = 1
+	deathsLabel.TextTransparency = 1
+	mainCopy.TextTransparency = 1
+	cyanCopy.TextTransparency = 1
+	redCopy.TextTransparency = 1
+	for _, px in ipairs(skullPixels) do
+		px.BackgroundTransparency = 1
+	end
+	for _, part in ipairs(bracketParts) do
+		part.BackgroundTransparency = 1
+	end
+	for _, drip in ipairs(drips) do
+		drip.Size = UDim2.new(0, 6, 0, 0)
+	end
+
+	colorCorrection.Saturation = 0
+	colorCorrection.Brightness = 0
+	colorCorrection.Contrast = 0
+	blur.Size = 0
+end
+
+--=====================================================
+-- WHITE FADE OUT + FROST SYNC (frost trails behind)
+--=====================================================
+
+local function fadeFromWhite()
+	-- White screen fades out immediately on respawn
+	TweenService:Create(whiteFlash, TweenInfo.new(FADE_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		BackgroundTransparency = 1
+	}):Play()
+
+	-- Frost waits then slowly fades out after white is gone
+	task.spawn(function()
+		task.wait(FROST_TRAIL_TIME)
+		tweenFrost(1, FADE_TIME + 0.4, Enum.EasingDirection.Out)
+	end)
+end
+
+--=====================================================
+-- EVENT HOOKS
+--=====================================================
+
+deathEvent.OnClientEvent:Connect(playDeathSequence)
+whiteFadeInEvent.OnClientEvent:Connect(fadeToWhite)
+whiteFadeOutEvent.OnClientEvent:Connect(fadeFromWhite)</string>
+            <int64 name="SourceAssetId">-1</int64>
+            <BinaryString name="Tags" />
+          </Properties>
+          <Item class="Sound" referent="173">
+            <Properties>
+              <string name="Name">DeathSound</string>
+              <bool name="AcousticSimulationEnabled">true</bool>
+              <BinaryString name="AttributesSerialize" />
+              <Content name="AudioContent">
+                <uri>rbxassetid://140695149439373</uri>
+              </Content>
+              <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+              <NumberRange name="LoopRegion">0 60000 </NumberRange>
+              <bool name="Looped">false</bool>
+              <bool name="PlayOnRemove">false</bool>
+              <NumberRange name="PlaybackRegion">0 60000 </NumberRange>
+              <bool name="PlaybackRegionsEnabled">false</bool>
+              <float name="PlaybackSpeed">1</float>
+              <bool name="Playing">false</bool>
+              <float name="xmlRead_MaxDistance_3">10000</float>
+              <float name="EmitterSize">10</float>
+              <token name="RollOffMode">0</token>
+              <bool name="DefinesCapabilities">false</bool>
+              <Ref name="SoundGroup">null</Ref>
+              <int64 name="SourceAssetId">140695149439373</int64>
+              <BinaryString name="Tags" />
+              <double name="TimePosition">0</double>
+              <float name="Volume">0.5</float>
+            </Properties>
+          </Item>
+          <Item class="ScreenGui" referent="174">
+            <Properties>
+              <string name="Name">FrostVignette</string>
+              <BinaryString name="AttributesSerialize" />
+              <bool name="AutoLocalize">true</bool>
+              <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+              <bool name="ClipToDeviceSafeArea">true</bool>
+              <int name="DisplayOrder">0</int>
+              <bool name="Enabled">true</bool>
+              <bool name="ResetOnSpawn">true</bool>
+              <Ref name="RootLocalizationTable">null</Ref>
+              <token name="SafeAreaCompatibility">1</token>
+              <bool name="DefinesCapabilities">false</bool>
+              <token name="ScreenInsets">2</token>
+              <token name="SelectionBehaviorDown">0</token>
+              <token name="SelectionBehaviorLeft">0</token>
+              <token name="SelectionBehaviorRight">0</token>
+              <token name="SelectionBehaviorUp">0</token>
+              <bool name="SelectionGroup">false</bool>
+              <int64 name="SourceAssetId">-1</int64>
+              <BinaryString name="Tags" />
+              <token name="ZIndexBehavior">1</token>
+            </Properties>
+            <Item class="Decal" referent="175">
+              <Properties>
+                <string name="Name">Vignette</string>
+                <BinaryString name="AttributesSerialize" />
+                <bool name="AutoLocalize">true</bool>
+                <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                <Color3 name="Color3">
+                  <R>1</R>
+                  <G>1</G>
+                  <B>1</B>
+                </Color3>
+                <token name="Face">5</token>
+                <Content name="MetalnessMapContent">
+                  <null>
+                  </null>
+                </Content>
+                <Content name="NormalMapContent">
+                  <null>
+                  </null>
+                </Content>
+                <float name="Rotation">0</float>
+                <Content name="RoughnessMapContent">
+                  <null>
+                  </null>
+                </Content>
+                <bool name="DefinesCapabilities">false</bool>
+                <int64 name="SourceAssetId">10344339796</int64>
+                <BinaryString name="Tags" />
+                <Content name="TextureContent">
+                  <uri>rbxassetid://10344339712</uri>
+                </Content>
+                <ContentId name="TexturePack">
+                  <null>
+                  </null>
+                </ContentId>
+                <string name="TexturePackMetadata" />
+                <float name="Transparency">0</float>
+                <Vector2 name="UVOffset">
+                  <X>0</X>
+                  <Y>0</Y>
+                </Vector2>
+                <Vector2 name="UVScale">
+                  <X>1</X>
+                  <Y>1</Y>
+                </Vector2>
+                <int name="ZIndex">1</int>
+              </Properties>
+            </Item>
+          </Item>
+        </Item>
+        <SharedStrings>
+    <SharedString md5="rxNJufX5oaagQE3qNtzJSQ==" />
+  </SharedStrings>
+</roblox>

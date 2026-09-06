@@ -1,0 +1,1645 @@
+<?xml version='1.0' encoding='utf-8'?>
+<roblox version="4"><Item class="ModuleScript" referent="58">
+            <Properties>
+              <string name="Name">FootstepModule</string>
+              <BinaryString name="AttributesSerialize" />
+              <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+              <ContentId name="LinkedSource">
+                <null>
+                </null>
+              </ContentId>
+              <bool name="DefinesCapabilities">false</bool>
+              <string name="ScriptGuid">{A4170199-4418-41B6-A435-739967A1E631}</string>
+              <string name="Source">export type SoundTable = {string}
+export type SoundIds = {[string]: SoundTable}
+
+-- Main Module
+local main = {}
+
+local FootstepSetsFolder = script:WaitForChild("Footsteps")
+local LandingSetsFolder = script:WaitForChild("Landing")
+local JumpingSetsFolder = script:WaitForChild("Jumping")
+
+local Sets = {}
+
+main.MaterialMap = {
+	[Enum.Material.Slate] = 		"Concrete",
+	[Enum.Material.Concrete] = 		"Concrete",
+	[Enum.Material.Brick] = 		"Concrete",
+	[Enum.Material.Cobblestone] = 	"Concrete",
+	[Enum.Material.Sandstone] =		"Concrete",
+	[Enum.Material.Rock] = 			"Concrete",
+	[Enum.Material.Basalt] = 		"Concrete",
+	[Enum.Material.CrackedLava] = 	"Concrete",
+	[Enum.Material.Asphalt] = 		"Concrete",
+	[Enum.Material.Limestone] = 	"Concrete",
+	[Enum.Material.Pavement] = 		"Concrete",
+
+	[Enum.Material.Plastic] = 		"Tile",
+	[Enum.Material.Marble] = 		"Tile",
+	[Enum.Material.Neon] = 			"Tile",
+	[Enum.Material.Granite] = 		"Tile",
+
+	[Enum.Material.Wood] = 			"Wood",
+	[Enum.Material.WoodPlanks] = 	"Wood",
+
+	[Enum.Material.Water] = 		"Slosh",
+
+	[Enum.Material.CorrodedMetal] = "Metal_Solid",
+	[Enum.Material.DiamondPlate] = 	"Metal_Solid",
+	[Enum.Material.Metal] = 		"Metal_Solid",
+
+	[Enum.Material.Foil] = 			"Metal_Grate",
+
+	[Enum.Material.Ground] = 		"Dirt",
+
+	[Enum.Material.Grass] = 		"Grass",
+	[Enum.Material.LeafyGrass] = 	"Grass",
+
+	[Enum.Material.Fabric] = 		"Carpet",
+
+	[Enum.Material.Pebble] = 		"Gravel",
+
+	[Enum.Material.Snow] = 			"Snow",
+
+	[Enum.Material.Sand] = 			"Sand",
+	[Enum.Material.Salt] = 			"Sand",
+
+	[Enum.Material.Ice] = 			"Glass",
+	[Enum.Material.Glacier] = 		"Glass",
+	[Enum.Material.Glass] = 		"Glass",
+
+	[Enum.Material.SmoothPlastic] = "Rubber",
+	[Enum.Material.ForceField] = 	"Rubber",
+
+	[Enum.Material.Mud] = 			"Mud",
+}
+
+Sets[FootstepSetsFolder.Name] = {}
+for _,v in pairs(FootstepSetsFolder:GetChildren()) do
+	Sets[FootstepSetsFolder.Name][v.Name] = require(v)
+end
+
+Sets[LandingSetsFolder.Name] = {}
+for _,v in pairs(LandingSetsFolder:GetChildren()) do
+	Sets[LandingSetsFolder.Name][v.Name] = require(v)
+end
+
+Sets[JumpingSetsFolder.Name] = {}
+for _,v in pairs(JumpingSetsFolder:GetChildren()) do
+	Sets[JumpingSetsFolder.Name][v.Name] = require(v)
+end
+
+-- This function produces a folder under a specified parent. --this function IS NOT USED
+-- "soundProperties" is a table determining what the default properties of these audios will be.
+function main:CreateSoundGroup(parent:Instance?, name:string?, soundProperties:{string:any}?, isFolder:boolean?) : SoundGroup|Folder
+	if not parent then warn("Parent not specified, Footstep folder parented to workspace") end
+	isFolder = isFolder or false
+	soundProperties = soundProperties or {}
+	parent = parent or workspace
+	-- Create folder
+	local SoundGroup = nil
+	if not isFolder then
+		SoundGroup = Instance.new("SoundGroup"); SoundGroup.Volume = 1; SoundGroup.Name = name or "Footsteps"
+	else
+		SoundGroup = Instance.new("Folder"); SoundGroup.Name = name or "Footsteps"
+	end
+	local index = 0
+	for soundMaterial,soundList in pairs(main.SoundIds) do
+		index = 0
+		local sectionGroup = nil
+		if not isFolder then
+			sectionGroup = Instance.new("SoundGroup"); sectionGroup.Volume = 1; sectionGroup.Name = soundMaterial
+		else
+			sectionGroup = Instance.new("Folder"); sectionGroup.Name = soundMaterial
+		end
+		for _,soundId in pairs(soundList) do
+			index += 1 -- Increment index
+			local soundEffect = Instance.new("Sound")
+			soundEffect.Name = string.format("%s_%02i",soundMaterial:lower(),index)
+			-- Set optional sound group
+			if not isFolder then
+				soundEffect.SoundGroup = sectionGroup
+			end
+			for property,value in pairs(soundProperties) do
+				soundEffect[property] = value
+			end
+			soundEffect.SoundId = soundId
+			soundEffect.Parent = sectionGroup
+		end
+		sectionGroup.Parent = SoundGroup
+	end
+
+	SoundGroup.Parent = parent
+	return SoundGroup
+end
+
+-- This function returns a table from the MaterialMap given the material.
+function main:GetTableFromMaterial(EnumItem : Enum.Material|string) : { [string]: {string}}
+	if typeof(EnumItem) == "string" then -- CONVERSION
+		EnumItem = Enum.Material[EnumItem]
+	end
+	return main.MaterialMap[EnumItem]
+end
+
+-- This function is a primitive "pick randomly from table" function.
+function main:GetRandomSound(SoundTable:{string}) : string
+	return SoundTable[math.random(#SoundTable)]
+end
+
+function main:ConstructSound(Parent,ID,SoundGroup,Set)
+	local Name = Parent.Name
+	local sound = Instance.new("Sound")
+	sound.SoundId = ID
+	sound.Name = ID
+	
+	sound:SetAttribute("IsBass",Name == "Bass")
+	sound:SetAttribute("DefaultVolume",Name == "Bass" and Set.DefaultBassVolume or Set.DefaultVolume)
+	sound:SetAttribute("DefaultPitch", Set.DefaultPitch)
+	sound:SetAttribute("DefaultRolloff", Set.DefaultRolloff)
+
+	sound.Volume = sound:GetAttribute("DefaultVolume")
+	sound.PlaybackSpeed = sound:GetAttribute("DefaultPitch")
+	sound.RollOffMinDistance = sound:GetAttribute("DefaultRolloff")
+	sound.RollOffMaxDistance = 250
+	sound.RollOffMode = Enum.RollOffMode.InverseTapered
+
+	sound.Parent = Parent
+	if SoundGroup then
+		sound.SoundGroup = SoundGroup
+	elseif Parent:IsA("SoundGroup") then
+		sound.SoundGroup = Parent
+	end
+	return sound
+end
+
+function main:GetCached(SoundGroup:SoundGroup, Type)
+	local CachedSounds = {}
+
+	do
+		local function newdirectory(parent:Instance,name:string,instancetype:string)
+			local directory = parent:FindFirstChild(name)
+			if not directory then
+				directory = Instance.new(instancetype or "Folder")
+				if directory:IsA("SoundGroup") then
+					directory.Volume = 1
+				end
+				directory.Name = name
+				directory.Parent = parent
+			end
+			return directory
+		end
+
+		local function constructsound(id,name,set)
+			if not SoundGroup:FindFirstChild(set) then
+				newdirectory(SoundGroup,set)
+			end
+			
+			local parent = newdirectory(SoundGroup[set],name,"SoundGroup")
+			local sound = main:ConstructSound(parent,id, nil, Sets[Type][set])
+			return sound
+		end
+
+		for setname,set in pairs(Sets[Type]) do
+			CachedSounds[setname] = {}
+			for Name, IDs in set.SoundIds do
+				local result = {}
+				for _, id in IDs do
+					table.insert(result,constructsound(id,Name,setname))
+				end
+				CachedSounds[setname][Name] = result
+			end
+		end
+	end
+
+	return CachedSounds
+end
+
+return main</string>
+              <int64 name="SourceAssetId">6034003547</int64>
+              <BinaryString name="Tags" />
+            </Properties>
+            <Item class="Folder" referent="59">
+              <Properties>
+                <string name="Name">Footsteps</string>
+                <BinaryString name="AttributesSerialize" />
+                <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                <bool name="DefinesCapabilities">false</bool>
+                <int64 name="SourceAssetId">-1</int64>
+                <BinaryString name="Tags" />
+              </Properties>
+              <Item class="ModuleScript" referent="60">
+                <Properties>
+                  <string name="Name">Default</string>
+                  <BinaryString name="AttributesSerialize" />
+                  <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                  <ContentId name="LinkedSource">
+                    <null>
+                    </null>
+                  </ContentId>
+                  <bool name="DefinesCapabilities">false</bool>
+                  <string name="ScriptGuid">{413429C0-CB31-4EA6-83D3-C6A9846F8F27}</string>
+                  <string name="Source">local Default = {
+	DefaultBassVolume = 0.5,
+	DefaultVolume = 0.5,
+	
+	DefaultPitch = 0.9,
+	DefaultRolloff = 10,
+}
+
+Default.SoundIds = {
+	["Bass"] = {
+		"rbxassetid://9126748907",
+		"rbxassetid://9126748813",
+		"rbxassetid://9126748580",
+		"rbxassetid://9126748691",
+		"rbxassetid://9126748431",
+		"rbxassetid://9126748324",
+		"rbxassetid://9126748239",
+		"rbxassetid://9126748185",
+		"rbxassetid://9126748045",
+		"rbxassetid://9126747958"
+	},
+
+	["Carpet"] = {
+		"rbxassetid://9126748130",
+		"rbxassetid://9126747861",
+		"rbxassetid://9126747720",
+		"rbxassetid://9126747529",
+		"rbxassetid://9126747412",
+		"rbxassetid://9126747283",
+		"rbxassetid://9126746732",
+		"rbxassetid://9126746837",
+		"rbxassetid://9126747132",
+		"rbxassetid://9126746984",
+		"rbxassetid://9126746598",
+		"rbxassetid://9126746481",
+		"rbxassetid://9126746371",
+		"rbxassetid://9126746291"
+	},
+
+	["Concrete"] = {
+		"rbxassetid://9126746167",
+		"rbxassetid://9126746098",
+		"rbxassetid://9126745995",
+		"rbxassetid://9126745877",
+		"rbxassetid://9126745774",
+		"rbxassetid://9126745574",
+		"rbxassetid://9126745336",
+		"rbxassetid://9126745241",
+		"rbxassetid://9126745445",
+		"rbxassetid://9126745052",
+		"rbxassetid://9126745141",
+		"rbxassetid://9126745676",
+		"rbxassetid://9126744969",
+		"rbxassetid://9126744894",
+		"rbxassetid://9126744639",
+		"rbxassetid://9126744789",
+		"rbxassetid://9126744481"
+	},
+
+	["Dirt"] = {
+		"rbxassetid://9126744390",
+		"rbxassetid://9126744718",
+		"rbxassetid://9126744263",
+		"rbxassetid://9126744157",
+		"rbxassetid://9126744066",
+		"rbxassetid://9126744009",
+		"rbxassetid://9126743796",
+		"rbxassetid://9126743938",
+		"rbxassetid://9126743711",
+		"rbxassetid://9126743879",
+		"rbxassetid://9126743613",
+		"rbxassetid://9126743481",
+		"rbxassetid://9126743338",
+		"rbxassetid://9126743086"
+	},
+
+	["Glass"] = {
+		"rbxassetid://9126742971",
+		"rbxassetid://9126742461",
+		"rbxassetid://9126742875",
+		"rbxassetid://9126742786",
+		"rbxassetid://9126743193",
+		"rbxassetid://9126742680",
+		"rbxassetid://9126742582",
+		"rbxassetid://9126742510"
+	},
+
+	["Grass"] = {
+		"rbxassetid://9126742396",
+		"rbxassetid://9126741427",
+		"rbxassetid://9126742333",
+		"rbxassetid://9126742215",
+		"rbxassetid://9126742271",
+		"rbxassetid://9126742031",
+		"rbxassetid://9126741934",
+		"rbxassetid://9126742105",
+		"rbxassetid://9126741826",
+		"rbxassetid://9126741594",
+		"rbxassetid://9126741512",
+		"rbxassetid://9126741741",
+		"rbxassetid://9126741674"
+	},
+
+	["Gravel"] = {
+		"rbxassetid://9126741273",
+		"rbxassetid://9126740393",
+		"rbxassetid://9126741200",
+		"rbxassetid://9126741051",
+		"rbxassetid://9126741128",
+		"rbxassetid://9126740951",
+		"rbxassetid://9126740802",
+		"rbxassetid://9126740724",
+		"rbxassetid://9126740524",
+		"rbxassetid://9126740623"
+	},
+
+	["Ladder"] = {
+		"rbxassetid://9126740217",
+		"rbxassetid://9126739039",
+		"rbxassetid://9126740133",
+		"rbxassetid://9126739947",
+		"rbxassetid://9126740044",
+		"rbxassetid://9126740305",
+		"rbxassetid://9126739834",
+		"rbxassetid://9126739622",
+		"rbxassetid://9126739505",
+		"rbxassetid://9126739406",
+		"rbxassetid://9126739332",
+		"rbxassetid://9126739229"
+	},
+
+	["Metal_Auto"] = {
+		"rbxassetid://9126739090",
+		"rbxassetid://9126738967",
+		"rbxassetid://9126738896",
+		"rbxassetid://9126738732",
+		"rbxassetid://9126738543",
+		"rbxassetid://9126738634"
+	},
+
+	["Metal_Chainlink"] = {
+		"rbxassetid://9126738423",
+		"rbxassetid://9126737791",
+		"rbxassetid://9126738338",
+		"rbxassetid://9126738197",
+		"rbxassetid://9126738113",
+		"rbxassetid://9126738032",
+		"rbxassetid://9126737943",
+		"rbxassetid://9126737853"
+	},
+
+	["Metal_Grate"] = {
+		"rbxassetid://9126737728",
+		"rbxassetid://9126736554",
+		"rbxassetid://9126737597",
+		"rbxassetid://9126737668",
+		"rbxassetid://9126737506",
+		"rbxassetid://9126737412",
+		"rbxassetid://9126737315",
+		"rbxassetid://9126737212",
+		"rbxassetid://9126736947",
+		"rbxassetid://9126737081",
+		"rbxassetid://9126736863",
+		"rbxassetid://9126736806",
+		"rbxassetid://9126736642",
+		"rbxassetid://9126736721"
+	},
+
+	["Metal_Solid"] = {
+		"rbxassetid://9126736470",
+		"rbxassetid://9126734921",
+		"rbxassetid://9126736274",
+		"rbxassetid://9126736354",
+		"rbxassetid://9126736186",
+		"rbxassetid://9126736049",
+		"rbxassetid://9126735913",
+		"rbxassetid://9126735734",
+		"rbxassetid://9126735546",
+		"rbxassetid://9126735474",
+		"rbxassetid://9126735265",
+		"rbxassetid://9126735374",
+		"rbxassetid://9126735161",
+		"rbxassetid://9126735028",
+		"rbxassetid://9126735089",
+		"rbxassetid://9126734972"
+	},
+
+	["Mud"] = {
+		"rbxassetid://9126734842",
+		"rbxassetid://9126734314",
+		"rbxassetid://9126734778",
+		"rbxassetid://9126734710",
+		"rbxassetid://9126734613",
+		"rbxassetid://9126734499",
+		"rbxassetid://9126734365",
+		"rbxassetid://9126734432",
+		"rbxassetid://9126734244"
+	},
+
+	["Rubber"] = {
+		"rbxassetid://9126734172",
+		"rbxassetid://9126733896",
+		"rbxassetid://9126734560",
+		"rbxassetid://9126734010",
+		"rbxassetid://9126733324",
+		"rbxassetid://9126733766",
+		"rbxassetid://9126733614",
+		"rbxassetid://9126733493"
+	},
+
+	["Sand"] = {
+		"rbxassetid://9126733118",
+		"rbxassetid://9126733408",
+		"rbxassetid://9126733225",
+		"rbxassetid://9126732675",
+		"rbxassetid://9126732571",
+		"rbxassetid://9126732962",
+		"rbxassetid://9126732962",
+		"rbxassetid://9126732457",
+		"rbxassetid://9126732862",
+		"rbxassetid://9126732776",
+		"rbxassetid://9126732334",
+		"rbxassetid://9126732253"
+	},
+
+	["Slosh"] = {
+		"rbxassetid://100559265363941",
+		"rbxassetid://93891894311654",
+		"rbxassetid://95248386561810",
+		"rbxassetid://76294475620716",
+	},
+
+	["Snow"] = {
+		"rbxassetid://9126732128",
+		"rbxassetid://9126731099",
+		"rbxassetid://9126732016",
+		"rbxassetid://9126731951",
+		"rbxassetid://9126731877",
+		"rbxassetid://9126731632",
+		"rbxassetid://9126731493",
+		"rbxassetid://9126731343",
+		"rbxassetid://9126731790",
+		"rbxassetid://9126731243",
+		"rbxassetid://9126731169",
+		"rbxassetid://9126730861"
+	},
+
+	["Tile"] = {
+		"rbxassetid://9126730713",
+		"rbxassetid://9126730782",
+		"rbxassetid://9126731037",
+		"rbxassetid://9126730980",
+		"rbxassetid://9126730651",
+		"rbxassetid://9126730563",
+		"rbxassetid://9126730279",
+		"rbxassetid://9126730403",
+		"rbxassetid://9126730056",
+		"rbxassetid://9126730172",
+		"rbxassetid://9126729836",
+		"rbxassetid://9126730472",
+		"rbxassetid://9126729938",
+		"rbxassetid://9126729706"
+	},
+
+	["Wood"] = {
+		"rbxassetid://9126931624",
+		"rbxassetid://9126931515",
+		"rbxassetid://9126931417",
+		"rbxassetid://9126931322",
+		"rbxassetid://9126931699",
+		"rbxassetid://9126931235",
+		"rbxassetid://9126931169",
+		"rbxassetid://9126931026",
+		"rbxassetid://9126930953",
+		"rbxassetid://9126930885",
+		"rbxassetid://9126930789",
+		"rbxassetid://9126930647",
+		"rbxassetid://9126930516",
+		"rbxassetid://9126930598",
+		"rbxassetid://9126930718"
+	}
+}
+
+return Default</string>
+                  <int64 name="SourceAssetId">-1</int64>
+                  <BinaryString name="Tags" />
+                </Properties>
+              </Item>
+              <Item class="ModuleScript" referent="61">
+                <Properties>
+                  <string name="Name">Fart</string>
+                  <BinaryString name="AttributesSerialize" />
+                  <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                  <ContentId name="LinkedSource">
+                    <null>
+                    </null>
+                  </ContentId>
+                  <bool name="DefinesCapabilities">false</bool>
+                  <string name="ScriptGuid">{87BC4443-C7F1-44D8-86CE-9C215DFF628C}</string>
+                  <string name="Source">local Fart = {
+	DefaultBassVolume = 1,
+	DefaultVolume = 0.2,
+	
+	DefaultPitch = 0.9,
+	DefaultRolloff = 3,
+}
+
+Fart.SoundIds = {
+	["Bass"] = {
+		"rbxassetid://9126748907",
+		"rbxassetid://9126748813",
+		"rbxassetid://9126748580",
+		"rbxassetid://9126748691",
+		"rbxassetid://9126748431",
+		"rbxassetid://9126748324",
+		"rbxassetid://9126748239",
+		"rbxassetid://9126748185",
+		"rbxassetid://9126748045",
+		"rbxassetid://9126747958"
+	},
+
+	["Carpet"] = {
+		"rbxassetid://8551016315",
+	},
+
+	["Concrete"] = {
+		"rbxassetid://8551016315",
+	},
+
+	["Dirt"] = {
+		"rbxassetid://8551016315",
+	},
+
+	["Glass"] = {
+		"rbxassetid://8551016315",
+	},
+
+	["Grass"] = {
+		"rbxassetid://8551016315",
+	},
+
+	["Gravel"] = {
+		"rbxassetid://8551016315",
+	},
+
+	["Ladder"] = {
+		"rbxassetid://8551016315",
+	},
+
+	["Metal_Auto"] = {
+		"rbxassetid://8551016315",
+	},
+
+	["Metal_Chainlink"] = {
+		"rbxassetid://8551016315",
+	},
+
+	["Metal_Grate"] = {
+		"rbxassetid://8551016315",
+	},
+
+	["Metal_Solid"] = {
+		"rbxassetid://8551016315",
+	},
+
+	["Mud"] = {
+		"rbxassetid://8551016315",
+	},
+
+	["Rubber"] = {
+		"rbxassetid://8551016315",
+	},
+
+	["Sand"] = {
+		"rbxassetid://8551016315",
+	},
+
+	["Slosh"] = {
+		"rbxassetid://8551016315",
+	},
+
+	["Snow"] = {
+		"rbxassetid://8551016315",
+	},
+
+	["Tile"] = {
+		"rbxassetid://8551016315",
+	},
+
+	["Wood"] = {
+		"rbxassetid://8551016315",
+	}
+}
+
+return Fart</string>
+                  <int64 name="SourceAssetId">-1</int64>
+                  <BinaryString name="Tags" />
+                </Properties>
+              </Item>
+              <Item class="ModuleScript" referent="62">
+                <Properties>
+                  <string name="Name">Water</string>
+                  <BinaryString name="AttributesSerialize" />
+                  <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                  <ContentId name="LinkedSource">
+                    <null>
+                    </null>
+                  </ContentId>
+                  <bool name="DefinesCapabilities">false</bool>
+                  <string name="ScriptGuid">{2B446346-4F35-4FAE-B0DC-9624EF2AA7AF}</string>
+                  <string name="Source">local Default = {
+	DefaultBassVolume = 1,
+	DefaultVolume = 4,
+	
+	DefaultPitch = 0.9,
+	DefaultRolloff = 15,
+}
+
+Default.SoundIds = {
+	["Bass"] = {
+		"rbxassetid://9126748907",
+		"rbxassetid://9126748813",
+		"rbxassetid://9126748580",
+		"rbxassetid://9126748691",
+		"rbxassetid://9126748431",
+		"rbxassetid://9126748324",
+		"rbxassetid://9126748239",
+		"rbxassetid://9126748185",
+		"rbxassetid://9126748045",
+		"rbxassetid://9126747958"
+	},
+
+	["Carpet"] = {
+		"rbxassetid://109353553631662",
+		"rbxassetid://129018550886739",
+		"rbxassetid://130534131095313",
+	},
+
+	["Concrete"] = {
+		"rbxassetid://109353553631662",
+		"rbxassetid://129018550886739",
+		"rbxassetid://130534131095313",
+	},
+
+	["Dirt"] = {
+		"rbxassetid://109353553631662",
+		"rbxassetid://129018550886739",
+		"rbxassetid://130534131095313",
+	},
+
+	["Glass"] = {
+		"rbxassetid://109353553631662",
+		"rbxassetid://129018550886739",
+		"rbxassetid://130534131095313",
+	},
+
+	["Grass"] = {
+		"rbxassetid://109353553631662",
+		"rbxassetid://129018550886739",
+		"rbxassetid://130534131095313",
+	},
+
+	["Gravel"] = {
+		"rbxassetid://109353553631662",
+		"rbxassetid://129018550886739",
+		"rbxassetid://130534131095313",
+	},
+
+	["Ladder"] = {
+		"rbxassetid://109353553631662",
+		"rbxassetid://129018550886739",
+		"rbxassetid://130534131095313",
+	},
+
+	["Metal_Auto"] = {
+		"rbxassetid://109353553631662",
+		"rbxassetid://129018550886739",
+		"rbxassetid://130534131095313",
+	},
+
+	["Metal_Chainlink"] = {
+		"rbxassetid://109353553631662",
+		"rbxassetid://129018550886739",
+		"rbxassetid://130534131095313",
+	},
+
+	["Metal_Grate"] = {
+		"rbxassetid://109353553631662",
+		"rbxassetid://129018550886739",
+		"rbxassetid://130534131095313",
+	},
+
+	["Metal_Solid"] = {
+		"rbxassetid://109353553631662",
+		"rbxassetid://129018550886739",
+		"rbxassetid://130534131095313",
+	},
+
+	["Mud"] = {
+		"rbxassetid://109353553631662",
+		"rbxassetid://129018550886739",
+		"rbxassetid://130534131095313",
+	},
+
+	["Rubber"] = {
+		"rbxassetid://109353553631662",
+		"rbxassetid://129018550886739",
+		"rbxassetid://130534131095313",
+	},
+
+	["Sand"] = {
+		"rbxassetid://109353553631662",
+		"rbxassetid://129018550886739",
+		"rbxassetid://130534131095313",
+	},
+
+	["Slosh"] = {
+		"rbxassetid://109353553631662",
+		"rbxassetid://129018550886739",
+		"rbxassetid://130534131095313",
+	},
+
+	["Snow"] = {
+		"rbxassetid://109353553631662",
+		"rbxassetid://129018550886739",
+		"rbxassetid://130534131095313",
+	},
+
+	["Tile"] = {
+		"rbxassetid://109353553631662",
+		"rbxassetid://129018550886739",
+		"rbxassetid://130534131095313",
+	},
+
+	["Wood"] = {
+		"rbxassetid://109353553631662",
+		"rbxassetid://129018550886739",
+		"rbxassetid://130534131095313",
+	}
+}
+
+return Default</string>
+                  <int64 name="SourceAssetId">-1</int64>
+                  <BinaryString name="Tags" />
+                </Properties>
+              </Item>
+            </Item>
+            <Item class="Folder" referent="63">
+              <Properties>
+                <string name="Name">Landing</string>
+                <BinaryString name="AttributesSerialize" />
+                <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                <bool name="DefinesCapabilities">false</bool>
+                <int64 name="SourceAssetId">-1</int64>
+                <BinaryString name="Tags" />
+              </Properties>
+              <Item class="ModuleScript" referent="64">
+                <Properties>
+                  <string name="Name">Default</string>
+                  <BinaryString name="AttributesSerialize" />
+                  <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                  <ContentId name="LinkedSource">
+                    <null>
+                    </null>
+                  </ContentId>
+                  <bool name="DefinesCapabilities">false</bool>
+                  <string name="ScriptGuid">{16AD5C90-AC2E-490F-B2B9-FDA17A76D73F}</string>
+                  <string name="Source">local Default = {
+	DefaultBassVolume = 0.7,
+	DefaultVolume = 0.7,
+	
+	DefaultPitch = .85,
+	DefaultRolloff = 12,
+}
+
+Default.SoundIds = {
+	["Bass"] = {
+		"rbxassetid://9126748907",
+		"rbxassetid://9126748813",
+		"rbxassetid://9126748580",
+		"rbxassetid://9126748691",
+		"rbxassetid://9126748431",
+		"rbxassetid://9126748324",
+		"rbxassetid://9126748239",
+		"rbxassetid://9126748185",
+		"rbxassetid://9126748045",
+		"rbxassetid://9126747958"
+	},
+
+	["Carpet"] = {
+		"rbxassetid://6769749877",
+		"rbxassetid://6769749980",
+		"rbxassetid://6769749902",
+	},
+
+	["Concrete"] = {
+		"rbxassetid://6769749948",
+		"rbxassetid://6769750071",
+		"rbxassetid://6769750030",
+	},
+
+	["Dirt"] = {
+		"rbxassetid://6769749836",
+		"rbxassetid://6769749795",
+		"rbxassetid://6769749746",
+	},
+
+	["Glass"] = {
+		"rbxassetid://9126742971",
+		"rbxassetid://9126742461",
+		"rbxassetid://9126742875",
+		"rbxassetid://9126742786",
+		"rbxassetid://9126743193",
+		"rbxassetid://9126742680",
+		"rbxassetid://9126742582",
+		"rbxassetid://9126742510"
+	},
+
+	["Grass"] = {
+		"rbxassetid://6769749877",
+		"rbxassetid://6769749980",
+		"rbxassetid://6769749902",
+	},
+
+	["Gravel"] = {
+		"rbxassetid://6769749836",
+		"rbxassetid://6769749795",
+		"rbxassetid://6769749746",
+	},
+
+	["Metal_Auto"] = {
+		"rbxassetid://9126739090",
+		"rbxassetid://9126738967",
+		"rbxassetid://9126738896",
+		"rbxassetid://9126738732",
+		"rbxassetid://9126738543",
+		"rbxassetid://9126738634"
+	},
+
+	["Metal_Chainlink"] = {
+		"rbxassetid://9126738423",
+		"rbxassetid://9126737791",
+		"rbxassetid://9126738338",
+		"rbxassetid://9126738197",
+		"rbxassetid://9126738113",
+		"rbxassetid://9126738032",
+		"rbxassetid://9126737943",
+		"rbxassetid://9126737853"
+	},
+
+	["Metal_Grate"] = {
+		"rbxassetid://9126737728",
+		"rbxassetid://9126736554",
+		"rbxassetid://9126737597",
+		"rbxassetid://9126737668",
+		"rbxassetid://9126737506",
+		"rbxassetid://9126737412",
+		"rbxassetid://9126737315",
+		"rbxassetid://9126737212",
+		"rbxassetid://9126736947",
+		"rbxassetid://9126737081",
+		"rbxassetid://9126736863",
+		"rbxassetid://9126736806",
+		"rbxassetid://9126736642",
+		"rbxassetid://9126736721"
+	},
+
+	["Metal_Solid"] = {
+		"rbxassetid://6769749711",
+		"rbxassetid://6769749680",
+		"rbxassetid://6769749620",
+	},
+
+	["Mud"] = {
+		"rbxassetid://9126734842",
+		"rbxassetid://9126734314",
+		"rbxassetid://9126734778",
+		"rbxassetid://9126734710",
+		"rbxassetid://9126734613",
+		"rbxassetid://9126734499",
+		"rbxassetid://9126734365",
+		"rbxassetid://9126734432",
+		"rbxassetid://9126734244"
+	},
+
+	["Rubber"] = {
+		"rbxassetid://6769749948",
+		"rbxassetid://6769750071",
+		"rbxassetid://6769750030",
+	},
+
+	["Sand"] = {
+		"rbxassetid://6769749877",
+		"rbxassetid://6769749980",
+		"rbxassetid://6769749902",
+	},
+
+	["Slosh"] = {
+		"rbxassetid://100559265363941",
+		"rbxassetid://93891894311654",
+		"rbxassetid://95248386561810",
+		"rbxassetid://76294475620716",
+	},
+
+	["Snow"] = {
+		"rbxassetid://6769749877",
+		"rbxassetid://6769749980",
+		"rbxassetid://6769749902",
+	},
+
+	["Tile"] = {
+		"rbxassetid://6769749948",
+		"rbxassetid://6769750071",
+		"rbxassetid://6769750030",
+	},
+
+	["Wood"] = {
+		"rbxassetid://6769749435",
+		"rbxassetid://6769749386",
+		"rbxassetid://6769749313",
+	}
+}
+
+return Default</string>
+                  <int64 name="SourceAssetId">-1</int64>
+                  <BinaryString name="Tags" />
+                </Properties>
+              </Item>
+              <Item class="ModuleScript" referent="65">
+                <Properties>
+                  <string name="Name">Fart</string>
+                  <BinaryString name="AttributesSerialize" />
+                  <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                  <ContentId name="LinkedSource">
+                    <null>
+                    </null>
+                  </ContentId>
+                  <bool name="DefinesCapabilities">false</bool>
+                  <string name="ScriptGuid">{EAD697F9-0127-4CCE-89F4-A3BE2124A28E}</string>
+                  <string name="Source">local Fart = {
+	DefaultBassVolume = .5,
+	DefaultVolume = 2,
+	
+	DefaultPitch = 0.9,
+	DefaultRolloff = 3,
+}
+
+Fart.SoundIds = {
+	["Bass"] = {
+		"rbxassetid://9126748907",
+		"rbxassetid://9126748813",
+		"rbxassetid://9126748580",
+		"rbxassetid://9126748691",
+		"rbxassetid://9126748431",
+		"rbxassetid://9126748324",
+		"rbxassetid://9126748239",
+		"rbxassetid://9126748185",
+		"rbxassetid://9126748045",
+		"rbxassetid://9126747958"
+	},
+
+	["Carpet"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Concrete"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Dirt"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Glass"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Grass"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Gravel"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Ladder"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Metal_Auto"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Metal_Chainlink"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Metal_Grate"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Metal_Solid"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Mud"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Rubber"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Sand"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Slosh"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Snow"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Tile"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Wood"] = {
+		"rbxassetid://8152780685",
+	}
+}
+
+return Fart</string>
+                  <int64 name="SourceAssetId">-1</int64>
+                  <BinaryString name="Tags" />
+                </Properties>
+              </Item>
+              <Item class="ModuleScript" referent="66">
+                <Properties>
+                  <string name="Name">Water</string>
+                  <BinaryString name="AttributesSerialize" />
+                  <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                  <ContentId name="LinkedSource">
+                    <null>
+                    </null>
+                  </ContentId>
+                  <bool name="DefinesCapabilities">false</bool>
+                  <string name="ScriptGuid">{4CCA3D58-C7EF-47B7-A5B5-E4A2707F2913}</string>
+                  <string name="Source">local Default = {
+	DefaultBassVolume = 0.7,
+	DefaultVolume = 0.7,
+	
+	DefaultPitch = .85,
+	DefaultRolloff = 35,
+}
+
+Default.SoundIds = {
+	["Bass"] = {
+		"rbxassetid://9126748907",
+		"rbxassetid://9126748813",
+		"rbxassetid://9126748580",
+		"rbxassetid://9126748691",
+		"rbxassetid://9126748431",
+		"rbxassetid://9126748324",
+		"rbxassetid://9126748239",
+		"rbxassetid://9126748185",
+		"rbxassetid://9126748045",
+		"rbxassetid://9126747958"
+	},
+
+	["Carpet"] = {
+		"rbxassetid://117185816509314",
+		"rbxassetid://94326126511116",
+		"rbxassetid://117454231326703",
+	},
+
+	["Concrete"] = {
+		"rbxassetid://117185816509314",
+		"rbxassetid://94326126511116",
+		"rbxassetid://117454231326703",
+	},
+
+	["Dirt"] = {
+		"rbxassetid://117185816509314",
+		"rbxassetid://94326126511116",
+		"rbxassetid://117454231326703",
+	},
+
+	["Glass"] = {
+		"rbxassetid://117185816509314",
+		"rbxassetid://94326126511116",
+		"rbxassetid://117454231326703",
+	},
+
+	["Grass"] = {
+		"rbxassetid://117185816509314",
+		"rbxassetid://94326126511116",
+		"rbxassetid://117454231326703",
+	},
+
+	["Gravel"] = {
+		"rbxassetid://117185816509314",
+		"rbxassetid://94326126511116",
+		"rbxassetid://117454231326703",
+	},
+
+	["Metal_Auto"] = {
+		"rbxassetid://117185816509314",
+		"rbxassetid://94326126511116",
+		"rbxassetid://117454231326703",
+	},
+
+	["Metal_Chainlink"] = {
+		"rbxassetid://117185816509314",
+		"rbxassetid://94326126511116",
+		"rbxassetid://117454231326703",
+	},
+
+	["Metal_Grate"] = {
+		"rbxassetid://117185816509314",
+		"rbxassetid://94326126511116",
+		"rbxassetid://117454231326703",
+	},
+
+	["Metal_Solid"] = {
+		"rbxassetid://117185816509314",
+		"rbxassetid://94326126511116",
+		"rbxassetid://117454231326703",
+	},
+
+	["Mud"] = {
+		"rbxassetid://117185816509314",
+		"rbxassetid://94326126511116",
+		"rbxassetid://117454231326703",
+	},
+
+	["Rubber"] = {
+		"rbxassetid://117185816509314",
+		"rbxassetid://94326126511116",
+		"rbxassetid://117454231326703",
+	},
+
+	["Sand"] = {
+		"rbxassetid://117185816509314",
+		"rbxassetid://94326126511116",
+		"rbxassetid://117454231326703",
+	},
+
+	["Slosh"] = {
+		"rbxassetid://117185816509314",
+		"rbxassetid://94326126511116",
+		"rbxassetid://117454231326703",
+	},
+
+	["Snow"] = {
+		"rbxassetid://117185816509314",
+		"rbxassetid://94326126511116",
+		"rbxassetid://117454231326703",
+	},
+
+	["Tile"] = {
+		"rbxassetid://117185816509314",
+		"rbxassetid://94326126511116",
+		"rbxassetid://117454231326703",
+	},
+
+	["Wood"] = {
+		"rbxassetid://117185816509314",
+		"rbxassetid://94326126511116",
+		"rbxassetid://117454231326703",
+	}
+}
+
+return Default</string>
+                  <int64 name="SourceAssetId">-1</int64>
+                  <BinaryString name="Tags" />
+                </Properties>
+              </Item>
+            </Item>
+            <Item class="Folder" referent="67">
+              <Properties>
+                <string name="Name">Jumping</string>
+                <BinaryString name="AttributesSerialize" />
+                <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                <bool name="DefinesCapabilities">false</bool>
+                <int64 name="SourceAssetId">-1</int64>
+                <BinaryString name="Tags" />
+              </Properties>
+              <Item class="ModuleScript" referent="68">
+                <Properties>
+                  <string name="Name">Default</string>
+                  <BinaryString name="AttributesSerialize" />
+                  <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                  <ContentId name="LinkedSource">
+                    <null>
+                    </null>
+                  </ContentId>
+                  <bool name="DefinesCapabilities">false</bool>
+                  <string name="ScriptGuid">{97DAD3FB-62BC-4AB8-B238-5615722AEEB3}</string>
+                  <string name="Source">local Default = {
+	DefaultBassVolume = 0.2,
+	DefaultVolume = 0.5,
+	
+	DefaultPitch = 1,
+	DefaultRolloff = 40,
+}
+
+Default.SoundIds = {
+	["Bass"] = {
+		"rbxassetid://9126748907",
+		"rbxassetid://9126748813",
+		"rbxassetid://9126748580",
+		"rbxassetid://9126748691",
+		"rbxassetid://9126748431",
+		"rbxassetid://9126748324",
+		"rbxassetid://9126748239",
+		"rbxassetid://9126748185",
+		"rbxassetid://9126748045",
+		"rbxassetid://9126747958"
+	},
+
+	["Carpet"] = {
+		"rbxassetid://6769749877",
+		"rbxassetid://6769749980",
+		"rbxassetid://6769749902",
+	},
+
+	["Concrete"] = {
+		"rbxassetid://6769750660",
+		"rbxassetid://6769750622",
+		"rbxassetid://6769750580",
+	},
+
+	["Dirt"] = {
+		"rbxassetid://6769742692",
+		"rbxassetid://6769750425",
+		"rbxassetid://6769742647",
+	},
+
+	["Glass"] = {
+		"rbxassetid://9126742971",
+		"rbxassetid://9126742461",
+		"rbxassetid://9126742875",
+		"rbxassetid://9126742786",
+		"rbxassetid://9126743193",
+		"rbxassetid://9126742680",
+		"rbxassetid://9126742582",
+		"rbxassetid://9126742510"
+	},
+
+	["Grass"] = {
+		"rbxassetid://6769750505",
+		"rbxassetid://6769750546",
+		"rbxassetid://6769750467",
+	},
+
+	["Gravel"] = {
+		"rbxassetid://6769750236",
+		"rbxassetid://6769750425",
+		"rbxassetid://6769750272",
+	},
+
+	["Metal_Auto"] = {
+		"rbxassetid://9126739090",
+		"rbxassetid://9126738967",
+		"rbxassetid://9126738896",
+		"rbxassetid://9126738732",
+		"rbxassetid://9126738543",
+		"rbxassetid://9126738634"
+	},
+
+	["Metal_Chainlink"] = {
+		"rbxassetid://6769750335",
+		"rbxassetid://6769750379",
+		"rbxassetid://6769750305",
+	},
+
+	["Metal_Grate"] = {
+		"rbxassetid://6769750335",
+		"rbxassetid://6769750379",
+		"rbxassetid://6769750305",
+	},
+
+	["Metal_Solid"] = {
+		"rbxassetid://6769750335",
+		"rbxassetid://6769750379",
+		"rbxassetid://6769750305",
+	},
+
+	["Mud"] = {
+		"rbxassetid://9126734842",
+		"rbxassetid://9126734314",
+		"rbxassetid://9126734778",
+		"rbxassetid://9126734710",
+		"rbxassetid://9126734613",
+		"rbxassetid://9126734499",
+		"rbxassetid://9126734365",
+		"rbxassetid://9126734432",
+		"rbxassetid://9126734244"
+	},
+
+	["Rubber"] = {
+		"rbxassetid://6769750660",
+		"rbxassetid://6769750622",
+		"rbxassetid://6769750580",
+	},
+
+	["Sand"] = {
+		"rbxassetid://6769750505",
+		"rbxassetid://6769750546",
+		"rbxassetid://6769750467",
+	},
+
+	["Slosh"] = {
+		"rbxassetid://100559265363941",
+		"rbxassetid://93891894311654",
+		"rbxassetid://95248386561810",
+		"rbxassetid://76294475620716",
+	},
+
+	["Snow"] = {
+		"rbxassetid://6769749877",
+		"rbxassetid://6769749980",
+		"rbxassetid://6769749902",
+	},
+
+	["Tile"] = {
+		"rbxassetid://6769750660",
+		"rbxassetid://6769750622",
+		"rbxassetid://6769750580",
+	},
+
+	["Wood"] = {
+		"rbxassetid://6769750196",
+		"rbxassetid://6769750157",
+		"rbxassetid://6769750118",
+	}
+}
+
+return Default</string>
+                  <int64 name="SourceAssetId">-1</int64>
+                  <BinaryString name="Tags" />
+                </Properties>
+              </Item>
+              <Item class="ModuleScript" referent="69">
+                <Properties>
+                  <string name="Name">Fart</string>
+                  <BinaryString name="AttributesSerialize" />
+                  <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                  <ContentId name="LinkedSource">
+                    <null>
+                    </null>
+                  </ContentId>
+                  <bool name="DefinesCapabilities">false</bool>
+                  <string name="ScriptGuid">{D5BE41D4-6289-41E1-8FD5-1987C154207A}</string>
+                  <string name="Source">local Fart = {
+	DefaultBassVolume = .2,
+	DefaultVolume = .2,
+	
+	DefaultPitch = 2,
+	DefaultRolloff = 3,
+}
+
+Fart.SoundIds = {
+	["Bass"] = {
+		"rbxassetid://9126748907",
+		"rbxassetid://9126748813",
+		"rbxassetid://9126748580",
+		"rbxassetid://9126748691",
+		"rbxassetid://9126748431",
+		"rbxassetid://9126748324",
+		"rbxassetid://9126748239",
+		"rbxassetid://9126748185",
+		"rbxassetid://9126748045",
+		"rbxassetid://9126747958"
+	},
+
+	["Carpet"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Concrete"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Dirt"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Glass"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Grass"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Gravel"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Ladder"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Metal_Auto"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Metal_Chainlink"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Metal_Grate"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Metal_Solid"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Mud"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Rubber"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Sand"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Slosh"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Snow"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Tile"] = {
+		"rbxassetid://8152780685",
+	},
+
+	["Wood"] = {
+		"rbxassetid://8152780685",
+	}
+}
+
+return Fart</string>
+                  <int64 name="SourceAssetId">-1</int64>
+                  <BinaryString name="Tags" />
+                </Properties>
+              </Item>
+              <Item class="ModuleScript" referent="70">
+                <Properties>
+                  <string name="Name">Water</string>
+                  <BinaryString name="AttributesSerialize" />
+                  <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                  <ContentId name="LinkedSource">
+                    <null>
+                    </null>
+                  </ContentId>
+                  <bool name="DefinesCapabilities">false</bool>
+                  <string name="ScriptGuid">{0F0C38FC-5C6A-44E0-BEC1-F0E2891BD8CD}</string>
+                  <string name="Source">local Default = {
+	DefaultBassVolume = 0.2,
+	DefaultVolume = 0.5,
+	
+	DefaultPitch = 1,
+	DefaultRolloff = 50,
+}
+
+Default.SoundIds = {
+	["Bass"] = {
+		"rbxassetid://9126748907",
+		"rbxassetid://9126748813",
+		"rbxassetid://9126748580",
+		"rbxassetid://9126748691",
+		"rbxassetid://9126748431",
+		"rbxassetid://9126748324",
+		"rbxassetid://9126748239",
+		"rbxassetid://9126748185",
+		"rbxassetid://9126748045",
+		"rbxassetid://9126747958"
+	},
+
+	["Carpet"] = {
+		"rbxassetid://106116361617365",
+		"rbxassetid://71482608669492",
+		"rbxassetid://80026580557237",
+	},
+
+	["Concrete"] = {
+		"rbxassetid://106116361617365",
+		"rbxassetid://71482608669492",
+		"rbxassetid://80026580557237",
+	},
+
+	["Dirt"] = {
+		"rbxassetid://106116361617365",
+		"rbxassetid://71482608669492",
+		"rbxassetid://80026580557237",
+	},
+
+	["Glass"] = {
+		"rbxassetid://106116361617365",
+		"rbxassetid://71482608669492",
+		"rbxassetid://80026580557237",
+	},
+
+	["Grass"] = {
+		"rbxassetid://106116361617365",
+		"rbxassetid://71482608669492",
+		"rbxassetid://80026580557237",
+	},
+
+	["Gravel"] = {
+		"rbxassetid://106116361617365",
+		"rbxassetid://71482608669492",
+		"rbxassetid://80026580557237",
+	},
+
+	["Metal_Auto"] = {
+		"rbxassetid://106116361617365",
+		"rbxassetid://71482608669492",
+		"rbxassetid://80026580557237",
+	},
+
+	["Metal_Chainlink"] = {
+		"rbxassetid://106116361617365",
+		"rbxassetid://71482608669492",
+		"rbxassetid://80026580557237",
+	},
+
+	["Metal_Grate"] = {
+		"rbxassetid://106116361617365",
+		"rbxassetid://71482608669492",
+		"rbxassetid://80026580557237",
+	},
+
+	["Metal_Solid"] = {
+		"rbxassetid://106116361617365",
+		"rbxassetid://71482608669492",
+		"rbxassetid://80026580557237",
+	},
+
+	["Mud"] = {
+		"rbxassetid://106116361617365",
+		"rbxassetid://71482608669492",
+		"rbxassetid://80026580557237",
+	},
+
+	["Rubber"] = {
+		"rbxassetid://106116361617365",
+		"rbxassetid://71482608669492",
+		"rbxassetid://80026580557237",
+	},
+
+	["Sand"] = {
+		"rbxassetid://106116361617365",
+		"rbxassetid://71482608669492",
+		"rbxassetid://80026580557237",
+	},
+
+	["Slosh"] = {
+		"rbxassetid://106116361617365",
+		"rbxassetid://71482608669492",
+		"rbxassetid://80026580557237",
+	},
+
+	["Snow"] = {
+		"rbxassetid://106116361617365",
+		"rbxassetid://71482608669492",
+		"rbxassetid://80026580557237",
+	},
+
+	["Tile"] = {
+		"rbxassetid://106116361617365",
+		"rbxassetid://71482608669492",
+		"rbxassetid://80026580557237",
+	},
+
+	["Wood"] = {
+		"rbxassetid://106116361617365",
+		"rbxassetid://71482608669492",
+		"rbxassetid://80026580557237",
+	}
+}
+
+return Default</string>
+                  <int64 name="SourceAssetId">-1</int64>
+                  <BinaryString name="Tags" />
+                </Properties>
+              </Item>
+            </Item>
+          </Item>
+        <SharedStrings>
+    <SharedString md5="rxNJufX5oaagQE3qNtzJSQ==" />
+  </SharedStrings>
+</roblox>

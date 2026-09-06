@@ -1,0 +1,263 @@
+<roblox version="4">
+  <Item class="Folder" referent="1179">
+    <Properties>
+      <string name="Name">Animations</string>
+      <BinaryString name="AttributesSerialize" />
+      <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+      <bool name="DefinesCapabilities">false</bool>
+      <BinaryString name="Tags" />
+    </Properties>
+    <Item class="Folder" referent="1180">
+      <Properties>
+        <string name="Name">CharacterAnimations</string>
+        <BinaryString name="AttributesSerialize" />
+        <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+        <bool name="DefinesCapabilities">false</bool>
+        <BinaryString name="Tags" />
+      </Properties>
+      <Item class="Animation" referent="1181">
+        <Properties>
+          <string name="Name">Idle</string>
+          <Content name="AnimationContent">
+            <uri>rbxassetid://17849803401</uri>
+          </Content>
+          <BinaryString name="AttributesSerialize" />
+          <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+          <bool name="DefinesCapabilities">false</bool>
+          <BinaryString name="Tags" />
+        </Properties>
+      </Item>
+      <Item class="Animation" referent="1182">
+        <Properties>
+          <string name="Name">Walk</string>
+          <Content name="AnimationContent">
+            <uri>rbxassetid://17849711883</uri>
+          </Content>
+          <BinaryString name="AttributesSerialize" />
+          <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+          <bool name="DefinesCapabilities">false</bool>
+          <BinaryString name="Tags" />
+        </Properties>
+      </Item>
+      <Item class="Animation" referent="1183">
+        <Properties>
+          <string name="Name">Run</string>
+          <Content name="AnimationContent">
+            <uri>rbxassetid://17849746642</uri>
+          </Content>
+          <BinaryString name="AttributesSerialize" />
+          <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+          <bool name="DefinesCapabilities">false</bool>
+          <BinaryString name="Tags" />
+        </Properties>
+      </Item>
+      <Item class="Animation" referent="1184">
+        <Properties>
+          <string name="Name">Jump</string>
+          <Content name="AnimationContent">
+            <uri>rbxassetid://14769018424</uri>
+          </Content>
+          <BinaryString name="AttributesSerialize" />
+          <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+          <bool name="DefinesCapabilities">false</bool>
+          <BinaryString name="Tags" />
+        </Properties>
+      </Item>
+      <Item class="Animation" referent="1185">
+        <Properties>
+          <string name="Name">Fall</string>
+          <Content name="AnimationContent">
+            <uri>rbxassetid://17861375684</uri>
+          </Content>
+          <BinaryString name="AttributesSerialize" />
+          <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+          <bool name="DefinesCapabilities">false</bool>
+          <BinaryString name="Tags" />
+        </Properties>
+      </Item>
+      <Item class="Animation" referent="1186">
+        <Properties>
+          <string name="Name">Land</string>
+          <Content name="AnimationContent">
+            <uri>rbxassetid://17856934882</uri>
+          </Content>
+          <BinaryString name="AttributesSerialize" />
+          <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+          <bool name="DefinesCapabilities">false</bool>
+          <BinaryString name="Tags" />
+        </Properties>
+      </Item>
+    </Item>
+    <Item class="Folder" referent="1187">
+      <Properties>
+        <string name="Name">RifleAnimations</string>
+        <BinaryString name="AttributesSerialize" />
+        <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+        <bool name="DefinesCapabilities">false</bool>
+        <BinaryString name="Tags" />
+      </Properties>
+      <Item class="Animation" referent="1188">
+        <Properties>
+          <string name="Name">Holster</string>
+          <Content name="AnimationContent">
+            <uri>rbxassetid://17837420732</uri>
+          </Content>
+          <BinaryString name="AttributesSerialize" />
+          <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+          <bool name="DefinesCapabilities">false</bool>
+          <BinaryString name="Tags" />
+        </Properties>
+      </Item>
+      <Item class="Animation" referent="1189">
+        <Properties>
+          <string name="Name">Aim</string>
+          <Content name="AnimationContent">
+            <uri>rbxassetid://17820833840</uri>
+          </Content>
+          <BinaryString name="AttributesSerialize" />
+          <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+          <bool name="DefinesCapabilities">false</bool>
+          <BinaryString name="Tags" />
+        </Properties>
+      </Item>
+      <Item class="Animation" referent="1190">
+        <Properties>
+          <string name="Name">Fire</string>
+          <Content name="AnimationContent">
+            <uri>rbxassetid://17820836472</uri>
+          </Content>
+          <BinaryString name="AttributesSerialize" />
+          <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+          <bool name="DefinesCapabilities">false</bool>
+          <BinaryString name="Tags" />
+        </Properties>
+      </Item>
+      <Item class="Animation" referent="1191">
+        <Properties>
+          <string name="Name">Reload</string>
+          <Content name="AnimationContent">
+            <uri>rbxassetid://17837428175</uri>
+          </Content>
+          <BinaryString name="AttributesSerialize" />
+          <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+          <bool name="DefinesCapabilities">false</bool>
+          <BinaryString name="Tags" />
+        </Properties>
+      </Item>
+    </Item>
+    <Item class="Folder" referent="1192">
+      <Properties>
+        <string name="Name">PistolAnimations</string>
+        <BinaryString name="AttributesSerialize" />
+        <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+        <bool name="DefinesCapabilities">false</bool>
+        <BinaryString name="Tags" />
+      </Properties>
+      <Item class="Animation" referent="1193">
+        <Properties>
+          <string name="Name">Fire</string>
+          <Content name="AnimationContent">
+            <uri>rbxassetid://17861277580</uri>
+          </Content>
+          <BinaryString name="AttributesSerialize" />
+          <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+          <bool name="DefinesCapabilities">false</bool>
+          <BinaryString name="Tags" />
+        </Properties>
+      </Item>
+      <Item class="Animation" referent="1194">
+        <Properties>
+          <string name="Name">Holster</string>
+          <Content name="AnimationContent">
+            <uri>rbxassetid://17837420732</uri>
+          </Content>
+          <BinaryString name="AttributesSerialize" />
+          <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+          <bool name="DefinesCapabilities">false</bool>
+          <BinaryString name="Tags" />
+        </Properties>
+      </Item>
+      <Item class="Animation" referent="1195">
+        <Properties>
+          <string name="Name">Reload</string>
+          <Content name="AnimationContent">
+            <uri>rbxassetid://17837428175</uri>
+          </Content>
+          <BinaryString name="AttributesSerialize" />
+          <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+          <bool name="DefinesCapabilities">false</bool>
+          <BinaryString name="Tags" />
+        </Properties>
+      </Item>
+      <Item class="Animation" referent="1196">
+        <Properties>
+          <string name="Name">Aim</string>
+          <Content name="AnimationContent">
+            <uri>rbxassetid://17834125927</uri>
+          </Content>
+          <BinaryString name="AttributesSerialize" />
+          <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+          <bool name="DefinesCapabilities">false</bool>
+          <BinaryString name="Tags" />
+        </Properties>
+      </Item>
+    </Item>
+    <Item class="Folder" referent="1197">
+      <Properties>
+        <string name="Name">ShotgunAnimations</string>
+        <BinaryString name="AttributesSerialize" />
+        <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+        <bool name="DefinesCapabilities">false</bool>
+        <BinaryString name="Tags" />
+      </Properties>
+      <Item class="Animation" referent="1198">
+        <Properties>
+          <string name="Name">Holster</string>
+          <Content name="AnimationContent">
+            <uri>rbxassetid://17837420732</uri>
+          </Content>
+          <BinaryString name="AttributesSerialize" />
+          <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+          <bool name="DefinesCapabilities">false</bool>
+          <BinaryString name="Tags" />
+        </Properties>
+      </Item>
+      <Item class="Animation" referent="1199">
+        <Properties>
+          <string name="Name">Reload</string>
+          <Content name="AnimationContent">
+            <uri>rbxassetid://17837441735</uri>
+          </Content>
+          <BinaryString name="AttributesSerialize" />
+          <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+          <bool name="DefinesCapabilities">false</bool>
+          <BinaryString name="Tags" />
+        </Properties>
+      </Item>
+      <Item class="Animation" referent="1200">
+        <Properties>
+          <string name="Name">Aim</string>
+          <Content name="AnimationContent">
+            <uri>rbxassetid://17820833840</uri>
+          </Content>
+          <BinaryString name="AttributesSerialize" />
+          <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+          <bool name="DefinesCapabilities">false</bool>
+          <BinaryString name="Tags" />
+        </Properties>
+      </Item>
+      <Item class="Animation" referent="1201">
+        <Properties>
+          <string name="Name">Fire</string>
+          <Content name="AnimationContent">
+            <uri>rbxassetid://17820836472</uri>
+          </Content>
+          <BinaryString name="AttributesSerialize" />
+          <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+          <bool name="DefinesCapabilities">false</bool>
+          <BinaryString name="Tags" />
+        </Properties>
+      </Item>
+    </Item>
+  </Item>
+</roblox>

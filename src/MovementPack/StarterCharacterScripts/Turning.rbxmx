@@ -1,0 +1,318 @@
+<?xml version='1.0' encoding='utf-8'?>
+<roblox version="4"><Item class="LocalScript" referent="106">
+          <Properties>
+            <string name="Name">Turning</string>
+            <BinaryString name="AttributesSerialize" />
+            <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+            <bool name="Disabled">false</bool>
+            <ContentId name="LinkedSource">
+              <null>
+              </null>
+            </ContentId>
+            <token name="RunContext">0</token>
+            <bool name="DefinesCapabilities">false</bool>
+            <string name="ScriptGuid">{437025F5-CF44-46B7-86BB-EF0584DCBB21}</string>
+            <string name="Source">local RunService = game:GetService('RunService')
+
+local Player = game.Players.LocalPlayer
+local Character = Player.Character
+local Humanoid = Character:WaitForChild('Humanoid')
+local HumanoidRootPart = Character:WaitForChild('HumanoidRootPart')
+local Torso = Character:WaitForChild('Torso', 8)
+if not Torso then
+	warn("[Turning] SEM 'Torso' -> o jogo precisa estar em R6. Inclinacao do corpo desligada.")
+	return
+end
+
+-- Original C0 Reference
+local RootJointOriginalC0 = HumanoidRootPart.RootJoint.C0
+local NeckOriginalC0 = Torso.Neck.C0
+local RightHipOriginalC0 = Torso['Right Hip'].C0
+local LeftHipOriginalC0 = Torso['Left Hip'].C0
+
+local PlayersTable = {}
+
+--[[
+	TURNING SETTINGS
+]]
+local RangeOfMotion = 40
+local RangeOfMotionTorso = 80 - RangeOfMotion
+local RangeOfMotionXZ = RangeOfMotion / 140
+local LerpSpeed = 0.005
+
+--[[
+	TILT SETTINGS
+]]
+local MIN_MOMENTUM = 0
+local MAX_MOMENTUM = math.huge
+local SMOOTH_SPEED = 5
+
+--[[
+	TILT AMOUNTS PER STATE
+]]
+local TILT_CONFIG = {
+	Walk = {
+		MOMENTUM_FACTOR = 0.020,
+	},
+	Sprint = {
+		MOMENTUM_FACTOR = 0.007,
+	},
+	Crouch = {
+		MOMENTUM_FACTOR = 0.025,
+	},
+}
+
+--[[
+	SPRINT PUNCH SETTINGS
+	PunchStrength : peak forward tilt in radians added at sprint start
+	DecaySpeed    : how fast it fades back (higher = faster recovery)
+]]
+local SPRINT_PUNCH_CONFIG = {
+	PunchStrength = 0.6,  -- how far forward the body slams (radians)
+	DecaySpeed    = 4.0,   -- recovery speed back to normal lean
+}
+
+local SPRINT_SPEED_THRESHOLD = 20
+local MOMENTUM_BLEND_SPEED   = 4
+
+-- Per-player tilt state
+local PlayerTiltState = {}
+
+-- Main Code
+RangeOfMotion      = math.rad(RangeOfMotion)
+RangeOfMotionTorso = math.rad(RangeOfMotionTorso)
+
+-- ============================================================
+-- SPRINT START DETECTION
+-- Use GetPropertyChangedSignal on WalkSpeed for local player.
+-- This fires the exact frame the sprint script sets WalkSpeed.
+-- ============================================================
+local localTiltState = nil -- will be set once player is registered
+
+Humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+	if Humanoid.WalkSpeed &gt;= SPRINT_SPEED_THRESHOLD then
+		-- Sprint just started: slam punchAmount to full immediately
+		-- so the decay gives the smooth "lunge then recover" feel
+		if localTiltState then
+			localTiltState.punchAmount = SPRINT_PUNCH_CONFIG.PunchStrength
+			localTiltState.punchActive = true
+		end
+	else
+		-- Sprint ended: cancel any remaining punch
+		if localTiltState then
+			localTiltState.punchActive = false
+			localTiltState.punchAmount = 0
+		end
+	end
+end)
+
+local function getTargetMomentumFactor(Humanoid, HumanoidRootPart)
+	local isCrouching = HumanoidRootPart:GetAttribute("IsCrouching")
+	local walkSpeed   = Humanoid.WalkSpeed
+
+	if isCrouching then
+		return TILT_CONFIG.Crouch.MOMENTUM_FACTOR
+	elseif walkSpeed &gt;= SPRINT_SPEED_THRESHOLD then
+		return TILT_CONFIG.Sprint.MOMENTUM_FACTOR
+	else
+		return TILT_CONFIG.Walk.MOMENTUM_FACTOR
+	end
+end
+
+local function Calculate(dt, HumanoidRootPart, Humanoid, Torso, tiltState, isLocalPlayer)
+	
+	-- ==========================================
+	-- CRAWL LOCK
+	-- Skip ALL tilt/turn joint manipulation while
+	-- crawling or transitioning in/out of crawl,
+	-- so CrawlIdle/CrawlWalk animations fully own
+	-- the Hip/RootJoint/Neck Motor6Ds without
+	-- being fought over every frame.
+	-- ==========================================
+	if HumanoidRootPart:GetAttribute("CrawlLock") then
+		return
+	end
+	
+	
+
+	-- ==========================================
+	-- SPRINT PUNCH DECAY
+	-- Runs every frame when punch is active,
+	-- smoothly brings punchAmount back to zero
+	-- ==========================================
+	if isLocalPlayer and tiltState.punchActive then
+		tiltState.punchAmount = tiltState.punchAmount
+			+ (0 - tiltState.punchAmount)
+			* math.min(dt * SPRINT_PUNCH_CONFIG.DecaySpeed, 1)
+
+		-- Clean up when basically zero
+		if math.abs(tiltState.punchAmount) &lt; 0.0005 then
+			tiltState.punchAmount = 0
+			tiltState.punchActive = false
+		end
+	end
+
+	-- ==========================================
+	-- TURNING LOGIC
+	-- ==========================================
+	local DirectionOfMovement = HumanoidRootPart.CFrame:VectorToObjectSpace(HumanoidRootPart.AssemblyLinearVelocity)
+	DirectionOfMovement = Vector3.new(
+		DirectionOfMovement.X / Humanoid.WalkSpeed,
+		0,
+		DirectionOfMovement.Z / Humanoid.WalkSpeed
+	)
+
+	local XResult = (DirectionOfMovement.X * (RangeOfMotion - (math.abs(DirectionOfMovement.Z) * (RangeOfMotion / 2))))
+	local XResultTorso = (DirectionOfMovement.X * (RangeOfMotionTorso - (math.abs(DirectionOfMovement.Z) * (RangeOfMotionTorso / 2))))
+	local XResultXZ = (DirectionOfMovement.X * (RangeOfMotionXZ - (math.abs(DirectionOfMovement.Z) * (RangeOfMotionXZ / 2))))
+
+	if DirectionOfMovement.Z &gt; 0.1 then
+		XResult      *= -1
+		XResultTorso *= -1
+		XResultXZ    *= -1
+	end
+
+	-- ==========================================
+	-- MOMENTUM FACTOR BLEND
+	-- ==========================================
+	local targetMomentumFactor = getTargetMomentumFactor(Humanoid, HumanoidRootPart)
+	local blendFactor = math.min(dt * MOMENTUM_BLEND_SPEED, 1)
+	tiltState.currentMomentumFactor = tiltState.currentMomentumFactor
+		+ (targetMomentumFactor - tiltState.currentMomentumFactor) * blendFactor
+
+	-- ==========================================
+	-- TILT LOGIC
+	-- ==========================================
+	local momentum = HumanoidRootPart.CFrame:VectorToObjectSpace(HumanoidRootPart.Velocity) * tiltState.currentMomentumFactor
+	momentum = Vector3.new(
+		math.clamp(math.abs(momentum.X), MIN_MOMENTUM, MAX_MOMENTUM),
+		0,
+		math.clamp(math.abs(momentum.Z), MIN_MOMENTUM, MAX_MOMENTUM)
+	)
+
+	local moveDirection = HumanoidRootPart.CFrame:VectorToObjectSpace(Humanoid.MoveDirection)
+
+	local x = moveDirection.X * momentum.X
+	local z = moveDirection.Z * momentum.Z
+
+	local targetAngles = {-z, -x, 0}
+
+	local smoothFactor = math.min(dt * SMOOTH_SPEED, 1)
+	for i = 1, 3 do
+		tiltState.currentAngles[i] = tiltState.currentAngles[i]
+			+ (targetAngles[i] - tiltState.currentAngles[i]) * smoothFactor
+	end
+
+	-- ==========================================
+	-- SPRINT PUNCH OFFSET
+	-- Applied directly to the RootJoint X axis
+	-- (forward lean in R6) regardless of move direction
+	-- Negative = lean forward in R6 joint space
+	-- ==========================================
+	local punchOffset = isLocalPlayer and (tiltState.punchAmount) or 0
+
+	local tiltCFrame = CFrame.Angles(
+		tiltState.currentAngles[1] + punchOffset,
+		tiltState.currentAngles[2],
+		tiltState.currentAngles[3]
+	)
+
+	-- ==========================================
+	-- BUILD FINAL C0s
+	-- ==========================================
+	local RootJointResult = RootJointOriginalC0 * CFrame.Angles(0, 0, -XResultTorso) * tiltCFrame
+
+	-- Neck partially follows punch so head dips naturally
+	-- Change 0.35 toward 0 to keep head more upright during punch
+	local NeckResult = NeckOriginalC0 * CFrame.Angles(0, 0, XResultTorso) * CFrame.Angles(
+		(-tiltState.currentAngles[1]) - (punchOffset * 0.35),
+		0,
+		-tiltState.currentAngles[3]
+	)
+
+	local RightHipResult = RightHipOriginalC0
+		* CFrame.new(-XResultXZ, 0, -math.abs(XResultXZ) + math.abs(-XResultXZ))
+		* CFrame.Angles(0, -XResult, 0)
+
+	local LeftHipResult = LeftHipOriginalC0
+		* CFrame.new(-XResultXZ, 0, -math.abs(-XResultXZ) + math.abs(-XResultXZ))
+		* CFrame.Angles(0, -XResult, 0)
+
+	-- ==========================================
+	-- LERP &amp; APPLY
+	-- ==========================================
+	local LerpTime = 1 - LerpSpeed ^ dt
+
+	Torso['Right Hip'].C0          = Torso['Right Hip'].C0:Lerp(RightHipResult, LerpTime)
+	Torso['Left Hip'].C0           = Torso['Left Hip'].C0:Lerp(LeftHipResult, LerpTime)
+	HumanoidRootPart.RootJoint.C0  = HumanoidRootPart.RootJoint.C0:Lerp(RootJointResult, LerpTime)
+	Torso.Neck.C0                  = Torso.Neck.C0:Lerp(NeckResult, LerpTime)
+end
+
+RunService.RenderStepped:Connect(function(dt)
+
+	for _, p in game.Players:GetPlayers() do
+		if p.Character == nil then continue end
+		if table.find(PlayersTable, p) then continue end
+		table.insert(PlayersTable, p)
+
+		if not PlayerTiltState[p] then
+			PlayerTiltState[p] = {
+				currentAngles         = {0, 0, 0},
+				currentMomentumFactor = TILT_CONFIG.Walk.MOMENTUM_FACTOR,
+				punchAmount           = 0,
+				punchActive           = false,
+			}
+		end
+
+		-- Store reference to local player state so the
+		-- WalkSpeed signal can access it immediately
+		if p == Player then
+			localTiltState = PlayerTiltState[p]
+		end
+	end
+
+	for i, p in pairs(PlayersTable) do
+
+		if p == nil then
+			table.remove(PlayersTable, i)
+			continue
+		end
+
+		if game.Players:FindFirstChild(p.Name) == nil then
+			PlayerTiltState[p] = nil
+			table.remove(PlayersTable, i)
+			continue
+		end
+
+		if p.Character == nil then
+			table.remove(PlayersTable, i)
+			continue
+		end
+
+		local hrp   = p.Character:FindFirstChild('HumanoidRootPart')
+		local hum   = p.Character:FindFirstChild('Humanoid')
+		local torso = p.Character:FindFirstChild('Torso')
+
+		if hrp == nil or hum == nil or torso == nil then continue end
+
+		if not PlayerTiltState[p] then
+			PlayerTiltState[p] = {
+				currentAngles         = {0, 0, 0},
+				currentMomentumFactor = TILT_CONFIG.Walk.MOMENTUM_FACTOR,
+				punchAmount           = 0,
+				punchActive           = false,
+			}
+		end
+
+		Calculate(dt, hrp, hum, torso, PlayerTiltState[p], p == Player)
+	end
+end)</string>
+            <int64 name="SourceAssetId">-1</int64>
+            <BinaryString name="Tags" />
+          </Properties>
+        </Item>
+        <SharedStrings>
+    <SharedString md5="rxNJufX5oaagQE3qNtzJSQ==" />
+  </SharedStrings>
+</roblox>

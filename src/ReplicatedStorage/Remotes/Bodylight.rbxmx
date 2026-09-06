@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='utf-8'?>
+<roblox version="4"><Item class="RemoteEvent" referent="49">
+            <Properties>
+              <string name="Name">Bodylight</string>
+              <BinaryString name="AttributesSerialize" />
+              <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+              <bool name="DefinesCapabilities">false</bool>
+              <int64 name="SourceAssetId">-1</int64>
+              <BinaryString name="Tags" />
+            </Properties>
+          </Item>
+          <SharedStrings>
+    <SharedString md5="rxNJufX5oaagQE3qNtzJSQ==" />
+  </SharedStrings>
+</roblox>

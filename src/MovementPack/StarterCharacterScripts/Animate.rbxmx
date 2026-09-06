@@ -1,0 +1,685 @@
+<?xml version='1.0' encoding='utf-8'?>
+<roblox version="4"><Item class="LocalScript" referent="123">
+          <Properties>
+            <string name="Name">Animate</string>
+            <BinaryString name="AttributesSerialize" />
+            <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+            <bool name="Disabled">false</bool>
+            <ContentId name="LinkedSource">
+              <null>
+              </null>
+            </ContentId>
+            <token name="RunContext">0</token>
+            <bool name="DefinesCapabilities">false</bool>
+            <string name="ScriptGuid">{2C765EEA-A178-40BE-8BF8-748FEF08EF2D}</string>
+            <string name="Source">local Figure = script.Parent
+-- [Meujogo] R6 obrigatorio. Sem timeout, WaitForChild trava aqui pra
+-- sempre em R15 e NENHUMA animacao roda (nem a default, que fica suprimida
+-- pelo nome "Animate"). Com timeout + aviso, da pra ver o motivo no Output.
+local Torso = Figure:WaitForChild("Torso", 8)
+if not Torso then
+	warn("[Animate] SEM 'Torso' apos 8s -> o jogo NAO esta em R6. "
+		.. "Game Settings > Avatar > Avatar Type > R6. Animacoes de movimento desligadas.")
+	return
+end
+local Humanoid = Figure:WaitForChild("Humanoid")
+local HumanoidRootPart = Figure:WaitForChild("HumanoidRootPart")
+local FOOT_OFFSET = Vector3.new(0, -2.9, 0)
+
+local sprintImpactTemplate = script:FindFirstChild("SprintImpact")
+local sprintEmitter
+local sprintEmitters = {} -- [Meujogo] TODOS os emissores, nao so o primeiro
+
+if sprintImpactTemplate then
+	local impactAttachment = sprintImpactTemplate:Clone()
+	-- [Meujogo] ATRAS do pe: em R6 o LookVector da HumanoidRootPart e -Z,
+	-- entao +Z fica pras costas do personagem.
+	impactAttachment.Position = FOOT_OFFSET + Vector3.new(0, 0, 1.2)
+	impactAttachment.Orientation = Vector3.new(-90, 0, 0)
+	impactAttachment.Parent = HumanoidRootPart
+
+	-- [Meujogo] o original fazia FindFirstChildWhichIsA("ParticleEmitter2"),
+	-- e "ParticleEmitter2" nao e ClassName nenhum (e o NOME do emissor) --
+	-- entao 3 dos 4 emissores vinham nil e a fumaca quase nao aparecia.
+	for _, child in impactAttachment:GetDescendants() do
+		if child:IsA("ParticleEmitter") then
+			table.insert(sprintEmitters, child)
+		end
+	end
+	sprintEmitter = sprintEmitters[1]
+
+	if not sprintEmitter then
+		warn("[Sprint] No ParticleEmitter found inside SprintImpact.")
+	end
+else
+	warn("[Sprint] No 'SprintImpact' Attachment found under this script.")
+end
+
+-- [Meujogo] baforada curta atras do pe ao ENGATAR a corrida.
+local function emitSprintDust(amount)
+	for _, emitter in sprintEmitters do
+		emitter:Emit(amount)
+	end
+end
+
+local sprintDustPlayed = false
+local pose = "Standing"
+
+local ContentProvider = game:GetService("ContentProvider")
+
+local currentAnim = ""
+local currentAnimInstance = nil
+local currentAnimTrack = nil
+local currentAnimKeyframeHandler = nil
+local currentAnimSpeed = 1.0
+local isAirborne = false
+
+local TRANSITIONS = {
+	idle_to_walk = 0.25,
+	walk_to_idle = 0.30,
+	walk_to_run  = 0.18,
+	run_to_walk  = 0.22,
+	run_to_idle  = 0.30,
+	default      = 0.28,
+}
+
+local animTable = {}
+
+-- All animation IDs are defined here in the script only.
+-- (No longer reads Animation objects parented under this script.)
+local animNames = {
+	idle = {
+		{ id = "rbxassetid://180435571", weight = 9 },
+		{ id = "rbxassetid://180435792", weight = 1 },
+	},
+	walk = {
+		{ id = "rbxassetid://118726962444881", weight = 10 }, -- [Meujogo] animacao do usuario
+	},
+	run = {
+		{ id = "rbxassetid://87202665361349", weight = 10 }, -- [Meujogo] animacao do usuario
+	},
+	climb = {
+		{ id = "rbxassetid://180436334", weight = 10 },
+	},
+	sit = {
+		{ id = "rbxassetid://178130996", weight = 10 },
+	},
+	fall = {
+		{ id = "rbxassetid://180436148", weight = 10 },
+	},
+	jump = {
+		{ id = "rbxassetid://125750702", weight = 10 },
+	},
+}
+
+-- Builds animTable[name] purely from the fileList defined above.
+local function configureAnimationSet(name, fileList)
+	animTable[name] = { count = 0, totalWeight = 0 }
+
+	for i, anim in ipairs(fileList) do
+		local inst = Instance.new("Animation")
+		inst.Name = name
+		inst.AnimationId = anim.id
+		animTable[name][i] = { anim = inst, weight = anim.weight }
+		animTable[name].count += 1
+		animTable[name].totalWeight += anim.weight
+	end
+end
+
+for name, list in pairs(animNames) do
+	configureAnimationSet(name, list)
+end
+
+pcall(function()
+	local assets = {}
+	for _, set in pairs(animTable) do
+		for i = 1, set.count do
+			table.insert(assets, set[i].anim)
+		end
+	end
+	ContentProvider:PreloadAsync(assets)
+end)
+
+local function pickAnim(name)
+	local set = animTable[name]
+	if not set or set.count == 0 then return nil end
+	local roll = math.random(1, set.totalWeight)
+	local idx = 1
+	while roll &gt; set[idx].weight do
+		roll -= set[idx].weight
+		idx  += 1
+	end
+	return set[idx].anim
+end
+
+local function getTransition(from, to)
+	return TRANSITIONS[from .. "_to_" .. to] or TRANSITIONS.default
+end
+
+local function stopAllAnimations()
+	local old = currentAnim
+	currentAnim = ""
+	currentAnimInstance = nil
+	if currentAnimKeyframeHandler then
+		currentAnimKeyframeHandler:Disconnect()
+		currentAnimKeyframeHandler = nil
+	end
+	if currentAnimTrack then
+		currentAnimTrack:Stop(TRANSITIONS.default)
+		currentAnimTrack:Destroy()
+		currentAnimTrack = nil
+	end
+	return old
+end
+
+local function setAnimationSpeed(speed)
+	if speed == currentAnimSpeed then return end
+	currentAnimSpeed = speed
+	if currentAnimTrack then
+		currentAnimTrack:AdjustSpeed(speed)
+	end
+end
+
+local function playAnimation(animName, forcedTransition)
+	local hrp = Figure:FindFirstChild("HumanoidRootPart")
+
+	-- While a landing-effects script is playing its own animation, don't let
+	-- ANYTHING from this script play over it (fall/jump included) — not just
+	-- idle/walk. Without this, a physics micro-bounce right after touching
+	-- ground can re-trigger onFreeFall/onJumping and restart the fall
+	-- animation, bypassing the stop that already happened on landing.
+	if hrp and hrp:GetAttribute("IsLanding") then
+		return
+	end
+
+	-- While crouching, only allow sit and climb (blocks jump too)
+	if hrp and hrp:GetAttribute("IsCrouching") then
+		if animName ~= "sit" and animName ~= "climb" then
+			return
+		end
+	end
+
+	local anim = pickAnim(animName)
+	if not anim then return end
+	if anim == currentAnimInstance then return end
+
+	local transition = forcedTransition or getTransition(currentAnim, animName)
+
+	if currentAnimTrack then
+		currentAnimTrack:Stop(transition)
+		currentAnimTrack:Destroy()
+	end
+	if currentAnimKeyframeHandler then
+		currentAnimKeyframeHandler:Disconnect()
+	end
+
+	currentAnimSpeed    = 1.0
+	-- [Meujogo] Animator:LoadAnimation (o Humanoid:LoadAnimation do pacote e
+	-- deprecado e as vezes nao toca com Animator ja presente).
+	local _animator = Humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", Humanoid)
+	currentAnimTrack    = _animator:LoadAnimation(anim)
+	currentAnimTrack.Priority = Enum.AnimationPriority.Core
+	-- [Meujogo] forca loop nas continuas: se a anim do usuario foi publicada
+	-- como nao-loopavel, sem isso ela toca uma vez e congela.
+	if animName == "idle" or animName == "walk" or animName == "run" then
+		currentAnimTrack.Looped = true
+	end
+	currentAnimTrack:Play(transition)
+	-- [Meujogo] avisa no Output se a anim nao carregou (ID invalido / privado / R15 em rig R6)
+	do
+		local _t, _n, _id = currentAnimTrack, animName, tostring(anim.AnimationId)
+		task.delay(2, function()
+			if _t and _t.IsPlaying and _t.Length == 0 then
+				warn("[Animate] a animacao '" .. _n .. "' (" .. _id .. ") nao carregou -- ID invalido, privado, ou R15 num rig R6")
+			end
+		end)
+	end
+	currentAnim         = animName
+	currentAnimInstance = anim
+
+	currentAnimKeyframeHandler = currentAnimTrack.KeyframeReached:Connect(
+		function(frame)
+			if frame == "End" then
+				local rName  = currentAnim
+				local rSpeed = currentAnimSpeed
+				playAnimation(rName)
+				setAnimationSpeed(rSpeed)
+			end
+		end
+	)
+end
+
+local function isMovingBackwards()
+	local hrp = Figure:FindFirstChild("HumanoidRootPart")
+	if not hrp then return false end
+	local v = hrp.Velocity
+	if v.Magnitude &lt; 0.5 then return false end
+	return v.Unit:Dot(hrp.CFrame.LookVector) &lt; -0.2
+end
+
+-- Use WalkSpeed threshold to detect sprint for animation only
+-- This matches CONFIG.SprintSpeed in the crouch script
+local SPRINT_SPEED_THRESHOLD = 20
+
+function onRunning(speed)
+	local hrp = Figure:FindFirstChild("HumanoidRootPart")
+	if hrp and hrp:GetAttribute("IsCrouching") then return end
+	if hrp and hrp:GetAttribute("IsLanding") then return end
+	if isAirborne then return end
+
+	if speed &gt; 0.5 then
+		if isMovingBackwards() then
+			playAnimation("walk")
+			setAnimationSpeed(-speed / 14.5)
+		elseif Humanoid.WalkSpeed &gt;= SPRINT_SPEED_THRESHOLD then
+			playAnimation("run")
+			setAnimationSpeed(1.3)
+
+			-- Play sprint start dust once
+			if not sprintDustPlayed then
+				sprintDustPlayed = true
+				emitSprintDust(8) -- [Meujogo] fumaca pequena, nao explosao
+			end
+		else
+			playAnimation("walk")
+			setAnimationSpeed(speed / 14.5)
+		end
+		pose = "Running"
+	else
+		playAnimation("idle")
+		pose = "Standing"
+	end
+	if Humanoid.WalkSpeed &lt; SPRINT_SPEED_THRESHOLD then
+		sprintDustPlayed = false
+	end
+end
+
+function onDied()             pose = "Dead"               end
+function onGettingUp()        pose = "GettingUp"          end
+function onFallingDown()      pose = "FallingDown"        end
+function onSeated()           pose = "Seated"             end
+function onPlatformStanding() pose = "PlatformStanding"   end
+
+function onSwimming(speed)
+	-- [Meujogo] flutuar com pose de idle > animacao de andar dentro da agua
+	pose = "Standing"
+end
+
+function onClimbing(speed)
+	playAnimation("climb", 0.1)
+	setAnimationSpeed(speed / 12.0)
+	pose = "Climbing"
+end
+
+function onFreeFall()
+	isAirborne = true
+	playAnimation("fall", 0.3)
+	pose = "FreeFall"
+end
+
+function onJumping(active)
+	local hrp = Figure:FindFirstChild("HumanoidRootPart")
+	if hrp and hrp:GetAttribute("IsCrouching") then return end
+
+	if active then
+		isAirborne = true
+		playAnimation("jump", 0.1)
+		pose = "Jumping"
+	end
+end
+
+-- Move loop: ONLY handles animation state, zero WalkSpeed changes.
+-- [Meujogo] tirei o dt/lastTick: era codigo morto (move so olha `pose`) e
+-- estourava porque task.wait() devolve 1 valor, nao 2 como o wait() antigo.
+function move()
+	if pose == "Seated" then
+		playAnimation("sit", 0.5)
+	elseif pose == "Dead"
+		or pose == "GettingUp"
+		or pose == "FallingDown"
+		or pose == "PlatformStanding" then
+		stopAllAnimations()
+	end
+end
+
+-- Jumping and Freefall must be enabled together. Leaving Freefall disabled
+-- while Jumping is enabled breaks the humanoid's state machine mid-jump,
+-- which is what was causing the character to lose its colliders (except
+-- the head) after jumping.
+Humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+Humanoid:SetStateEnabled(Enum.HumanoidStateType.Freefall, true)
+
+Humanoid.Died:Connect(onDied)
+Humanoid.Running:Connect(onRunning)
+Humanoid.Climbing:Connect(onClimbing)
+Humanoid.GettingUp:Connect(onGettingUp)
+Humanoid.FreeFalling:Connect(onFreeFall)
+Humanoid.FallingDown:Connect(onFallingDown)
+Humanoid.Seated:Connect(onSeated)
+Humanoid.PlatformStanding:Connect(onPlatformStanding)
+Humanoid.Swimming:Connect(onSwimming)
+Humanoid.Jumping:Connect(onJumping)
+
+Humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+	if Humanoid.WalkSpeed &gt;= SPRINT_SPEED_THRESHOLD then
+		if not sprintDustPlayed then
+			sprintDustPlayed = true
+			emitSprintDust(8) -- [Meujogo] fumaca pequena, nao explosao
+		end
+	else
+		sprintDustPlayed = false
+	end
+end)
+
+Humanoid.StateChanged:Connect(function(_, newState)
+	if newState == Enum.HumanoidStateType.Landed
+		or newState == Enum.HumanoidStateType.Running
+		or newState == Enum.HumanoidStateType.RunningNoPhysics then
+		isAirborne = false
+
+		-- Don't wait for the next Running event (it only fires when speed
+		-- CHANGES). Force an immediate re-check so standing still after a
+		-- jump doesn't leave the fall/jump animation stuck playing.
+		-- Deferred so it runs AFTER any other script (e.g. a landing effects
+		-- script) has a chance to set the IsLanding attribute this frame.
+		task.defer(function()
+			local hrp = Figure:FindFirstChild("HumanoidRootPart")
+			local horizSpeed = 0
+			if hrp then
+				local v = hrp.Velocity
+				horizSpeed = Vector3.new(v.X, 0, v.Z).Magnitude
+			end
+			onRunning(horizSpeed)
+		end)
+	end
+end)
+
+-- If a landing-effects script (or anything else) sets IsLanding true to
+-- temporarily take over animation, stop our own track immediately so it
+-- doesn't blend with the landing animation (both are Core priority, so
+-- without this they'd play on top of each other). When IsLanding goes
+-- back to false, re-check the animation so idle/walk resumes correctly
+-- instead of staying stuck (Running only fires on a speed CHANGE).
+HumanoidRootPart:GetAttributeChangedSignal("IsLanding"):Connect(function()
+	if HumanoidRootPart:GetAttribute("IsLanding") then
+		stopAllAnimations()
+		return
+	end
+	task.defer(function()
+		local v = HumanoidRootPart.Velocity
+		local horizSpeed = Vector3.new(v.X, 0, v.Z).Magnitude
+		onRunning(horizSpeed)
+	end)
+end)
+
+playAnimation("idle", 0.3)
+pose = "Standing"
+
+while Figure.Parent ~= nil do
+	task.wait(0.1)
+	move()
+end</string>
+            <int64 name="SourceAssetId">3286651982</int64>
+            <BinaryString name="Tags" />
+          </Properties>
+          <Item class="NumberValue" referent="124">
+            <Properties>
+              <string name="Name">ScaleDampeningPercent</string>
+              <BinaryString name="AttributesSerialize" />
+              <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+              <bool name="DefinesCapabilities">false</bool>
+              <int64 name="SourceAssetId">-1</int64>
+              <BinaryString name="Tags" />
+              <double name="Value">0.4000000059604645</double>
+            </Properties>
+          </Item>
+          <Item class="Attachment" referent="125">
+            <Properties>
+              <string name="Name">SprintImpact</string>
+              <BinaryString name="AttributesSerialize" />
+              <CoordinateFrame name="CFrame">
+                <X>0</X>
+                <Y>-3</Y>
+                <Z>0</Z>
+                <R00>1</R00>
+                <R01>0</R01>
+                <R02>0</R02>
+                <R10>0</R10>
+                <R11>1</R11>
+                <R12>0</R12>
+                <R20>0</R20>
+                <R21>0</R21>
+                <R22>1</R22>
+              </CoordinateFrame>
+              <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+              <bool name="DefinesCapabilities">false</bool>
+              <int64 name="SourceAssetId">-1</int64>
+              <BinaryString name="Tags" />
+              <bool name="Visible">false</bool>
+            </Properties>
+            <Item class="ParticleEmitter" referent="126">
+              <Properties>
+                <string name="Name">ParticleEmitter3</string>
+                <Vector3 name="Acceleration">
+                  <X>0</X>
+                  <Y>0</Y>
+                  <Z>0</Z>
+                </Vector3>
+                <BinaryString name="AttributesSerialize">AgAAAAkAAABFbWl0Q291bnQGAAAAAAAAMkAJAAAARW1pdERlbGF5BgAAAAAAAAAA</BinaryString>
+                <float name="Brightness">1</float>
+                <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                <ColorSequence name="Color">0 0.3882353 0.3882353 0.3882353 0 1 0.3882353 0.3882353 0.3882353 0 </ColorSequence>
+                <float name="Drag">9</float>
+                <token name="EmissionDirection">5</token>
+                <bool name="Enabled">false</bool>
+                <bool name="FlipbookBlendFrames">true</bool>
+                <NumberRange name="FlipbookFramerate">1 1 </NumberRange>
+                <string name="FlipbookIncompatible">Particle texture must be 1024 by 1024 to use flipbooks.</string>
+                <token name="FlipbookLayout">0</token>
+                <token name="FlipbookMode">0</token>
+                <int name="FlipbookSizeX">1</int>
+                <int name="FlipbookSizeY">1</int>
+                <bool name="FlipbookStartRandom">false</bool>
+                <NumberRange name="Lifetime">0.4 1.2 </NumberRange>
+                <float name="LightEmission">0.25</float>
+                <float name="LightInfluence">0.75</float>
+                <bool name="LockedToPart">false</bool>
+                <token name="Orientation">0</token>
+                <float name="Rate">120</float>
+                <NumberRange name="RotSpeed">0 0 </NumberRange>
+                <NumberRange name="Rotation">-360 360 </NumberRange>
+                <bool name="DefinesCapabilities">false</bool>
+                <token name="Shape">0</token>
+                <token name="ShapeInOut">0</token>
+                <float name="ShapePartial">1</float>
+                <token name="ShapeStyle">0</token>
+                <NumberSequence name="Size">0 1.3212239 0 1 1.3212239 0 </NumberSequence>
+                <int64 name="SourceAssetId">-1</int64>
+                <NumberRange name="Speed">3.7749255 28.311941 </NumberRange>
+                <Vector2 name="SpreadAngle">
+                  <X>0</X>
+                  <Y>360</Y>
+                </Vector2>
+                <NumberSequence name="Squash">0 0 0 1 0 0 </NumberSequence>
+                <BinaryString name="Tags" />
+                <Content name="TextureContent">
+                  <uri>rbxassetid://9544354287</uri>
+                </Content>
+                <float name="TimeScale">1</float>
+                <NumberSequence name="Transparency">0 0.90163934 0 1 1 0 </NumberSequence>
+                <float name="VelocityInheritance">0</float>
+                <bool name="WindAffectsDrag">false</bool>
+                <float name="ZOffset">0.18874627</float>
+              </Properties>
+            </Item>
+            <Item class="ParticleEmitter" referent="127">
+              <Properties>
+                <string name="Name">ParticleEmitter4</string>
+                <Vector3 name="Acceleration">
+                  <X>0</X>
+                  <Y>0</Y>
+                  <Z>0</Z>
+                </Vector3>
+                <BinaryString name="AttributesSerialize">AgAAAAkAAABFbWl0Q291bnQGAAAAAAAAHEAJAAAARW1pdERlbGF5BgAAAAAAAAAA</BinaryString>
+                <float name="Brightness">1</float>
+                <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                <ColorSequence name="Color">0 0.588235 0.564706 0.584314 0 1 0.588235 0.564706 0.584314 0 </ColorSequence>
+                <float name="Drag">6</float>
+                <token name="EmissionDirection">2</token>
+                <bool name="Enabled">false</bool>
+                <bool name="FlipbookBlendFrames">true</bool>
+                <NumberRange name="FlipbookFramerate">1 1 </NumberRange>
+                <string name="FlipbookIncompatible">Particle texture must be 1024 by 1024 to use flipbooks.</string>
+                <token name="FlipbookLayout">0</token>
+                <token name="FlipbookMode">0</token>
+                <int name="FlipbookSizeX">1</int>
+                <int name="FlipbookSizeY">1</int>
+                <bool name="FlipbookStartRandom">false</bool>
+                <NumberRange name="Lifetime">0.45 1.4 </NumberRange>
+                <float name="LightEmission">1</float>
+                <float name="LightInfluence">0</float>
+                <bool name="LockedToPart">false</bool>
+                <token name="Orientation">2</token>
+                <float name="Rate">20</float>
+                <NumberRange name="RotSpeed">0 0 </NumberRange>
+                <NumberRange name="Rotation">-90 -90 </NumberRange>
+                <bool name="DefinesCapabilities">false</bool>
+                <token name="Shape">0</token>
+                <token name="ShapeInOut">0</token>
+                <float name="ShapePartial">1</float>
+                <token name="ShapeStyle">0</token>
+                <NumberSequence name="Size">0 0.8541493 0 1 0.8541493 0 </NumberSequence>
+                <int64 name="SourceAssetId">-1</int64>
+                <NumberRange name="Speed">5.1248956 43.56161 </NumberRange>
+                <Vector2 name="SpreadAngle">
+                  <X>0</X>
+                  <Y>30</Y>
+                </Vector2>
+                <NumberSequence name="Squash">0 0 0 1 3 0 </NumberSequence>
+                <BinaryString name="Tags" />
+                <Content name="TextureContent">
+                  <uri>rbxassetid://9544366974</uri>
+                </Content>
+                <float name="TimeScale">1</float>
+                <NumberSequence name="Transparency">0 0.765363 0 0.460123 0.916201 0 1 1 0 </NumberSequence>
+                <float name="VelocityInheritance">0</float>
+                <bool name="WindAffectsDrag">false</bool>
+                <float name="ZOffset">0.42707464</float>
+              </Properties>
+            </Item>
+            <Item class="ParticleEmitter" referent="128">
+              <Properties>
+                <string name="Name">ParticleEmitter2</string>
+                <Vector3 name="Acceleration">
+                  <X>0</X>
+                  <Y>-6.40612</Y>
+                  <Z>0</Z>
+                </Vector3>
+                <BinaryString name="AttributesSerialize">AgAAAAkAAABFbWl0Q291bnQGAAAAAAAAKEAJAAAARW1pdERlbGF5BgAAAAAAAAAA</BinaryString>
+                <float name="Brightness">1</float>
+                <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                <ColorSequence name="Color">0 0.588235 0.564706 0.584314 0 1 0.588235 0.564706 0.584314 0 </ColorSequence>
+                <float name="Drag">6</float>
+                <token name="EmissionDirection">2</token>
+                <bool name="Enabled">false</bool>
+                <bool name="FlipbookBlendFrames">true</bool>
+                <NumberRange name="FlipbookFramerate">1 1 </NumberRange>
+                <string name="FlipbookIncompatible">Particle texture must be 1024 by 1024 to use flipbooks.</string>
+                <token name="FlipbookLayout">0</token>
+                <token name="FlipbookMode">0</token>
+                <int name="FlipbookSizeX">1</int>
+                <int name="FlipbookSizeY">1</int>
+                <bool name="FlipbookStartRandom">false</bool>
+                <NumberRange name="Lifetime">0.45 1.4 </NumberRange>
+                <float name="LightEmission">1</float>
+                <float name="LightInfluence">0</float>
+                <bool name="LockedToPart">false</bool>
+                <token name="Orientation">0</token>
+                <float name="Rate">20</float>
+                <NumberRange name="RotSpeed">-120 120 </NumberRange>
+                <NumberRange name="Rotation">-360 360 </NumberRange>
+                <bool name="DefinesCapabilities">false</bool>
+                <token name="Shape">0</token>
+                <token name="ShapeInOut">0</token>
+                <float name="ShapePartial">1</float>
+                <token name="ShapeStyle">0</token>
+                <NumberSequence name="Size">0 1.7082986 0 1 1.7082986 0 </NumberSequence>
+                <int64 name="SourceAssetId">-1</int64>
+                <NumberRange name="Speed">3.4165971 29.895224 </NumberRange>
+                <Vector2 name="SpreadAngle">
+                  <X>25</X>
+                  <Y>30</Y>
+                </Vector2>
+                <NumberSequence name="Squash">0 0 0 1 0 0 </NumberSequence>
+                <BinaryString name="Tags" />
+                <Content name="TextureContent">
+                  <uri>rbxassetid://7216854921</uri>
+                </Content>
+                <float name="TimeScale">1</float>
+                <NumberSequence name="Transparency">0 0.47486 0 0.253067 0.759777 0 0.673313 0.932961 0 1 1 0 </NumberSequence>
+                <float name="VelocityInheritance">0</float>
+                <bool name="WindAffectsDrag">false</bool>
+                <float name="ZOffset">0.42707464</float>
+              </Properties>
+            </Item>
+            <Item class="ParticleEmitter" referent="129">
+              <Properties>
+                <string name="Name">ParticleEmitter</string>
+                <Vector3 name="Acceleration">
+                  <X>0</X>
+                  <Y>0</Y>
+                  <Z>0</Z>
+                </Vector3>
+                <BinaryString name="AttributesSerialize">AgAAAAkAAABFbWl0Q291bnQGAAAAAAAAKEAJAAAARW1pdERlbGF5BgAAAAAAAAAA</BinaryString>
+                <float name="Brightness">2</float>
+                <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                <ColorSequence name="Color">0 0.588235 0.564706 0.584314 0 1 0.588235 0.564706 0.584314 0 </ColorSequence>
+                <float name="Drag">6</float>
+                <token name="EmissionDirection">2</token>
+                <bool name="Enabled">false</bool>
+                <bool name="FlipbookBlendFrames">true</bool>
+                <NumberRange name="FlipbookFramerate">1 1 </NumberRange>
+                <string name="FlipbookIncompatible">Particle texture must be 1024 by 1024 to use flipbooks.</string>
+                <token name="FlipbookLayout">0</token>
+                <token name="FlipbookMode">0</token>
+                <int name="FlipbookSizeX">1</int>
+                <int name="FlipbookSizeY">1</int>
+                <bool name="FlipbookStartRandom">false</bool>
+                <NumberRange name="Lifetime">0.45 1.4 </NumberRange>
+                <float name="LightEmission">0</float>
+                <float name="LightInfluence">0</float>
+                <bool name="LockedToPart">false</bool>
+                <token name="Orientation">0</token>
+                <float name="Rate">20</float>
+                <NumberRange name="RotSpeed">-120 120 </NumberRange>
+                <NumberRange name="Rotation">-360 360 </NumberRange>
+                <bool name="DefinesCapabilities">false</bool>
+                <token name="Shape">0</token>
+                <token name="ShapeInOut">0</token>
+                <float name="ShapePartial">1</float>
+                <token name="ShapeStyle">0</token>
+                <NumberSequence name="Size">0 1.7082986 0 1 1.7082986 0 </NumberSequence>
+                <int64 name="SourceAssetId">-1</int64>
+                <NumberRange name="Speed">3.4165971 29.895224 </NumberRange>
+                <Vector2 name="SpreadAngle">
+                  <X>10</X>
+                  <Y>30</Y>
+                </Vector2>
+                <NumberSequence name="Squash">0 0 0 1 0 0 </NumberSequence>
+                <BinaryString name="Tags" />
+                <Content name="TextureContent">
+                  <uri>rbxassetid://9544354287</uri>
+                </Content>
+                <float name="TimeScale">1</float>
+                <NumberSequence name="Transparency">0 1 0 0.0904908 0.586592 0 0.253067 0.759777 0 0.673313 0.932961 0 1 1 0 </NumberSequence>
+                <float name="VelocityInheritance">0</float>
+                <bool name="WindAffectsDrag">false</bool>
+                <float name="ZOffset">0</float>
+              </Properties>
+            </Item>
+          </Item>
+        </Item>
+      <SharedStrings>
+    <SharedString md5="rxNJufX5oaagQE3qNtzJSQ==" />
+  </SharedStrings>
+</roblox>

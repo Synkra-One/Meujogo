@@ -1,0 +1,749 @@
+<?xml version='1.0' encoding='utf-8'?>
+<roblox version="4"><Item class="Script" referent="77">
+          <Properties>
+            <string name="Name">R6Ragdoll</string>
+            <BinaryString name="AttributesSerialize" />
+            <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+            <bool name="Disabled">false</bool>
+            <ContentId name="LinkedSource">
+              <null>
+              </null>
+            </ContentId>
+            <token name="RunContext">0</token>
+            <bool name="DefinesCapabilities">false</bool>
+            <string name="ScriptGuid">{F0A174A0-BCB6-4955-B080-77742CBDE6DC}</string>
+            <string name="Source">
+
+local PhysicsService = game:GetService("PhysicsService")
+local CollectionService = game:GetService("CollectionService")
+local module = require(script.ModuleScript)
+local ragParts = script.RagdollParts:GetChildren()
+local r6Client = script.R6RagdollClient
+
+
+PhysicsService:RegisterCollisionGroup("Ragdoll")
+
+local function SetupRagdoll(char)
+	CollectionService:AddTag(char,"Rig")
+	if game.Players:GetPlayerFromCharacter(char) then
+		local humanoid = char.Humanoid
+		char.Head.Size = Vector3.new(1, 1, 1)
+		humanoid.BreakJointsOnDeath = false
+		humanoid.RequiresNeck = false
+
+		local clones = {}
+		for _, v in ipairs(ragParts) do
+			clones[v.Name] = v:Clone()
+		end
+
+		local folder1 = Instance.new("Folder")
+		folder1.Name = "RagdollConstraints"
+		for _, v in pairs(clones) do
+			if v:IsA("Attachment") then
+				v.Parent = char[v:GetAttribute("Parent")]
+			elseif v:IsA("BallSocketConstraint") then
+				v.Attachment0 = clones[v:GetAttribute("0")]
+				v.Attachment1 = clones[v:GetAttribute("1")]
+				v.Parent = folder1
+			end
+		end
+		folder1.Parent = char
+		local folder2 = Instance.new("Folder")
+		folder2.Name = "Motors"
+		local value
+		for _, v in ipairs(char.Torso:GetChildren()) do
+			if v:IsA("Motor6D") then
+				value = Instance.new("ObjectValue")
+				value.Value = v
+				value.Parent = folder2
+			end
+		end
+		folder2.Parent = folder1 
+		
+		char.ChildAdded:Connect(function(bool)
+			if bool.Name == "Ragdoll" then
+				module:Ragdoll(char)
+			end
+		end)
+		char.ChildRemoved:Connect(function(bool)
+			if bool.Name == "Ragdoll" and not char:FindFirstChild("Ragdoll") then
+				module:Unragdoll(char)
+			end
+		end)
+		
+		r6Client:Clone().Parent = char
+	else
+		require(script.ModuleScript):Setup(char)
+	end
+end
+
+for i,part in pairs(workspace:GetDescendants()) do
+	local char = part.Parent
+	pcall(function()
+
+		if char:FindFirstChild("Humanoid") and char:FindFirstChild("HumanoidRootPart") and not char:FindFirstChild("RagdollConstraints") then
+			SetupRagdoll(char)
+		end
+
+	end) 
+end
+
+workspace.DescendantAdded:Connect(function(part)
+	local char = part.Parent
+	pcall(function()
+		
+		if char:FindFirstChild("Humanoid") and char:FindFirstChild("HumanoidRootPart") and not char:FindFirstChild("RagdollConstraints") then
+			SetupRagdoll(char)
+		end
+		
+	end) 
+end)
+</string>
+            <int64 name="SourceAssetId">9292864894</int64>
+            <BinaryString name="Tags" />
+          </Properties>
+          <Item class="ModuleScript" referent="78">
+            <Properties>
+              <string name="Name">ModuleScript</string>
+              <BinaryString name="AttributesSerialize" />
+              <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+              <ContentId name="LinkedSource">
+                <null>
+                </null>
+              </ContentId>
+              <bool name="DefinesCapabilities">false</bool>
+              <string name="ScriptGuid">{7BD87C21-182C-4B13-BE44-ADFB83C30524}</string>
+              <string name="Source">local module = {}
+local Players = game:GetService("Players")
+
+local PhysicsService = game:GetService("PhysicsService")
+local ragParts = script.Parent.RagdollParts:GetChildren()
+
+function module:Setup(char: Model)
+	assert(
+		Players:GetPlayerFromCharacter(char) == nil,
+		"Setting up ragdoll on player characters is already done automatically"
+	)
+
+	local humanoid = char:FindFirstChild("Humanoid")
+	assert(humanoid, "Can only set-up ragdoll on R6 humanoid rigs")
+	assert(humanoid.RigType == Enum.HumanoidRigType.R6, "Can only set-up ragdoll on R6 humanoid rigs")
+	assert(humanoid.RootPart ~= nil, "No RootPart was found in the provided rig")
+	assert(char:FindFirstChild("HumanoidRootPart"), "No HumanoidRootPart was found in the provided rig")
+
+
+	-- Setup ragdoll
+	humanoid.BreakJointsOnDeath = false
+	humanoid.RequiresNeck = false
+
+	local clones = {}
+	for _, v in ipairs(ragParts) do
+		clones[v.Name] = v:Clone()
+	end
+
+	local folder1 = Instance.new("Folder")
+	folder1.Name = "RagdollConstraints"
+	for _, v in pairs(clones) do
+		if v:IsA("Attachment") then
+			v.Parent = char[v:GetAttribute("Parent")]
+		elseif v:IsA("BallSocketConstraint") then
+			v.Attachment0 = clones[v:GetAttribute("0")]
+			v.Attachment1 = clones[v:GetAttribute("1")]
+			v.Parent = folder1
+		end
+	end
+	folder1.Parent = char
+
+	local folder2 = Instance.new("Folder")
+	folder2.Name = "Motors"
+	local value
+	for _, v in ipairs(char.Torso:GetChildren()) do
+		if v:IsA("Motor6D") then
+			value = Instance.new("ObjectValue")
+			value.Value = v
+			value.Parent = folder2
+		end
+	end
+	folder2.Parent = folder1
+ 
+	char.ChildAdded:Connect(function(force)
+		if force.Name == "Ragdoll" then
+			module:Ragdoll(char,force.Value)
+		end
+	end)
+	
+	char.ChildRemoved:Connect(function(bool)
+		if bool.Name == "Ragdoll" and not char:FindFirstChild("Ragdoll") then
+			module:Unragdoll(char)
+		end
+	end)
+
+end
+
+function module:Ragdoll(char: Model,Force)
+	char.Humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+	char.Humanoid.AutoRotate = false
+	for _, v in ipairs(char.RagdollConstraints.Motors:GetChildren()) do
+		v.Value.Enabled = false
+	end
+
+	for _, v in ipairs(char:GetChildren()) do
+		if v:IsA("BasePart") then
+			v.CollisionGroup = "Ragdoll"
+		end
+	end
+
+ 	char.HumanoidRootPart:ApplyAngularImpulse(Vector3.new(-Force, 0, 0))
+end
+
+function module:Unragdoll(char: Model)
+	for i = 1,4 do
+		char.Humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+		task.wait()
+	end
+	
+	for _, v in ipairs(char.RagdollConstraints.Motors:GetChildren()) do
+		v.Value.Enabled = true
+	end
+
+	for _, v in ipairs(char:GetChildren()) do
+		if v:IsA("BasePart") then
+			v.CollisionGroup = "Default"
+		end
+	end
+	char.Humanoid.AutoRotate = true
+end
+
+return module
+</string>
+              <int64 name="SourceAssetId">-1</int64>
+              <BinaryString name="Tags" />
+            </Properties>
+          </Item>
+          <Item class="LocalScript" referent="79">
+            <Properties>
+              <string name="Name">R6RagdollClient</string>
+              <BinaryString name="AttributesSerialize" />
+              <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+              <bool name="Disabled">false</bool>
+              <ContentId name="LinkedSource">
+                <null>
+                </null>
+              </ContentId>
+              <token name="RunContext">0</token>
+              <bool name="DefinesCapabilities">false</bool>
+              <string name="ScriptGuid">{2CA0A310-1428-4C5F-8714-47DF8C019235}</string>
+              <string name="Source">local player = game.Players.LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+local hrp = char:WaitForChild("HumanoidRootPart")
+local humanoid = char:WaitForChild("Humanoid")
+
+humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+humanoid:SetStateEnabled(Enum.HumanoidStateType.GettingUp, false)
+
+-- Makes hands interact with head better
+local head = char:WaitForChild("Head")
+head.Size = Vector3.new(1,1,1)
+
+char.ChildAdded:Connect(function(force)
+	if force.Name == "Ragdoll" then
+		humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+		hrp:ApplyAngularImpulse(Vector3.new(-force.Value, 0, 0))
+	end
+end)
+char.ChildRemoved:Connect(function(bool)
+	if bool.Name == "Ragdoll" and not char:FindFirstChild("Ragdoll") then
+		humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+	end
+end)</string>
+              <int64 name="SourceAssetId">-1</int64>
+              <BinaryString name="Tags" />
+            </Properties>
+          </Item>
+          <Item class="Script" referent="80">
+            <Properties>
+              <string name="Name">R6NPCRagdoll</string>
+              <BinaryString name="AttributesSerialize" />
+              <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+              <bool name="Disabled">true</bool>
+              <ContentId name="LinkedSource">
+                <null>
+                </null>
+              </ContentId>
+              <token name="RunContext">0</token>
+              <bool name="DefinesCapabilities">false</bool>
+              <string name="ScriptGuid">{7ED581E2-6F52-46A0-94E4-4A72417B6C62}</string>
+              <string name="Source">require(game.ServerScriptService.R6Ragdoll.ModuleScript):Setup(script.Parent)</string>
+              <int64 name="SourceAssetId">-1</int64>
+              <BinaryString name="Tags" />
+            </Properties>
+          </Item>
+          <Item class="Part" referent="81">
+            <Properties>
+              <string name="Name">RagdollParts</string>
+              <bool name="Anchored">true</bool>
+              <BinaryString name="AttributesSerialize" />
+              <bool name="AudioCanCollide">true</bool>
+              <float name="BackParamA">-0.5</float>
+              <float name="BackParamB">0.5</float>
+              <token name="BackSurface">0</token>
+              <token name="BackSurfaceInput">0</token>
+              <float name="BottomParamA">-0.5</float>
+              <float name="BottomParamB">0.5</float>
+              <token name="BottomSurface">0</token>
+              <token name="BottomSurfaceInput">0</token>
+              <CoordinateFrame name="CFrame">
+                <X>115.92549</X>
+                <Y>42.802574</Y>
+                <Z>-112.86452</Z>
+                <R00>1</R00>
+                <R01>0</R01>
+                <R02>0</R02>
+                <R10>0</R10>
+                <R11>1</R11>
+                <R12>0</R12>
+                <R20>0</R20>
+                <R21>0</R21>
+                <R22>1</R22>
+              </CoordinateFrame>
+              <bool name="CanCollide">false</bool>
+              <bool name="CanQuery">true</bool>
+              <bool name="CanTouch">false</bool>
+              <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+              <bool name="CastShadow">false</bool>
+              <string name="CollisionGroup">Default</string>
+              <int name="CollisionGroupId">0</int>
+              <Color3uint8 name="Color3uint8">10724005</Color3uint8>
+              <PhysicalProperties name="CustomPhysicalProperties">
+                <CustomPhysics>false</CustomPhysics>
+              </PhysicalProperties>
+              <bool name="EnableFluidForces">true</bool>
+              <token name="formFactorRaw">1</token>
+              <float name="FrontParamA">-0.5</float>
+              <float name="FrontParamB">0.5</float>
+              <token name="FrontSurface">0</token>
+              <token name="FrontSurfaceInput">0</token>
+              <float name="LeftParamA">-0.5</float>
+              <float name="LeftParamB">0.5</float>
+              <token name="LeftSurface">0</token>
+              <token name="LeftSurfaceInput">0</token>
+              <bool name="Locked">true</bool>
+              <bool name="Massless">false</bool>
+              <token name="Material">256</token>
+              <string name="MaterialVariantSerialized" />
+              <CoordinateFrame name="PivotOffset">
+                <X>0</X>
+                <Y>0</Y>
+                <Z>0</Z>
+                <R00>1</R00>
+                <R01>0</R01>
+                <R02>0</R02>
+                <R10>0</R10>
+                <R11>1</R11>
+                <R12>0</R12>
+                <R20>0</R20>
+                <R21>0</R21>
+                <R22>1</R22>
+              </CoordinateFrame>
+              <float name="Reflectance">0</float>
+              <float name="RightParamA">-0.5</float>
+              <float name="RightParamB">0.5</float>
+              <token name="RightSurface">0</token>
+              <token name="RightSurfaceInput">0</token>
+              <int name="RootPriority">0</int>
+              <Vector3 name="RotVelocity">
+                <X>0</X>
+                <Y>0</Y>
+                <Z>0</Z>
+              </Vector3>
+              <bool name="DefinesCapabilities">false</bool>
+              <token name="shape">1</token>
+              <Vector3 name="size">
+                <X>4</X>
+                <Y>1</Y>
+                <Z>2</Z>
+              </Vector3>
+              <int64 name="SourceAssetId">-1</int64>
+              <BinaryString name="Tags" />
+              <float name="TopParamA">-0.5</float>
+              <float name="TopParamB">0.5</float>
+              <token name="TopSurface">0</token>
+              <token name="TopSurfaceInput">0</token>
+              <float name="Transparency">0</float>
+              <Vector3 name="Velocity">
+                <X>0</X>
+                <Y>0</Y>
+                <Z>0</Z>
+              </Vector3>
+            </Properties>
+            <Item class="Attachment" referent="82">
+              <Properties>
+                <string name="Name">LA0</string>
+                <BinaryString name="AttributesSerialize">AQAAAAYAAABQYXJlbnQCBQAAAFRvcnNv</BinaryString>
+                <CoordinateFrame name="CFrame">
+                  <X>-1</X>
+                  <Y>1</Y>
+                  <Z>0</Z>
+                  <R00>-1</R00>
+                  <R01>0</R01>
+                  <R02>0</R02>
+                  <R10>0</R10>
+                  <R11>1</R11>
+                  <R12>0</R12>
+                  <R20>0</R20>
+                  <R21>0</R21>
+                  <R22>-1</R22>
+                </CoordinateFrame>
+                <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                <bool name="DefinesCapabilities">false</bool>
+                <int64 name="SourceAssetId">-1</int64>
+                <BinaryString name="Tags" />
+                <bool name="Visible">false</bool>
+              </Properties>
+            </Item>
+            <Item class="BallSocketConstraint" referent="83">
+              <Properties>
+                <string name="Name">LAS</string>
+                <Ref name="Attachment0">null</Ref>
+                <Ref name="Attachment1">null</Ref>
+                <BinaryString name="AttributesSerialize">AgAAAAEAAAAwAgMAAABMQTABAAAAMQIDAAAATEEx</BinaryString>
+                <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                <int name="Color">1009</int>
+                <bool name="Enabled">true</bool>
+                <bool name="LimitsEnabled">true</bool>
+                <float name="MaxFrictionTorqueXml">50</float>
+                <float name="Radius">0.15</float>
+                <float name="Restitution">0</float>
+                <bool name="DefinesCapabilities">false</bool>
+                <int64 name="SourceAssetId">-1</int64>
+                <BinaryString name="Tags" />
+                <bool name="TwistLimitsEnabled">true</bool>
+                <float name="TwistLowerAngle">-90</float>
+                <float name="TwistUpperAngle">90</float>
+                <float name="UpperAngle">90</float>
+                <bool name="Visible">false</bool>
+              </Properties>
+            </Item>
+            <Item class="Attachment" referent="84">
+              <Properties>
+                <string name="Name">LL0</string>
+                <BinaryString name="AttributesSerialize">AQAAAAYAAABQYXJlbnQCBQAAAFRvcnNv</BinaryString>
+                <CoordinateFrame name="CFrame">
+                  <X>-0.5</X>
+                  <Y>-1</Y>
+                  <Z>0</Z>
+                  <R00>0</R00>
+                  <R01>0</R01>
+                  <R02>1</R02>
+                  <R10>-1</R10>
+                  <R11>0</R11>
+                  <R12>0</R12>
+                  <R20>0</R20>
+                  <R21>-1</R21>
+                  <R22>0</R22>
+                </CoordinateFrame>
+                <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                <bool name="DefinesCapabilities">false</bool>
+                <int64 name="SourceAssetId">-1</int64>
+                <BinaryString name="Tags" />
+                <bool name="Visible">false</bool>
+              </Properties>
+            </Item>
+            <Item class="BallSocketConstraint" referent="85">
+              <Properties>
+                <string name="Name">LLS</string>
+                <Ref name="Attachment0">null</Ref>
+                <Ref name="Attachment1">null</Ref>
+                <BinaryString name="AttributesSerialize">AgAAAAEAAAAwAgMAAABMTDABAAAAMQIDAAAATEwx</BinaryString>
+                <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                <int name="Color">1009</int>
+                <bool name="Enabled">true</bool>
+                <bool name="LimitsEnabled">true</bool>
+                <float name="MaxFrictionTorqueXml">50</float>
+                <float name="Radius">0.15</float>
+                <float name="Restitution">0</float>
+                <bool name="DefinesCapabilities">false</bool>
+                <int64 name="SourceAssetId">-1</int64>
+                <BinaryString name="Tags" />
+                <bool name="TwistLimitsEnabled">true</bool>
+                <float name="TwistLowerAngle">-45</float>
+                <float name="TwistUpperAngle">45</float>
+                <float name="UpperAngle">90</float>
+                <bool name="Visible">false</bool>
+              </Properties>
+            </Item>
+            <Item class="Attachment" referent="86">
+              <Properties>
+                <string name="Name">N0</string>
+                <BinaryString name="AttributesSerialize">AQAAAAYAAABQYXJlbnQCBQAAAFRvcnNv</BinaryString>
+                <CoordinateFrame name="CFrame">
+                  <X>0</X>
+                  <Y>1</Y>
+                  <Z>0</Z>
+                  <R00>0</R00>
+                  <R01>0</R01>
+                  <R02>-1</R02>
+                  <R10>1</R10>
+                  <R11>0</R11>
+                  <R12>0</R12>
+                  <R20>0</R20>
+                  <R21>-1</R21>
+                  <R22>0</R22>
+                </CoordinateFrame>
+                <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                <bool name="DefinesCapabilities">false</bool>
+                <int64 name="SourceAssetId">-1</int64>
+                <BinaryString name="Tags" />
+                <bool name="Visible">false</bool>
+              </Properties>
+            </Item>
+            <Item class="BallSocketConstraint" referent="87">
+              <Properties>
+                <string name="Name">NS</string>
+                <Ref name="Attachment0">null</Ref>
+                <Ref name="Attachment1">null</Ref>
+                <BinaryString name="AttributesSerialize">AgAAAAEAAAAwAgIAAABOMAEAAAAxAgIAAABOMQ==</BinaryString>
+                <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                <int name="Color">1009</int>
+                <bool name="Enabled">true</bool>
+                <bool name="LimitsEnabled">true</bool>
+                <float name="MaxFrictionTorqueXml">50</float>
+                <float name="Radius">0.15</float>
+                <float name="Restitution">0</float>
+                <bool name="DefinesCapabilities">false</bool>
+                <int64 name="SourceAssetId">-1</int64>
+                <BinaryString name="Tags" />
+                <bool name="TwistLimitsEnabled">true</bool>
+                <float name="TwistLowerAngle">-45</float>
+                <float name="TwistUpperAngle">45</float>
+                <float name="UpperAngle">60</float>
+                <bool name="Visible">false</bool>
+              </Properties>
+            </Item>
+            <Item class="Attachment" referent="88">
+              <Properties>
+                <string name="Name">RA0</string>
+                <BinaryString name="AttributesSerialize">AQAAAAYAAABQYXJlbnQCBQAAAFRvcnNv</BinaryString>
+                <CoordinateFrame name="CFrame">
+                  <X>1</X>
+                  <Y>1</Y>
+                  <Z>0</Z>
+                  <R00>1</R00>
+                  <R01>0</R01>
+                  <R02>0</R02>
+                  <R10>0</R10>
+                  <R11>1</R11>
+                  <R12>0</R12>
+                  <R20>0</R20>
+                  <R21>0</R21>
+                  <R22>1</R22>
+                </CoordinateFrame>
+                <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                <bool name="DefinesCapabilities">false</bool>
+                <int64 name="SourceAssetId">-1</int64>
+                <BinaryString name="Tags" />
+                <bool name="Visible">false</bool>
+              </Properties>
+            </Item>
+            <Item class="BallSocketConstraint" referent="89">
+              <Properties>
+                <string name="Name">RAS</string>
+                <Ref name="Attachment0">null</Ref>
+                <Ref name="Attachment1">null</Ref>
+                <BinaryString name="AttributesSerialize">AgAAAAEAAAAwAgMAAABSQTABAAAAMQIDAAAAUkEx</BinaryString>
+                <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                <int name="Color">1009</int>
+                <bool name="Enabled">true</bool>
+                <bool name="LimitsEnabled">true</bool>
+                <float name="MaxFrictionTorqueXml">50</float>
+                <float name="Radius">0.15</float>
+                <float name="Restitution">0</float>
+                <bool name="DefinesCapabilities">false</bool>
+                <int64 name="SourceAssetId">-1</int64>
+                <BinaryString name="Tags" />
+                <bool name="TwistLimitsEnabled">true</bool>
+                <float name="TwistLowerAngle">-90</float>
+                <float name="TwistUpperAngle">90</float>
+                <float name="UpperAngle">90</float>
+                <bool name="Visible">false</bool>
+              </Properties>
+            </Item>
+            <Item class="Attachment" referent="90">
+              <Properties>
+                <string name="Name">RL0</string>
+                <BinaryString name="AttributesSerialize">AQAAAAYAAABQYXJlbnQCBQAAAFRvcnNv</BinaryString>
+                <CoordinateFrame name="CFrame">
+                  <X>0.5</X>
+                  <Y>-1</Y>
+                  <Z>0</Z>
+                  <R00>0</R00>
+                  <R01>0</R01>
+                  <R02>1</R02>
+                  <R10>-1</R10>
+                  <R11>0</R11>
+                  <R12>0</R12>
+                  <R20>0</R20>
+                  <R21>-1</R21>
+                  <R22>0</R22>
+                </CoordinateFrame>
+                <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                <bool name="DefinesCapabilities">false</bool>
+                <int64 name="SourceAssetId">-1</int64>
+                <BinaryString name="Tags" />
+                <bool name="Visible">false</bool>
+              </Properties>
+            </Item>
+            <Item class="BallSocketConstraint" referent="91">
+              <Properties>
+                <string name="Name">RLS</string>
+                <Ref name="Attachment0">null</Ref>
+                <Ref name="Attachment1">null</Ref>
+                <BinaryString name="AttributesSerialize">AgAAAAEAAAAwAgMAAABSTDABAAAAMQIDAAAAUkwx</BinaryString>
+                <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                <int name="Color">1009</int>
+                <bool name="Enabled">true</bool>
+                <bool name="LimitsEnabled">true</bool>
+                <float name="MaxFrictionTorqueXml">50</float>
+                <float name="Radius">0.15</float>
+                <float name="Restitution">0</float>
+                <bool name="DefinesCapabilities">false</bool>
+                <int64 name="SourceAssetId">-1</int64>
+                <BinaryString name="Tags" />
+                <bool name="TwistLimitsEnabled">true</bool>
+                <float name="TwistLowerAngle">-45</float>
+                <float name="TwistUpperAngle">45</float>
+                <float name="UpperAngle">90</float>
+                <bool name="Visible">false</bool>
+              </Properties>
+            </Item>
+            <Item class="Attachment" referent="92">
+              <Properties>
+                <string name="Name">RL1</string>
+                <BinaryString name="AttributesSerialize">AQAAAAYAAABQYXJlbnQCCQAAAFJpZ2h0IExlZw==</BinaryString>
+                <CoordinateFrame name="CFrame">
+                  <X>0</X>
+                  <Y>1</Y>
+                  <Z>0</Z>
+                  <R00>0.0000000000000019106855</R00>
+                  <R01>-0.00000004371139</R01>
+                  <R02>1</R02>
+                  <R10>-1</R10>
+                  <R11>-0.00000004371139</R11>
+                  <R12>0</R12>
+                  <R20>0.00000004371139</R20>
+                  <R21>-1</R21>
+                  <R22>-0.00000004371139</R22>
+                </CoordinateFrame>
+                <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                <bool name="DefinesCapabilities">false</bool>
+                <int64 name="SourceAssetId">-1</int64>
+                <BinaryString name="Tags" />
+                <bool name="Visible">false</bool>
+              </Properties>
+            </Item>
+            <Item class="Attachment" referent="93">
+              <Properties>
+                <string name="Name">RA1</string>
+                <BinaryString name="AttributesSerialize">AQAAAAYAAABQYXJlbnQCCQAAAFJpZ2h0IEFybQ==</BinaryString>
+                <CoordinateFrame name="CFrame">
+                  <X>-0.5</X>
+                  <Y>1</Y>
+                  <Z>0</Z>
+                  <R00>0</R00>
+                  <R01>1</R01>
+                  <R02>0</R02>
+                  <R10>-1</R10>
+                  <R11>0</R11>
+                  <R12>0</R12>
+                  <R20>0</R20>
+                  <R21>0</R21>
+                  <R22>1</R22>
+                </CoordinateFrame>
+                <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                <bool name="DefinesCapabilities">false</bool>
+                <int64 name="SourceAssetId">-1</int64>
+                <BinaryString name="Tags" />
+                <bool name="Visible">false</bool>
+              </Properties>
+            </Item>
+            <Item class="Attachment" referent="94">
+              <Properties>
+                <string name="Name">LL1</string>
+                <BinaryString name="AttributesSerialize">AQAAAAYAAABQYXJlbnQCCAAAAExlZnQgTGVn</BinaryString>
+                <CoordinateFrame name="CFrame">
+                  <X>0</X>
+                  <Y>1</Y>
+                  <Z>0</Z>
+                  <R00>0.0000000000000019106855</R00>
+                  <R01>-0.00000004371139</R01>
+                  <R02>1</R02>
+                  <R10>-1</R10>
+                  <R11>-0.00000004371139</R11>
+                  <R12>0</R12>
+                  <R20>0.00000004371139</R20>
+                  <R21>-1</R21>
+                  <R22>-0.00000004371139</R22>
+                </CoordinateFrame>
+                <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                <bool name="DefinesCapabilities">false</bool>
+                <int64 name="SourceAssetId">-1</int64>
+                <BinaryString name="Tags" />
+                <bool name="Visible">false</bool>
+              </Properties>
+            </Item>
+            <Item class="Attachment" referent="95">
+              <Properties>
+                <string name="Name">LA1</string>
+                <BinaryString name="AttributesSerialize">AQAAAAYAAABQYXJlbnQCCAAAAExlZnQgQXJt</BinaryString>
+                <CoordinateFrame name="CFrame">
+                  <X>0.5</X>
+                  <Y>1</Y>
+                  <Z>0</Z>
+                  <R00>0</R00>
+                  <R01>-1</R01>
+                  <R02>0</R02>
+                  <R10>-1</R10>
+                  <R11>0</R11>
+                  <R12>0</R12>
+                  <R20>0</R20>
+                  <R21>0</R21>
+                  <R22>-1</R22>
+                </CoordinateFrame>
+                <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                <bool name="DefinesCapabilities">false</bool>
+                <int64 name="SourceAssetId">-1</int64>
+                <BinaryString name="Tags" />
+                <bool name="Visible">false</bool>
+              </Properties>
+            </Item>
+            <Item class="Attachment" referent="96">
+              <Properties>
+                <string name="Name">N1</string>
+                <BinaryString name="AttributesSerialize">AQAAAAYAAABQYXJlbnQCBAAAAEhlYWQ=</BinaryString>
+                <CoordinateFrame name="CFrame">
+                  <X>0</X>
+                  <Y>-0.5</Y>
+                  <Z>0</Z>
+                  <R00>0</R00>
+                  <R01>0</R01>
+                  <R02>-1</R02>
+                  <R10>1</R10>
+                  <R11>0</R11>
+                  <R12>0</R12>
+                  <R20>0</R20>
+                  <R21>-1</R21>
+                  <R22>0</R22>
+                </CoordinateFrame>
+                <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+                <bool name="DefinesCapabilities">false</bool>
+                <int64 name="SourceAssetId">-1</int64>
+                <BinaryString name="Tags" />
+                <bool name="Visible">false</bool>
+              </Properties>
+            </Item>
+          </Item>
+        </Item>
+        <SharedStrings>
+    <SharedString md5="rxNJufX5oaagQE3qNtzJSQ==" />
+  </SharedStrings>
+</roblox>

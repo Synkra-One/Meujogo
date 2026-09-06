@@ -1,0 +1,972 @@
+<?xml version='1.0' encoding='utf-8'?>
+<roblox version="4"><Item class="LocalScript" referent="114">
+          <Properties>
+            <string name="Name">Crouching</string>
+            <BinaryString name="AttributesSerialize" />
+            <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+            <bool name="Disabled">false</bool>
+            <ContentId name="LinkedSource">
+              <null>
+              </null>
+            </ContentId>
+            <token name="RunContext">0</token>
+            <bool name="DefinesCapabilities">false</bool>
+            <string name="ScriptGuid">{C17D53B0-7E38-4A78-85F3-2DD4C12DCB8E}</string>
+            <string name="Source">local Players      = game:GetService("Players")
+local RunService   = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UIS          = game:GetService("UserInputService")
+
+local plr       = Players.LocalPlayer
+local Character = plr.Character or plr.CharacterAdded:Wait()
+local Humanoid  = Character:WaitForChild("Humanoid")
+local RootPart  = Character:WaitForChild("HumanoidRootPart")
+local Camera    = workspace.CurrentCamera
+
+-- =============================================
+-- VIGNETTE
+-- =============================================
+local PlayerGui   = plr:WaitForChild("PlayerGui")
+local VignetteGui = PlayerGui:WaitForChild("Vignette")
+
+VignetteGui.IgnoreGuiInset = true
+
+local VignetteElement = VignetteGui:FindFirstChildWhichIsA("ImageLabel")
+	or VignetteGui:FindFirstChildWhichIsA("Frame")
+
+if not VignetteElement then
+	warn("[Crouch] No ImageLabel or Frame found inside 'Vignette' ScreenGui")
+end
+
+if VignetteElement then
+	VignetteElement.AnchorPoint = Vector2.new(0, 0)
+	VignetteElement.Position    = UDim2.new(0, 0, 0, 0)
+	VignetteElement.Size        = UDim2.new(1, 0, 1, 0)
+
+	if VignetteElement:IsA("ImageLabel") then
+		VignetteElement.ImageTransparency = 1
+	else
+		VignetteElement.BackgroundTransparency = 1
+	end
+end
+
+local vignetteTween = nil
+
+-- =============================================
+-- CONFIG
+-- =============================================
+local CONFIG = {
+	NormalSpeed  = 12,
+	SprintSpeed  = 23,
+	CrouchSpeed  = 6,
+	CrawlSpeed   = 3,
+	WaterSpeed   = 7, -- [Meujogo] teto de velocidade nadando / na agua
+
+	WalkAnimSpeed        = 0.8,
+	RunAnimSpeed         = 1.4,
+	CrouchIdleAnimSpeed  = 1.0,
+	CrouchWalkAnimSpeed  = 1.0,
+	CrawlIdleAnimSpeed   = 1.0,
+	CrawlWalkAnimSpeed   = 1.0,
+
+	DefaultFOV   = 70,
+	SprintFOV    = 90,
+	CrouchFOV    = 62,
+	CrawlFOV     = 55,
+
+	SprintFOVTime  = 0.35,
+	CrouchFOVTime  = 0.4,
+	CrawlFOVTime   = 0.4,
+	DefaultFOVTime = 0.5,
+
+	CrouchCamOffset = -1.5,
+	CrawlCamOffset  = -2.8,
+
+	CrouchCooldown  = 0.2,
+	CrawlCooldown   = 0.2,
+	MaxFreefallTime = 0.5,
+
+	VignetteVisible     = 0.3,
+	VignetteCrawl       = 0.55,
+	VignetteFadeInTime  = 0.4,
+	VignetteFadeOutTime = 0.4,
+
+	CrouchKey  = Enum.KeyCode.C,
+	CrawlKey   = Enum.KeyCode.Z,
+	SprintKeys = {
+		Enum.KeyCode.LeftShift,
+		Enum.KeyCode.RightShift,
+	},
+}
+
+-- =============================================
+-- STATE
+-- =============================================
+local isCrouching       = false
+local isCrawling        = false
+local isTransitioning   = false
+local isSprinting       = false
+local sprintKeyHeld     = false
+local crouchDebounce    = true
+local crawlDebounce     = true
+local isOnGround        = true
+local notMoving         = true
+local freefallTimer     = 0
+local fovTween          = nil
+local currentCrouchAnim = nil
+local currentCrawlAnim  = nil
+
+-- =============================================
+-- ANIMATIONS
+-- =============================================
+local Animator = Humanoid:FindFirstChildOfClass("Animator")
+	or Instance.new("Animator", Humanoid)
+
+local function safeLoadAnim(animName)
+	local animObj = script:FindFirstChild(animName)
+	if not animObj then
+		warn("[Crouch] Missing Animation child: " .. animName)
+		return nil
+	end
+	local ok, track = pcall(function()
+		return Animator:LoadAnimation(animObj)
+	end)
+	if ok then return track end
+	return nil
+end
+
+local CrouchIdle    = safeLoadAnim("Crouching")
+local CrouchWalk    = safeLoadAnim("CrouchWalk")
+local CrouchToCrawl = safeLoadAnim("CrouchToCrawl")
+local CrawlIdle     = safeLoadAnim("CrawlIdle")
+local CrawlWalk     = safeLoadAnim("CrawlWalk")
+local CrawlToCrouch = safeLoadAnim("CrawlToCrouch")
+
+if CrawlIdle then CrawlIdle.Looped = true end
+if CrawlWalk then CrawlWalk.Looped = true end
+if CrouchIdle then CrouchIdle.Looped = true end -- [Meujogo] forca loop
+if CrouchWalk then CrouchWalk.Looped = true end -- [Meujogo] forca loop
+if CrouchToCrawl then CrouchToCrawl.Looped = false end
+if CrawlToCrouch then CrawlToCrouch.Looped = false end
+
+-- =============================================
+-- IK FOOT DISABLE HELPERS
+-- =============================================
+local function getIKParts()
+	local vm = Character:FindFirstChild("ViewModel")
+	if not vm then return nil end
+
+	local vmLeft  = vm:FindFirstChild("Left Leg")
+	local vmRight = vm:FindFirstChild("Right Leg")
+	local realLeft  = Character:FindFirstChild("Left Leg")
+	local realRight = Character:FindFirstChild("Right Leg")
+
+	return vmLeft, vmRight, realLeft, realRight
+end
+
+local ikCurrentlyDisabled = false
+
+local function setIKFeetEnabled(enabled)
+	local vmLeft, vmRight, realLeft, realRight = getIKParts()
+
+	if enabled then
+		if vmLeft then vmLeft.Transparency = 0 end
+		if vmRight then vmRight.Transparency = 0 end
+		if realLeft then realLeft.Transparency = 1 end
+		if realRight then realRight.Transparency = 1 end
+		ikCurrentlyDisabled = false
+	else
+		if vmLeft then vmLeft.Transparency = 1 end
+		if vmRight then vmRight.Transparency = 1 end
+		if realLeft then realLeft.Transparency = 0 end
+		if realRight then realRight.Transparency = 0 end
+		ikCurrentlyDisabled = true
+	end
+end
+
+-- =============================================
+-- CRAWL LOCK (turning script joint conflict fix)
+-- =============================================
+--[[
+	Sets an attribute the turning script checks to
+	completely skip its Hip/RootJoint/Neck C0 writes
+	while we're crawling or transitioning in/out of
+	crawl. Without this, the turning script fights
+	the CrawlIdle/CrawlWalk animations every frame
+	and mangles the leg positions.
+
+	Requires ONE line added to the turning script's
+	Calculate() function (see chat) — everything else
+	in that script remains untouched.
+]]
+local function setCrawlLock(locked)
+	RootPart:SetAttribute("CrawlLock", locked)
+end
+
+-- =============================================
+-- HELPERS
+-- =============================================
+local function tweenFOV(target, duration)
+	if fovTween then fovTween:Cancel() end
+	fovTween = TweenService:Create(
+		Camera,
+		TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ FieldOfView = target }
+	)
+	fovTween:Play()
+end
+
+local function tweenCamOffset(y, duration)
+	TweenService:Create(
+		Humanoid,
+		TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ CameraOffset = Vector3.new(0, y, 0) }
+	):Play()
+end
+
+local function setVignette(targetTransparency, duration)
+	if not VignetteElement then return end
+	if vignetteTween then
+		vignetteTween:Cancel()
+		vignetteTween = nil
+	end
+
+	local prop
+	if VignetteElement:IsA("ImageLabel") then
+		prop = { ImageTransparency = targetTransparency }
+	else
+		prop = { BackgroundTransparency = targetTransparency }
+	end
+
+	vignetteTween = TweenService:Create(
+		VignetteElement,
+		TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		prop
+	)
+	vignetteTween:Play()
+end
+
+local SPEED_FLOOR = 0.001
+
+local function safeSetSpeed(speed)
+	Humanoid.WalkSpeed = math.max(speed, SPEED_FLOOR)
+end
+
+local function applySpeed()
+	if isTransitioning then
+		safeSetSpeed(SPEED_FLOOR)
+	elseif isCrawling then
+		safeSetSpeed(CONFIG.CrawlSpeed)
+	elseif isCrouching then
+		safeSetSpeed(CONFIG.CrouchSpeed)
+	elseif isSprinting then
+		safeSetSpeed(CONFIG.SprintSpeed)
+	else
+		safeSetSpeed(CONFIG.NormalSpeed)
+	end
+end
+
+local function isMovingBackwards()
+	local vel = RootPart.Velocity
+	if Vector3.new(vel.X, 0, vel.Z).Magnitude &lt; 0.5 then return false end
+	return vel.Unit:Dot(RootPart.CFrame.LookVector) &lt; -0.2
+end
+
+local function isMovingForward()
+	local vel = RootPart.Velocity
+	if Vector3.new(vel.X, 0, vel.Z).Magnitude &lt; 0.5 then return false end
+	return vel.Unit:Dot(RootPart.CFrame.LookVector) &gt; 0.2
+end
+
+local function isObstructed()
+	local head = Character:FindFirstChild("Head")
+	if not head then return false end
+	local params = RaycastParams.new()
+	params.FilterDescendantsInstances = {Character}
+	return workspace:Raycast(head.Position, Vector3.new(0, 2.5, 0), params) ~= nil
+end
+
+local function isObstructedForStand()
+	local head = Character:FindFirstChild("Head")
+	if not head then return false end
+	local params = RaycastParams.new()
+	params.FilterDescendantsInstances = {Character}
+	return workspace:Raycast(head.Position, Vector3.new(0, 3.5, 0), params) ~= nil
+end
+
+local function canSprintNow()
+	local can = RootPart:GetAttribute("CanSprint")
+	if can == nil then return true end
+	return can == true
+end
+
+local function shouldForceStopSprint()
+	return RootPart:GetAttribute("ForceStopSprint") == true
+end
+
+-- =============================================
+-- CROUCH ANIMATIONS
+-- =============================================
+local function stopCrouchAnims()
+	if CrouchIdle and CrouchIdle.IsPlaying then CrouchIdle:Stop(0.2) end
+	if CrouchWalk and CrouchWalk.IsPlaying then CrouchWalk:Stop(0.2) end
+	currentCrouchAnim = nil
+end
+
+local function updateCrouchAnims()
+	if not isCrouching or isCrawling or isTransitioning then return end
+
+	if notMoving then
+		if currentCrouchAnim ~= "idle" then
+			if CrouchWalk and CrouchWalk.IsPlaying then CrouchWalk:Stop(0.2) end
+			if CrouchIdle and not CrouchIdle.IsPlaying then
+				CrouchIdle:Play(0.2)
+				CrouchIdle:AdjustSpeed(CONFIG.CrouchIdleAnimSpeed)
+			end
+			currentCrouchAnim = "idle"
+		end
+	else
+		if currentCrouchAnim ~= "walk" then
+			if CrouchIdle and CrouchIdle.IsPlaying then CrouchIdle:Stop(0.2) end
+			if CrouchWalk and not CrouchWalk.IsPlaying then
+				CrouchWalk:Play(0.2)
+				CrouchWalk:AdjustSpeed(CONFIG.CrouchWalkAnimSpeed)
+			end
+			currentCrouchAnim = "walk"
+		end
+	end
+end
+
+-- =============================================
+-- CRAWL ANIMATIONS
+-- =============================================
+local function stopCrawlAnims()
+	if CrawlIdle and CrawlIdle.IsPlaying then CrawlIdle:Stop(0.2) end
+	if CrawlWalk and CrawlWalk.IsPlaying then CrawlWalk:Stop(0.2) end
+	currentCrawlAnim = nil
+end
+
+local function updateCrawlAnims()
+	if not isCrawling or isTransitioning then return end
+
+	if notMoving then
+		if currentCrawlAnim ~= "idle" then
+			if CrawlWalk and CrawlWalk.IsPlaying then CrawlWalk:Stop(0.2) end
+			if CrawlIdle and not CrawlIdle.IsPlaying then
+				CrawlIdle:Play(0.2)
+				CrawlIdle:AdjustSpeed(CONFIG.CrawlIdleAnimSpeed)
+			end
+			currentCrawlAnim = "idle"
+		end
+	else
+		if currentCrawlAnim ~= "walk" then
+			if CrawlIdle and CrawlIdle.IsPlaying then CrawlIdle:Stop(0.2) end
+			if CrawlWalk and not CrawlWalk.IsPlaying then
+				CrawlWalk:Play(0.2)
+				CrawlWalk:AdjustSpeed(CONFIG.CrawlWalkAnimSpeed)
+			end
+			currentCrawlAnim = "walk"
+		end
+	end
+end
+
+-- =============================================
+-- SPRINT
+-- =============================================
+local function startSprint()
+	if isCrouching or isCrawling or isTransitioning then return end
+	if isSprinting then return end
+	if not canSprintNow() then return end
+
+	isSprinting = true
+	applySpeed()
+	tweenFOV(CONFIG.SprintFOV, CONFIG.SprintFOVTime)
+end
+
+local function stopSprint()
+	if not isSprinting then return end
+	isSprinting = false
+	applySpeed()
+	if not isCrouching and not isCrawling then
+		tweenFOV(CONFIG.DefaultFOV, CONFIG.DefaultFOVTime)
+	end
+end
+
+-- =============================================
+-- CRAWL — enter (must already be crouching)
+-- =============================================
+local function doCrawl()
+	if not crawlDebounce then return end
+	if isCrawling or isTransitioning then return end
+	if not isCrouching then return end
+	if not isOnGround then return end
+
+	crawlDebounce   = false
+	isCrawling      = true
+	isTransitioning = true
+
+	-- Lock BOTH the IK feet and the turning script's joint writes
+	setIKFeetEnabled(false)
+	setCrawlLock(true)
+
+	RootPart:SetAttribute("IsCrawling", true)
+
+	stopCrouchAnims()
+
+	tweenFOV(CONFIG.CrawlFOV, CONFIG.CrawlFOVTime)
+	tweenCamOffset(CONFIG.CrawlCamOffset, 0.35)
+	setVignette(1 - CONFIG.VignetteCrawl, CONFIG.VignetteFadeInTime)
+
+	applySpeed()
+
+	if CrouchToCrawl then
+		CrouchToCrawl:Play(0.1)
+		CrouchToCrawl:AdjustSpeed(1)
+
+		local conn
+		conn = CrouchToCrawl.Stopped:Connect(function()
+			conn:Disconnect()
+			isTransitioning = false
+			if isCrawling then
+				applySpeed()
+				updateCrawlAnims()
+			end
+		end)
+	else
+		isTransitioning = false
+		applySpeed()
+		updateCrawlAnims()
+	end
+
+	task.delay(CONFIG.CrawlCooldown, function()
+		crawlDebounce = true
+	end)
+end
+
+-- =============================================
+-- CRAWL — exit (return to crouch)
+-- =============================================
+local function doStopCrawl()
+	if not isCrawling or isTransitioning then return end
+
+	isCrawling      = false
+	isTransitioning = true
+
+	-- Keep CrawlLock + IK disabled through the ENTIRE
+	-- crawl-&gt;crouch transition animation
+
+	RootPart:SetAttribute("IsCrawling", false)
+
+	stopCrawlAnims()
+
+	tweenFOV(CONFIG.CrouchFOV, CONFIG.CrouchFOVTime)
+	tweenCamOffset(CONFIG.CrouchCamOffset, 0.35)
+	setVignette(1 - CONFIG.VignetteVisible, CONFIG.VignetteFadeOutTime)
+
+	applySpeed()
+
+	if CrawlToCrouch then
+		CrawlToCrouch:Play(0.1)
+		CrawlToCrouch:AdjustSpeed(1)
+
+		local conn
+		conn = CrawlToCrouch.Stopped:Connect(function()
+			conn:Disconnect()
+			isTransitioning = false
+			if isCrouching and not isCrawling then
+				applySpeed()
+				updateCrouchAnims()
+				-- Fully back in crouch: safe to release both locks
+				setIKFeetEnabled(true)
+				setCrawlLock(false)
+			end
+		end)
+	else
+		isTransitioning = false
+		applySpeed()
+		updateCrouchAnims()
+		setIKFeetEnabled(true)
+		setCrawlLock(false)
+	end
+end
+
+-- =============================================
+-- CROUCH / STANDUP
+-- =============================================
+local function doCrouch()
+	if not crouchDebounce then return end
+	if isCrouching or isTransitioning then return end
+	if not isOnGround then return end
+
+	crouchDebounce = false
+	isSprinting    = false
+	isCrouching    = true
+
+	RootPart:SetAttribute("IsCrouching", true)
+
+	applySpeed()
+	updateCrouchAnims()
+
+	setVignette(1 - CONFIG.VignetteVisible, CONFIG.VignetteFadeInTime)
+	tweenFOV(CONFIG.CrouchFOV, CONFIG.CrouchFOVTime)
+
+	Humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+	tweenCamOffset(CONFIG.CrouchCamOffset, 0.25)
+
+	task.delay(CONFIG.CrouchCooldown, function()
+		crouchDebounce = true
+	end)
+end
+
+local function doStandUp()
+	if not isCrouching or isTransitioning then return end
+	if isObstructed() then return end
+
+	if isCrawling then
+		if isObstructedForStand() then return end
+		doStopCrawl()
+
+		local transLen = (CrawlToCrouch and CrawlToCrouch.Length) or 0.3
+		task.delay(transLen + 0.05, function()
+			if not isCrawling and isCrouching and not isTransitioning then
+				doStandUp()
+			end
+		end)
+		return
+	end
+
+	isCrouching       = false
+	currentCrouchAnim = nil
+
+	RootPart:SetAttribute("IsCrouching", false)
+
+	stopCrouchAnims()
+	applySpeed()
+
+	setVignette(1, CONFIG.VignetteFadeOutTime)
+	tweenFOV(CONFIG.DefaultFOV, CONFIG.DefaultFOVTime)
+
+	Humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+	tweenCamOffset(0, 0.25)
+end
+
+-- =============================================
+-- INPUT
+-- =============================================
+UIS.InputBegan:Connect(function(input, typing)
+	if typing then return end
+
+	if input.KeyCode == CONFIG.CrouchKey then
+		if isCrawling then
+			doStopCrawl()
+		elseif isCrouching then
+			doStandUp()
+		else
+			doCrouch()
+		end
+		return
+	end
+
+	if input.KeyCode == CONFIG.CrawlKey then
+		if isCrawling then
+			doStopCrawl()
+		elseif isCrouching then
+			doCrawl()
+		end
+		return
+	end
+
+	for _, key in ipairs(CONFIG.SprintKeys) do
+		if input.KeyCode == key then
+			sprintKeyHeld = true
+			if not isCrouching and not isCrawling
+				and not isTransitioning and isMovingForward() then
+				startSprint()
+			end
+			return
+		end
+	end
+end)
+
+UIS.InputEnded:Connect(function(input, _typing)
+	for _, key in ipairs(CONFIG.SprintKeys) do
+		if input.KeyCode == key then
+			sprintKeyHeld = false
+			stopSprint()
+			return
+		end
+	end
+end)
+
+-- =============================================
+-- HEARTBEAT
+-- =============================================
+RunService.Heartbeat:Connect(function(dt)
+	notMoving  = Humanoid.MoveDirection.Magnitude &lt; 0.1
+	isOnGround = Humanoid.FloorMaterial ~= Enum.Material.Air
+
+	local targetSpeed
+	if isTransitioning then
+		targetSpeed = SPEED_FLOOR
+	elseif isCrawling then
+		targetSpeed = CONFIG.CrawlSpeed
+	elseif isCrouching then
+		targetSpeed = CONFIG.CrouchSpeed
+	elseif isSprinting then
+		targetSpeed = CONFIG.SprintSpeed
+	else
+		targetSpeed = CONFIG.NormalSpeed
+	end
+	Humanoid.WalkSpeed = math.max(targetSpeed, SPEED_FLOOR)
+
+	-- [Meujogo] resistencia da agua: nadando ou pisando em Water, corta
+	-- a velocidade. Roda logo depois do pacote setar o WalkSpeed (mesmo
+	-- frame), entao nao ha briga.
+	if Humanoid.FloorMaterial == Enum.Material.Water
+		or Humanoid:GetState() == Enum.HumanoidStateType.Swimming then
+		Humanoid.WalkSpeed = math.min(Humanoid.WalkSpeed, CONFIG.WaterSpeed)
+	end
+
+	-- [Meujogo] Monstro anda mais rapido (MonsterCombat.lua publica esse
+	-- Attribute no character: SpeedMultiplier normal, WeakenedSpeedMultiplier
+	-- enquanto fraco pela luz; nil pra quem nao e Monstro).
+	local monMul = Character:GetAttribute("MonsterSpeedMul")
+	if type(monMul) == "number" and monMul > 0 and Humanoid.WalkSpeed > SPEED_FLOOR then
+		Humanoid.WalkSpeed *= monMul
+	end
+
+	-- [Meujogo] VELOCIDADE do personagem escolhido (CharacterStatsApplier
+	-- publica esse Attribute; Rafael ~1.4x, Diego ~0.9x). Multiplica junto com
+	-- o do Monstro, entao os dois compoem.
+	local statMul = Character:GetAttribute("SpeedMul")
+	if type(statMul) == "number" and statMul > 0 and Humanoid.WalkSpeed > SPEED_FLOOR then
+		Humanoid.WalkSpeed *= statMul
+	end
+
+	-- Safety nets: keep locks correctly synced every frame
+	if (isCrawling or isTransitioning) then
+		if not ikCurrentlyDisabled then
+			setIKFeetEnabled(false)
+		end
+		if not RootPart:GetAttribute("CrawlLock") then
+			setCrawlLock(true)
+		end
+	end
+
+	if isCrouching or isCrawling then
+		if not isOnGround then
+			freefallTimer += dt
+			if freefallTimer &gt;= CONFIG.MaxFreefallTime then
+				if isCrawling then
+					isCrawling      = false
+					isTransitioning = false
+					RootPart:SetAttribute("IsCrawling", false)
+					stopCrawlAnims()
+					if CrouchToCrawl and CrouchToCrawl.IsPlaying then
+						CrouchToCrawl:Stop(0)
+					end
+					if CrawlToCrouch and CrawlToCrouch.IsPlaying then
+						CrawlToCrouch:Stop(0)
+					end
+				end
+				if isCrouching then
+					isCrouching       = false
+					isTransitioning   = false
+					currentCrouchAnim = nil
+					RootPart:SetAttribute("IsCrouching", false)
+					stopCrouchAnims()
+					Humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+					tweenCamOffset(0, 0.2)
+					setVignette(1, CONFIG.VignetteFadeOutTime)
+					tweenFOV(CONFIG.DefaultFOV, CONFIG.DefaultFOVTime)
+				end
+				-- Full emergency exit: release both locks
+				setIKFeetEnabled(true)
+				setCrawlLock(false)
+			end
+		else
+			freefallTimer = 0
+		end
+	else
+		freefallTimer = 0
+	end
+
+	if isCrawling then
+		updateCrawlAnims()
+	elseif isCrouching then
+		updateCrouchAnims()
+	end
+
+	if not isCrouching and not isCrawling and not isTransitioning then
+		if isSprinting and shouldForceStopSprint() then
+			stopSprint()
+		end
+
+		if isSprinting then
+			if isMovingBackwards() or notMoving then
+				stopSprint()
+			end
+		else
+			if sprintKeyHeld and isMovingForward() and canSprintNow() then
+				startSprint()
+			end
+		end
+	end
+end)
+
+-- =============================================
+-- HUMANOID STATES
+-- =============================================
+Humanoid.StateChanged:Connect(function(_, newState)
+	if newState == Enum.HumanoidStateType.Dead
+		or newState == Enum.HumanoidStateType.Climbing
+		or newState == Enum.HumanoidStateType.Swimming
+		or newState == Enum.HumanoidStateType.Seated then
+
+		if isCrawling then
+			isCrawling      = false
+			isTransitioning = false
+			RootPart:SetAttribute("IsCrawling", false)
+			stopCrawlAnims()
+			if CrouchToCrawl and CrouchToCrawl.IsPlaying then CrouchToCrawl:Stop(0) end
+			if CrawlToCrouch and CrawlToCrouch.IsPlaying then CrawlToCrouch:Stop(0) end
+		end
+		if isCrouching then
+			isCrouching       = false
+			isTransitioning   = false
+			currentCrouchAnim = nil
+			RootPart:SetAttribute("IsCrouching", false)
+			stopCrouchAnims()
+			Humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+			tweenCamOffset(0, 0.25)
+			setVignette(1, CONFIG.VignetteFadeOutTime)
+			tweenFOV(CONFIG.DefaultFOV, CONFIG.DefaultFOVTime)
+		end
+
+		setIKFeetEnabled(true)
+		setCrawlLock(false)
+	end
+end)
+
+-- =============================================
+-- RESPAWN
+-- =============================================
+plr.CharacterAdded:Connect(function(newChar)
+	Character = newChar
+	Humanoid  = newChar:WaitForChild("Humanoid")
+	RootPart  = newChar:WaitForChild("HumanoidRootPart")
+
+	Animator = Humanoid:FindFirstChildOfClass("Animator")
+		or Instance.new("Animator", Humanoid)
+
+	CrouchIdle    = safeLoadAnim("Crouching")
+	CrouchWalk    = safeLoadAnim("CrouchWalk")
+	CrouchToCrawl = safeLoadAnim("CrouchToCrawl")
+	CrawlIdle     = safeLoadAnim("CrawlIdle")
+	CrawlWalk     = safeLoadAnim("CrawlWalk")
+	CrawlToCrouch = safeLoadAnim("CrawlToCrouch")
+
+	if CrawlIdle then CrawlIdle.Looped = true end
+	if CrawlWalk then CrawlWalk.Looped = true end
+	if CrouchIdle then CrouchIdle.Looped = true end -- [Meujogo] forca loop
+	if CrouchWalk then CrouchWalk.Looped = true end -- [Meujogo] forca loop
+	if CrouchToCrawl then CrouchToCrawl.Looped = false end
+	if CrawlToCrouch then CrawlToCrouch.Looped = false end
+
+	isCrouching       = false
+	isCrawling        = false
+	isTransitioning   = false
+	isSprinting       = false
+	sprintKeyHeld     = false
+	crouchDebounce    = true
+	crawlDebounce     = true
+	currentCrouchAnim = nil
+	currentCrawlAnim  = nil
+	freefallTimer     = 0
+	ikCurrentlyDisabled = false
+
+	RootPart:SetAttribute("IsCrouching",     false)
+	RootPart:SetAttribute("IsCrawling",      false)
+	RootPart:SetAttribute("CrawlLock",       false)
+	RootPart:SetAttribute("CanSprint",       true)
+	RootPart:SetAttribute("ForceStopSprint", false)
+
+	Humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+
+	if VignetteElement then
+		if VignetteElement:IsA("ImageLabel") then
+			VignetteElement.ImageTransparency = 1
+		else
+			VignetteElement.BackgroundTransparency = 1
+		end
+	end
+
+	Humanoid.StateChanged:Connect(function(_, newState)
+		if newState == Enum.HumanoidStateType.Dead then
+			if isCrawling then
+				isCrawling      = false
+				isTransitioning = false
+				RootPart:SetAttribute("IsCrawling", false)
+				stopCrawlAnims()
+			end
+			if isCrouching then
+				isCrouching     = false
+				isTransitioning = false
+				RootPart:SetAttribute("IsCrouching", false)
+				stopCrouchAnims()
+				Humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+			end
+			setIKFeetEnabled(true)
+			setCrawlLock(false)
+		end
+	end)
+end)
+
+-- =============================================
+-- INITIAL SETUP
+-- =============================================
+RootPart:SetAttribute("IsCrouching",     false)
+RootPart:SetAttribute("IsCrawling",      false)
+RootPart:SetAttribute("CrawlLock",       false)
+RootPart:SetAttribute("CanSprint",       true)
+RootPart:SetAttribute("ForceStopSprint", false)</string>
+            <int64 name="SourceAssetId">-1</int64>
+            <BinaryString name="Tags" />
+          </Properties>
+          <Item class="Sound" referent="115">
+            <Properties>
+              <string name="Name">GetUp</string>
+              <bool name="AcousticSimulationEnabled">true</bool>
+              <BinaryString name="AttributesSerialize" />
+              <Content name="AudioContent">
+                <uri>rbxassetid://9113468907</uri>
+              </Content>
+              <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+              <NumberRange name="LoopRegion">0 60000 </NumberRange>
+              <bool name="Looped">false</bool>
+              <bool name="PlayOnRemove">false</bool>
+              <NumberRange name="PlaybackRegion">0 60000 </NumberRange>
+              <bool name="PlaybackRegionsEnabled">false</bool>
+              <float name="PlaybackSpeed">1</float>
+              <bool name="Playing">false</bool>
+              <float name="xmlRead_MaxDistance_3">1</float>
+              <float name="EmitterSize">0</float>
+              <token name="RollOffMode">0</token>
+              <bool name="DefinesCapabilities">false</bool>
+              <Ref name="SoundGroup">null</Ref>
+              <int64 name="SourceAssetId">-1</int64>
+              <BinaryString name="Tags" />
+              <double name="TimePosition">0</double>
+              <float name="Volume">1.5</float>
+            </Properties>
+          </Item>
+          <Item class="Sound" referent="116">
+            <Properties>
+              <string name="Name">Crouch</string>
+              <bool name="AcousticSimulationEnabled">true</bool>
+              <BinaryString name="AttributesSerialize" />
+              <Content name="AudioContent">
+                <uri>rbxassetid://3746956704</uri>
+              </Content>
+              <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+              <NumberRange name="LoopRegion">0 60000 </NumberRange>
+              <bool name="Looped">false</bool>
+              <bool name="PlayOnRemove">false</bool>
+              <NumberRange name="PlaybackRegion">0 60000 </NumberRange>
+              <bool name="PlaybackRegionsEnabled">false</bool>
+              <float name="PlaybackSpeed">1</float>
+              <bool name="Playing">false</bool>
+              <float name="xmlRead_MaxDistance_3">1</float>
+              <float name="EmitterSize">0</float>
+              <token name="RollOffMode">0</token>
+              <bool name="DefinesCapabilities">false</bool>
+              <Ref name="SoundGroup">null</Ref>
+              <int64 name="SourceAssetId">-1</int64>
+              <BinaryString name="Tags" />
+              <double name="TimePosition">0</double>
+              <float name="Volume">1</float>
+            </Properties>
+          </Item>
+          <Item class="Animation" referent="117">
+            <Properties>
+              <string name="Name">Crouching</string>
+              <Content name="AnimationContent">
+                <uri></uri>
+              </Content>
+              <BinaryString name="AttributesSerialize" />
+              <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+              <bool name="DefinesCapabilities">false</bool>
+              <int64 name="SourceAssetId">-1</int64>
+              <BinaryString name="Tags" />
+            </Properties>
+          </Item>
+          <Item class="Animation" referent="118">
+            <Properties>
+              <string name="Name">CrouchWalk</string>
+              <Content name="AnimationContent">
+                <uri></uri>
+              </Content>
+              <BinaryString name="AttributesSerialize" />
+              <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+              <bool name="DefinesCapabilities">false</bool>
+              <int64 name="SourceAssetId">-1</int64>
+              <BinaryString name="Tags" />
+            </Properties>
+          </Item>
+          <Item class="Animation" referent="119">
+            <Properties>
+              <string name="Name">CrouchToCrawl</string>
+              <Content name="AnimationContent">
+                <uri></uri>
+              </Content>
+              <BinaryString name="AttributesSerialize" />
+              <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+              <bool name="DefinesCapabilities">false</bool>
+              <int64 name="SourceAssetId">-1</int64>
+              <BinaryString name="Tags" />
+            </Properties>
+          </Item>
+          <Item class="Animation" referent="120">
+            <Properties>
+              <string name="Name">CrawlIdle</string>
+              <Content name="AnimationContent">
+                <uri></uri>
+              </Content>
+              <BinaryString name="AttributesSerialize" />
+              <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+              <bool name="DefinesCapabilities">false</bool>
+              <int64 name="SourceAssetId">-1</int64>
+              <BinaryString name="Tags" />
+            </Properties>
+          </Item>
+          <Item class="Animation" referent="121">
+            <Properties>
+              <string name="Name">CrawlWalk</string>
+              <Content name="AnimationContent">
+                <uri></uri>
+              </Content>
+              <BinaryString name="AttributesSerialize" />
+              <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+              <bool name="DefinesCapabilities">false</bool>
+              <int64 name="SourceAssetId">-1</int64>
+              <BinaryString name="Tags" />
+            </Properties>
+          </Item>
+          <Item class="Animation" referent="122">
+            <Properties>
+              <string name="Name">CrawlToCrouch</string>
+              <Content name="AnimationContent">
+                <uri></uri>
+              </Content>
+              <BinaryString name="AttributesSerialize" />
+              <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+              <bool name="DefinesCapabilities">false</bool>
+              <int64 name="SourceAssetId">-1</int64>
+              <BinaryString name="Tags" />
+            </Properties>
+          </Item>
+        </Item>
+        <SharedStrings>
+    <SharedString md5="rxNJufX5oaagQE3qNtzJSQ==" />
+  </SharedStrings>
+</roblox>

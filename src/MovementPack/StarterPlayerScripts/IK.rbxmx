@@ -1,0 +1,234 @@
+<?xml version='1.0' encoding='utf-8'?>
+<roblox version="4"><Item class="LocalScript" referent="170">
+          <Properties>
+            <string name="Name">IK</string>
+            <BinaryString name="AttributesSerialize" />
+            <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+            <bool name="Disabled">false</bool>
+            <ContentId name="LinkedSource">
+              <null>
+              </null>
+            </ContentId>
+            <token name="RunContext">0</token>
+            <bool name="DefinesCapabilities">false</bool>
+            <string name="ScriptGuid">{B1F80BE0-26B6-4391-A8D8-1AD32F5EB66D}</string>
+            <string name="Source">wait(1)
+
+local player = game:GetService("Players").LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local RootPart = char:FindFirstChild("HumanoidRootPart")
+local ViewModel = ReplicatedStorage:FindFirstChild("ViewModel"):Clone()
+local ViewModelRoot = ViewModel:FindFirstChild("HumanoidRootPart")
+local LeftLegClone = ViewModel:FindFirstChild("Left Leg")
+local RightLegClone = ViewModel:FindFirstChild("Right Leg")
+
+local LeftLeg = char:FindFirstChild("Left Leg")
+local RightLeg = char:FindFirstChild("Right Leg")
+
+
+local LeftRay = ReplicatedStorage:FindFirstChild("RayPart"):Clone()
+local RightRay = ReplicatedStorage:FindFirstChild("RayPart"):Clone()
+
+local initialLeftLegOffset = LeftLegClone.Position - ViewModelRoot.Position
+local initialRightLegOffset = RightLegClone.Position - ViewModelRoot.Position
+
+
+local function WeldParts(part0, part1)
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = part0
+	weld.Part1 = part1
+	weld.Parent = part0
+end
+
+-- Ensure necessary parts exist
+if RootPart and ViewModelRoot and LeftLegClone and RightLegClone then
+	
+	ViewModel.Parent = char
+	
+	for _,children in ipairs(ViewModel:GetChildren()) do
+		if children:IsA("BasePart") then
+			children.CanCollide = false
+		end
+		wait()
+	end
+	-- Position the ViewModelRoot initially
+	ViewModel:PivotTo(RootPart.CFrame)
+
+	-- Set initial ray positions and parent them
+	LeftRay.Position = LeftLegClone.Position + Vector3.new(0, 0.5, 0)
+	RightRay.Position = RightLegClone.Position + Vector3.new(0, 0.5, 0)
+	LeftRay.Parent = char
+	RightRay.Parent = char
+	RightRay.Name = "RightRay"
+	LeftRay.Name = "LeftRay"
+	LeftLeg.Transparency = 1
+	RightLeg.Transparency = 1
+	WeldParts(LeftRay, RootPart)
+	WeldParts(RightRay, RootPart)
+end
+
+
+local function MatchToLegs()
+	-- Get the player's character's parts
+	local charLeftLeg = char:FindFirstChild("Left Leg")
+	local charRightLeg = char:FindFirstChild("Right Leg")
+
+	-- Get the ViewModel legs
+	local vmLeftLeg = ViewModel:FindFirstChild("Left Leg")
+	local vmRightLeg = ViewModel:FindFirstChild("Right Leg")
+
+	-- Check if the character's legs and the ViewModel legs exist
+	if charLeftLeg and charRightLeg and vmLeftLeg and vmRightLeg then
+		-- Apply the skin color from the character's legs to the ViewModel legs
+		vmLeftLeg.BrickColor = charLeftLeg.BrickColor
+		vmRightLeg.BrickColor = charRightLeg.BrickColor
+
+		-- Check if the character has pants and apply them to the ViewModel legs
+		local Pants = char:FindFirstChildOfClass("Pants")
+		
+
+		if Pants then
+			ViewModel.Pants.PantsTemplate = Pants.PantsTemplate
+		end
+
+		
+	end
+end
+MatchToLegs()
+
+-- Raycast function to detect ground height
+local function SendRay(start)
+	local rayOrigin = start.Position
+	local rayDirection = Vector3.new(0, -1.4, 0) -- Longer ray for better accuracy
+
+	local RayParams = RaycastParams.new()
+	RayParams.FilterDescendantsInstances = {char, start} -- Ignore character and itself
+	RayParams.FilterType = Enum.RaycastFilterType.Exclude
+	RayParams.IgnoreWater = true
+
+	local raycastResult = workspace:Raycast(rayOrigin, rayDirection, RayParams)
+	if raycastResult then
+		local hitPart = raycastResult.Instance
+		
+		--CreateRayLine(start.Position, raycastResult.Position)
+		return raycastResult.Position.Y
+	end
+	return nil
+end
+
+-- Adjust viewmodel leg position based on raycast results
+local isLeftLegBeingAdjusted = false  -- Flag to check if the left leg is being adjusted
+local isRightLegBeingAdjuted = false 
+
+local function canMoveLeftLeg(leg)
+	if leg == true and isRightLegBeingAdjuted == false then
+		return true
+	else
+		return false
+	end
+end
+local function canMoveRightLeg(leg)
+	if leg == false and isLeftLegBeingAdjusted == false then
+		return true
+	else
+		return false
+	end
+end
+
+local function AdjustLegPosition(legClone, ray, initialOffset, isLeftLeg)
+	local hitY = SendRay(ray)
+	if isLeftLeg then
+		if hitY and canMoveLeftLeg(isLeftLeg) then
+			isLeftLegBeingAdjusted = true
+			local forwardVector = RootPart.CFrame.LookVector  -- This gives the forward direction as a Vector3
+
+			-- Apply a forward offset (distance the leg should be moved forward)
+			local forwardDistance = 0.3  -- Adjust this value to control how far the leg moves forward
+			local offsetPosition = forwardVector * forwardDistance  -- Multiply the forward direction by the distance
+
+			local charLeg = char:FindFirstChild(legClone.Name)
+			local targetPosition = Vector3.new(charLeg.Position.X, hitY + 1, charLeg.Position.Z) + offsetPosition
+
+			-- Get the orientation of the corresponding leg in the character
+			local targetOrientation = charLeg and charLeg.CFrame - charLeg.Position -- Remove the position component for just the rotation
+
+			-- Smoothly transition to the target position and match orientation
+			legClone.CFrame = legClone.CFrame:Lerp(CFrame.new(targetPosition) * targetOrientation , 0.2)
+		else
+			local charLeg = char:FindFirstChild(legClone.Name)
+			local targetOrientation = charLeg and charLeg.CFrame - charLeg.Position
+			local targetPosition = Vector3.new(charLeg.Position.X,charLeg.Position.Y, charLeg.Position.Z)
+			if isLeftLegBeingAdjusted == true then
+				legClone.CFrame = legClone.CFrame:Lerp(CFrame.new(targetPosition) * targetOrientation , 0.2)
+				isLeftLegBeingAdjusted = false
+			else
+				legClone.CFrame = CFrame.new(targetPosition) * targetOrientation
+			end
+			
+			
+			
+			
+		end
+	else
+		if hitY and canMoveRightLeg(isLeftLeg) then
+			isRightLegBeingAdjuted = true
+
+			local forwardVector = RootPart.CFrame.LookVector  -- This gives the forward direction as a Vector3
+
+			-- Apply a forward offset (distance the leg should be moved forward)
+			local forwardDistance = 0.3  -- Adjust this value to control how far the leg moves forward
+			local offsetPosition = forwardVector * forwardDistance  -- Multiply the forward direction by the distance
+
+			local charLeg = char:FindFirstChild(legClone.Name)
+			local targetPosition = Vector3.new(charLeg.Position.X, hitY + 1, charLeg.Position.Z) + offsetPosition
+
+			-- Get the orientation of the corresponding leg in the character
+			local targetOrientation = charLeg and charLeg.CFrame - charLeg.Position -- Remove the position component for just the rotation
+
+			-- Smoothly transition to the target position and match orientation
+			legClone.CFrame = legClone.CFrame:Lerp(CFrame.new(targetPosition) * targetOrientation , 0.2)
+		else
+			local charLeg = char:FindFirstChild(legClone.Name)
+			local targetOrientation = charLeg and charLeg.CFrame - charLeg.Position
+			local targetPosition = Vector3.new(charLeg.Position.X,charLeg.Position.Y, charLeg.Position.Z)
+			if isRightLegBeingAdjuted == true then
+				legClone.CFrame = legClone.CFrame:Lerp(CFrame.new(targetPosition) * targetOrientation , 0.2)
+				isRightLegBeingAdjuted = false
+			else
+				legClone.CFrame = CFrame.new(targetPosition) * targetOrientation
+			end
+		end
+	end
+
+	
+	
+
+	-- Reset the flag after adjustment is done
+	
+end
+
+-- Update viewmodel leg positions every frame
+RunService.RenderStepped:Connect(function()
+	if not (RootPart and ViewModelRoot) then return end
+
+	-- Keep the ViewModel aligned with the character
+	ViewModel:PivotTo(RootPart.CFrame)
+
+	-- Adjust left leg if not being adjusted
+	AdjustLegPosition(LeftLegClone, LeftRay, initialLeftLegOffset, true)
+
+	-- Adjust right leg if not being adjusted
+	AdjustLegPosition(RightLegClone, RightRay, initialRightLegOffset, false)
+end)
+</string>
+            <int64 name="SourceAssetId">-1</int64>
+            <BinaryString name="Tags" />
+          </Properties>
+        </Item>
+        <SharedStrings>
+    <SharedString md5="rxNJufX5oaagQE3qNtzJSQ==" />
+  </SharedStrings>
+</roblox>

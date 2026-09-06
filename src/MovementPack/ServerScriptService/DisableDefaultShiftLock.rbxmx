@@ -1,0 +1,30 @@
+<?xml version='1.0' encoding='utf-8'?>
+<roblox version="4"><Item class="Script" referent="98">
+          <Properties>
+            <string name="Name">DisableDefaultShiftLock</string>
+            <BinaryString name="AttributesSerialize" />
+            <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+            <bool name="Disabled">false</bool>
+            <ContentId name="LinkedSource">
+              <null>
+              </null>
+            </ContentId>
+            <token name="RunContext">0</token>
+            <bool name="DefinesCapabilities">false</bool>
+            <string name="ScriptGuid">{1BB6DE66-62EA-4283-8E48-FCB4935BD42C}</string>
+            <string name="Source">--[[
+
+	Put this into ServerScriptService
+
+--]]
+
+local StarterPlayer = game:GetService("StarterPlayer");
+StarterPlayer.EnableMouseLockOption = false;</string>
+            <int64 name="SourceAssetId">-1</int64>
+            <BinaryString name="Tags" />
+          </Properties>
+        </Item>
+        <SharedStrings>
+    <SharedString md5="rxNJufX5oaagQE3qNtzJSQ==" />
+  </SharedStrings>
+</roblox>

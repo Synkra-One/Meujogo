@@ -1,0 +1,111 @@
+{
+  "className": "ScreenGui",
+  "properties": {
+    "ResetOnSpawn": false,
+    "IgnoreGuiInset": false,
+    "Enabled": false
+  },
+  "children": [
+    {
+      "name": "PhaseFrame",
+      "className": "Frame",
+      "properties": {
+        "Size": { "UDim2": [[0, 420], [0, 46]] },
+        "Position": { "UDim2": [[0.5, 0], [0, 10]] },
+        "AnchorPoint": [0.5, 0],
+        "BackgroundColor3": [0, 0, 0],
+        "BackgroundTransparency": 0.4,
+        "BorderSizePixel": 0
+      },
+      "children": [
+        {
+          "name": "PhaseText",
+          "className": "TextLabel",
+          "properties": {
+            "Size": { "UDim2": [[1, 0], [1, 0]] },
+            "BackgroundTransparency": 1,
+            "Text": "Fase: -- | Tempo: --:--",
+            "TextColor3": [1, 1, 1],
+            "TextSize": 22,
+            "Font": "SourceSansBold",
+            "TextXAlignment": "Center",
+            "TextYAlignment": "Center"
+          }
+        }
+      ]
+    },
+    {
+      "name": "RoleFrame",
+      "className": "Frame",
+      "properties": {
+        "Size": { "UDim2": [[0, 200], [0, 32]] },
+        "Position": { "UDim2": [[0, 10], [1, -10]] },
+        "AnchorPoint": [0, 1],
+        "BackgroundColor3": [0, 0, 0],
+        "BackgroundTransparency": 0.4,
+        "BorderSizePixel": 0
+      },
+      "children": [
+        {
+          "name": "RoleText",
+          "className": "TextLabel",
+          "properties": {
+            "Size": { "UDim2": [[1, 0], [1, 0]] },
+            "BackgroundTransparency": 1,
+            "Text": "Papel: --",
+            "TextColor3": [1, 1, 1],
+            "TextSize": 18,
+            "Font": "SourceSans",
+            "TextXAlignment": "Center",
+            "TextYAlignment": "Center"
+          }
+        }
+      ]
+    },
+    {
+      "name": "SpyCooldownFrame",
+      "className": "Frame",
+      "properties": {
+        "Size": { "UDim2": [[0, 230], [0, 60]] },
+        "Position": { "UDim2": [[1, -10], [1, -10]] },
+        "AnchorPoint": [1, 1],
+        "BackgroundColor3": [0, 0, 0],
+        "BackgroundTransparency": 0.4,
+        "BorderSizePixel": 0,
+        "Visible": false
+      },
+      "children": [
+        {
+          "name": "SabotageCooldownText",
+          "className": "TextLabel",
+          "properties": {
+            "Size": { "UDim2": [[1, 0], [0.5, 0]] },
+            "Position": { "UDim2": [[0, 0], [0, 0]] },
+            "BackgroundTransparency": 1,
+            "Text": "Sabotagem: pronta",
+            "TextColor3": [1, 1, 1],
+            "TextSize": 16,
+            "Font": "SourceSans",
+            "TextXAlignment": "Center",
+            "TextYAlignment": "Center"
+          }
+        },
+        {
+          "name": "LethalCooldownText",
+          "className": "TextLabel",
+          "properties": {
+            "Size": { "UDim2": [[1, 0], [0.5, 0]] },
+            "Position": { "UDim2": [[0, 0], [0.5, 0]] },
+            "BackgroundTransparency": 1,
+            "Text": "Habilidade letal: pronta",
+            "TextColor3": [1, 1, 1],
+            "TextSize": 16,
+            "Font": "SourceSans",
+            "TextXAlignment": "Center",
+            "TextYAlignment": "Center"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,377 @@
+<?xml version='1.0' encoding='utf-8'?>
+<roblox version="4"><Item class="LocalScript" referent="103">
+          <Properties>
+            <string name="Name">Ui</string>
+            <BinaryString name="AttributesSerialize" />
+            <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+            <bool name="Disabled">false</bool>
+            <ContentId name="LinkedSource">
+              <null>
+              </null>
+            </ContentId>
+            <token name="RunContext">0</token>
+            <bool name="DefinesCapabilities">false</bool>
+            <string name="ScriptGuid">{AE0A43F4-24B1-4501-A47C-F18433D8DAE2}</string>
+            <string name="Source">--[[
+    Pixel-Art Health Meter UI (No More Duplicates + Shaped Shadow)
+    Place in: StarterPlayerScripts (recommended) as a LocalScript
+    (StarterPlayerScripts runs ONCE per session — avoids respawn duplication issues entirely)
+--]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+------------------------------------------------------------
+-- CLEANUP: destroy any previous copy of this GUI first
+-- (this is what fixes the "duplicate UI on death" bug)
+------------------------------------------------------------
+local existing = playerGui:FindFirstChild("PixelHealthGui")
+if existing then
+	existing:Destroy()
+end
+
+------------------------------------------------------------
+-- CONFIG
+------------------------------------------------------------
+local SEGMENT_COUNT = 10
+local BAR_WIDTH = 220
+local BAR_HEIGHT = 28
+local SEGMENT_GAP = 3
+
+------------------------------------------------------------
+-- SCREEN GUI
+------------------------------------------------------------
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "PixelHealthGui"
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+screenGui.Parent = playerGui
+
+------------------------------------------------------------
+-- BASE POSITION (moved right + down slightly)
+------------------------------------------------------------
+local basePosition = UDim2.new(0, 170, 1, -55)
+
+local container = Instance.new("Frame")
+container.Name = "HealthContainer"
+container.Size = UDim2.new(0, 40 + BAR_WIDTH + 70, 0, BAR_HEIGHT + 10)
+container.Position = basePosition
+container.AnchorPoint = Vector2.new(0.5, 0.5)
+container.BackgroundTransparency = 1
+container.Parent = screenGui
+
+------------------------------------------------------------
+-- SHAPED SHADOW LAYER (children of container so they auto-shake)
+------------------------------------------------------------
+local SHADOW_OFFSET = 4
+
+-- Bar-shaped shadow
+local barShadow = Instance.new("Frame")
+barShadow.Name = "BarShadow"
+barShadow.Size = UDim2.new(0, BAR_WIDTH, 0, BAR_HEIGHT)
+barShadow.Position = UDim2.new(0, 40 + SHADOW_OFFSET, 0.5, SHADOW_OFFSET)
+barShadow.AnchorPoint = Vector2.new(0, 0.5)
+barShadow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+barShadow.BackgroundTransparency = 0.55
+barShadow.BorderSizePixel = 0
+barShadow.ZIndex = 1
+barShadow.Parent = container
+
+local barShadowCorner = Instance.new("UICorner")
+barShadowCorner.CornerRadius = UDim.new(0, 3)
+barShadowCorner.Parent = barShadow
+
+------------------------------------------------------------
+-- PIXEL HEART ICON (+ matching pixel shadow)
+------------------------------------------------------------
+local heartMatrix = {
+	{0,1,1,0,0,1,1,0},
+	{1,1,1,1,1,1,1,1},
+	{1,1,1,1,1,1,1,1},
+	{1,1,1,1,1,1,1,1},
+	{0,1,1,1,1,1,1,0},
+	{0,0,1,1,1,1,0,0},
+	{0,0,0,1,1,0,0,0},
+}
+
+local pixelSize = 4
+
+-- Heart shadow (drawn first, offset, behind)
+local heartShadowHolder = Instance.new("Frame")
+heartShadowHolder.Name = "HeartShadow"
+heartShadowHolder.Size = UDim2.new(0, 32, 0, 28)
+heartShadowHolder.Position = UDim2.new(0, SHADOW_OFFSET, 0.5, SHADOW_OFFSET)
+heartShadowHolder.AnchorPoint = Vector2.new(0, 0.5)
+heartShadowHolder.BackgroundTransparency = 1
+heartShadowHolder.ZIndex = 1
+heartShadowHolder.Parent = container
+
+for row = 1, #heartMatrix do
+	for col = 1, #heartMatrix[row] do
+		if heartMatrix[row][col] == 1 then
+			local px = Instance.new("Frame")
+			px.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+			px.BackgroundTransparency = 0.55
+			px.BorderSizePixel = 0
+			px.ZIndex = 1
+			px.Size = UDim2.new(0, pixelSize, 0, pixelSize)
+			px.Position = UDim2.new(0, (col-1) * pixelSize, 0, (row-1) * pixelSize)
+			px.Parent = heartShadowHolder
+		end
+	end
+end
+
+-- Real heart (on top of shadow)
+local heartHolder = Instance.new("Frame")
+heartHolder.Name = "Heart"
+heartHolder.Size = UDim2.new(0, 32, 0, 28)
+heartHolder.Position = UDim2.new(0, 0, 0.5, 0)
+heartHolder.AnchorPoint = Vector2.new(0, 0.5)
+heartHolder.BackgroundTransparency = 1
+heartHolder.ZIndex = 3
+heartHolder.Parent = container
+
+local heartCells = {}
+for row = 1, #heartMatrix do
+	for col = 1, #heartMatrix[row] do
+		if heartMatrix[row][col] == 1 then
+			local px = Instance.new("Frame")
+			px.BackgroundColor3 = Color3.fromRGB(230, 40, 40)
+			px.BorderSizePixel = 0
+			px.ZIndex = 3
+			px.Size = UDim2.new(0, pixelSize, 0, pixelSize)
+			px.Position = UDim2.new(0, (col-1) * pixelSize, 0, (row-1) * pixelSize)
+			px.Parent = heartHolder
+			table.insert(heartCells, px)
+		end
+	end
+end
+
+------------------------------------------------------------
+-- SEGMENTED PIXEL BAR
+------------------------------------------------------------
+local barOuter = Instance.new("Frame")
+barOuter.Name = "BarOuter"
+barOuter.Size = UDim2.new(0, BAR_WIDTH, 0, BAR_HEIGHT)
+barOuter.Position = UDim2.new(0, 40, 0.5, 0)
+barOuter.AnchorPoint = Vector2.new(0, 0.5)
+barOuter.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+barOuter.BackgroundTransparency = 0
+barOuter.BorderSizePixel = 0
+barOuter.ZIndex = 2
+barOuter.Parent = container
+
+local barStroke = Instance.new("UIStroke")
+barStroke.Name = "BarStroke"
+barStroke.Color = Color3.fromRGB(255, 255, 255)
+barStroke.Thickness = 2
+barStroke.Parent = barOuter
+
+local segLayout = Instance.new("UIListLayout")
+segLayout.FillDirection = Enum.FillDirection.Horizontal
+segLayout.Padding = UDim.new(0, SEGMENT_GAP)
+segLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+segLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+segLayout.SortOrder = Enum.SortOrder.LayoutOrder
+segLayout.Parent = barOuter
+
+local segPadding = Instance.new("UIPadding")
+segPadding.PaddingLeft = UDim.new(0, 4)
+segPadding.PaddingRight = UDim.new(0, 4)
+segPadding.PaddingTop = UDim.new(0, 4)
+segPadding.PaddingBottom = UDim.new(0, 4)
+segPadding.Parent = barOuter
+
+local segments = {}
+local segWidth = (BAR_WIDTH - 8 - (SEGMENT_GAP * (SEGMENT_COUNT - 1))) / SEGMENT_COUNT
+
+for i = 1, SEGMENT_COUNT do
+	local seg = Instance.new("Frame")
+	seg.Name = "Segment" .. i
+	seg.Size = UDim2.new(0, segWidth, 1, 0)
+	seg.BackgroundColor3 = Color3.fromRGB(230, 40, 40)
+	seg.BackgroundTransparency = 0
+	seg.BorderSizePixel = 0
+	seg.ZIndex = 4                 -- force above barOuter (2) and heart (3)
+	seg.LayoutOrder = i
+	seg.Parent = barOuter
+
+	local segCorner = Instance.new("UICorner")
+	segCorner.CornerRadius = UDim.new(0, 2)
+	segCorner.Parent = seg
+
+	segments[i] = seg
+end
+------------------------------------------------------------
+-- PERCENT TEXT (+ shadow copy behind it for readability)
+------------------------------------------------------------
+local percentShadow = Instance.new("TextLabel")
+percentShadow.Name = "PercentShadow"
+percentShadow.Size = UDim2.new(0, 60, 1, 0)
+percentShadow.Position = UDim2.new(0, 40 + BAR_WIDTH + 10 + SHADOW_OFFSET, 0.5, SHADOW_OFFSET)
+percentShadow.AnchorPoint = Vector2.new(0, 0.5)
+percentShadow.BackgroundTransparency = 1
+percentShadow.Font = Enum.Font.Code
+percentShadow.TextSize = 20
+percentShadow.TextColor3 = Color3.fromRGB(0, 0, 0)
+percentShadow.TextTransparency = 0.45
+percentShadow.TextXAlignment = Enum.TextXAlignment.Left
+percentShadow.Text = "100%"
+percentShadow.ZIndex = 1
+percentShadow.Parent = container
+
+local percentLabel = Instance.new("TextLabel")
+percentLabel.Name = "PercentText"
+percentLabel.Size = UDim2.new(0, 60, 1, 0)
+percentLabel.Position = UDim2.new(0, 40 + BAR_WIDTH + 10, 0.5, 0)
+percentLabel.AnchorPoint = Vector2.new(0, 0.5)
+percentLabel.BackgroundTransparency = 1
+percentLabel.Font = Enum.Font.Code
+percentLabel.TextSize = 20
+percentLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+percentLabel.TextXAlignment = Enum.TextXAlignment.Left
+percentLabel.Text = "100%"
+percentLabel.ZIndex = 3
+percentLabel.Parent = container
+
+------------------------------------------------------------
+-- DAMAGE FLASH
+------------------------------------------------------------
+local function flashDamage()
+	local flash = Instance.new("Frame")
+	flash.Size = UDim2.new(1, 20, 1, 20)
+	flash.Position = UDim2.new(0.5, 0, 0.5, 0)
+	flash.AnchorPoint = Vector2.new(0.5, 0.5)
+	flash.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+	flash.BackgroundTransparency = 0.4
+	flash.BorderSizePixel = 0
+	flash.ZIndex = 20
+	flash.Parent = container
+
+	TweenService:Create(flash, TweenInfo.new(0.35, Enum.EasingStyle.Quad), {
+		BackgroundTransparency = 1
+	}):Play()
+	game.Debris:AddItem(flash, 0.35)
+end
+
+------------------------------------------------------------
+-- SHAKE EFFECT (position + rotation, decaying)
+-- Shadow + text-shadow are children of container, so they
+-- shake automatically — no manual syncing needed anymore.
+------------------------------------------------------------
+local shakeConnection = nil
+
+local function shakeUI()
+	if shakeConnection then
+		shakeConnection:Disconnect()
+		shakeConnection = nil
+	end
+
+	local duration = 0.35
+	local elapsed = 0
+	local posMagnitude = 10
+	local rotMagnitude = 8
+
+	shakeConnection = RunService.Heartbeat:Connect(function(dt)
+		elapsed += dt
+		if elapsed &gt;= duration then
+			container.Position = basePosition
+			container.Rotation = 0
+			if shakeConnection then
+				shakeConnection:Disconnect()
+				shakeConnection = nil
+			end
+			return
+		end
+
+		local decay = 1 - (elapsed / duration)
+		local offsetX = (math.random() * 2 - 1) * posMagnitude * decay
+		local offsetY = (math.random() * 2 - 1) * posMagnitude * decay
+		local rot = (math.random() * 2 - 1) * rotMagnitude * decay
+
+		container.Position = basePosition + UDim2.new(0, offsetX, 0, offsetY)
+		container.Rotation = rot
+	end)
+end
+
+------------------------------------------------------------
+-- HEALTH UPDATE LOGIC
+------------------------------------------------------------
+local lastHealth = 100
+
+local function updateHealth(humanoid)
+	local health = math.max(humanoid.Health, 0)
+	local maxHealth = math.max(humanoid.MaxHealth, 1)
+	local pct = health / maxHealth
+
+	local filledCount = math.ceil(pct * SEGMENT_COUNT)
+
+	for i, seg in ipairs(segments) do
+		if i &lt;= filledCount and health &gt; 0 then
+			local color
+			if pct &gt; 0.5 then
+				color = Color3.fromRGB(230, 40, 40)
+			elseif pct &gt; 0.25 then
+				color = Color3.fromRGB(255, 170, 30)
+			else
+				color = Color3.fromRGB(255, 60, 60)
+			end
+			seg.BackgroundColor3 = color
+		else
+			seg.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+		end
+	end
+
+	percentLabel.Text = math.floor(pct * 100) .. "%"
+	percentShadow.Text = percentLabel.Text
+
+	local heartColor = pct &lt;= 0.25 and Color3.fromRGB(255, 90, 90) or Color3.fromRGB(230, 40, 40)
+	for _, px in ipairs(heartCells) do
+		px.BackgroundColor3 = heartColor
+	end
+
+	if health &lt; lastHealth then
+		flashDamage()
+		shakeUI()
+	end
+
+	lastHealth = health
+end
+
+------------------------------------------------------------
+-- CONNECTION MANAGEMENT
+------------------------------------------------------------
+local healthConnection = nil
+
+local function onCharacterAdded(char)
+	if healthConnection then
+		healthConnection:Disconnect()
+		healthConnection = nil
+	end
+
+	local humanoid = char:WaitForChild("Humanoid")
+	lastHealth = humanoid.Health
+
+	healthConnection = humanoid.HealthChanged:Connect(function()
+		updateHealth(humanoid)
+	end)
+
+	updateHealth(humanoid)
+end
+
+if player.Character then
+	onCharacterAdded(player.Character)
+end
+player.CharacterAdded:Connect(onCharacterAdded)</string>
+            <int64 name="SourceAssetId">-1</int64>
+            <BinaryString name="Tags" />
+          </Properties>
+        </Item>
+        <SharedStrings>
+    <SharedString md5="rxNJufX5oaagQE3qNtzJSQ==" />
+  </SharedStrings>
+</roblox>

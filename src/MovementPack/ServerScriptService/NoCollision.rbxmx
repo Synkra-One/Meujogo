@@ -1,0 +1,53 @@
+<?xml version='1.0' encoding='utf-8'?>
+<roblox version="4"><Item class="Script" referent="97">
+          <Properties>
+            <string name="Name">NoCollision</string>
+            <BinaryString name="AttributesSerialize" />
+            <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+            <bool name="Disabled">false</bool>
+            <ContentId name="LinkedSource">
+              <null>
+              </null>
+            </ContentId>
+            <token name="RunContext">0</token>
+            <bool name="DefinesCapabilities">false</bool>
+            <string name="ScriptGuid">{AA5CB5DF-0221-469B-A4BD-83508F4DC243}</string>
+            <string name="Source">local PhysicsService = game:GetService("PhysicsService")
+local PlayerGroup = PhysicsService:CreateCollisionGroup("p")
+
+PhysicsService:CollisionGroupSetCollidable("p","p",false)
+
+function NoCollision(Model)
+	for k,v in pairs(Model:GetChildren()) do
+		if v:IsA("BasePart") then
+			PhysicsService:SetPartCollisionGroup(v,"p")
+		end
+	end
+end
+
+for i,Child in workspace:GetDescendants() do
+	if Child and Child:FindFirstChild("HumanoidRootPart") then
+		NoCollision(Child)
+	end
+end
+
+game.Players.PlayerAdded:Connect(function(plr)
+	plr.CharacterAdded:Connect(function()
+		wait()
+		NoCollision(plr.Character)
+	end)
+end)
+
+game:GetService("Workspace").ChildAdded:Connect(function(Child)
+	if Child and Child:FindFirstChild("HumanoidRootPart") then
+		NoCollision(Child)
+	end
+end)</string>
+            <int64 name="SourceAssetId">6117952432</int64>
+            <BinaryString name="Tags" />
+          </Properties>
+        </Item>
+        <SharedStrings>
+    <SharedString md5="rxNJufX5oaagQE3qNtzJSQ==" />
+  </SharedStrings>
+</roblox>

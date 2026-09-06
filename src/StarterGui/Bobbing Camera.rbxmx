@@ -1,0 +1,264 @@
+<?xml version='1.0' encoding='utf-8'?>
+<roblox version="4"><Item class="LocalScript" referent="104">
+          <Properties>
+            <string name="Name">Bobbing Camera</string>
+            <BinaryString name="AttributesSerialize" />
+            <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+            <bool name="Disabled">false</bool>
+            <ContentId name="LinkedSource">
+              <null>
+              </null>
+            </ContentId>
+            <token name="RunContext">0</token>
+            <bool name="DefinesCapabilities">false</bool>
+            <string name="ScriptGuid">{229BF5D5-EDF4-486C-BE2E-E0EE7D73E99B}</string>
+            <string name="Source">local Players    = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS        = game:GetService("UserInputService")
+
+local Player  = Players.LocalPlayer
+local Camera  = workspace.CurrentCamera
+
+local Character = Player.Character or Player.CharacterAdded:Wait()
+local Humanoid  = Character:WaitForChild("Humanoid")
+local RootPart  = Character:WaitForChild("HumanoidRootPart")
+
+-- =============================================
+-- CONFIG
+-- =============================================
+local CONFIG = {
+	-- Walk bob
+	WalkBobHeight    = 0.009,   -- up/down amount while walking
+	WalkBobSide      = 0.05,   -- left/right amount while walking
+	WalkBobFreq      = 7,      -- steps per second while walking
+
+	-- Run bob
+	RunBobHeight     = 0.009,   -- up/down amount while running
+	RunBobSide       = 0.05,   -- left/right amount while running
+	RunBobFreq       = 15,     -- steps per second while running
+
+	-- Crouch bob
+	CrouchBobHeight  = 0.009,
+	CrouchBobSide    = 0.05,
+	CrouchBobFreq    = 5,
+
+	-- Idle sway (breathing effect)
+	IdleSwayHeight   = 0.012,  -- very subtle up/down while idle
+	IdleSwayFreq     = 0.9,    -- slow breathing rate
+
+	-- Pitch tilt from bobbing (looks like head nodding)
+	BobPitchScale    = 0.6,    -- how much the camera pitches with Y bob
+	BobRollScale     = 0.8,    -- how much the camera rolls with X bob
+
+	-- Strafe sway (camera leans when moving sideways)
+	StrafeSway       = 0.06,   -- how much camera rolls when strafing
+	MaxStrafeSway    = 0.08,
+
+	-- Mouse look tilt (camera rolls slightly when turning)
+	MouseTilt        = 0.18,
+	MaxMouseTilt     = 3.5,    -- max degrees
+
+	-- Landing impact
+	LandingBob       = 0.18,   -- how far camera dips on landing
+	LandingDuration  = 0.25,   -- seconds to recover from landing
+
+	-- Smoothing (lower = smoother but slower)
+	BobSmoothing     = 0.14,
+	IdleSmoothing    = 0.025,
+	SwaySmoothing    = 0.10,
+	TiltSmoothing    = 0.18,
+	ReturnSmoothing  = 0.08,   -- how fast bob returns to 0 when stopping
+
+	-- Sprint speed threshold (match your crouch script CONFIG.SprintSpeed)
+	SprintThreshold  = 20,
+}
+
+-- =============================================
+-- STATE
+-- =============================================
+local bobTimer   = 0   -- accumulates time, drives the sin/cos wave
+
+-- Current smoothed values
+local curBobY    = 0
+local curBobX    = 0
+local curIdleY   = 0
+local curRollB   = 0   -- roll from bobbing
+local curPitch   = 0   -- pitch from bobbing
+local curStrafeSway = 0
+local curMouseTilt  = 0
+
+-- Landing impact state
+local landingOffset  = 0
+local wasOnGround    = true
+local landingTimer   = 0
+
+local function lerp(a, b, t)
+	return a + (b - a) * t
+end
+
+local function sign(x)
+	return x &gt; 0 and 1 or (x &lt; 0 and -1 or 0)
+end
+
+-- =============================================
+-- MAIN LOOP
+-- =============================================
+RunService.RenderStepped:Connect(function(dt)
+	if not RootPart or not Humanoid then return end
+	if Humanoid.Health &lt;= 0 then return end
+
+	dt = math.min(dt, 0.1) -- clamp dt so nothing explodes on lag
+
+	local vel        = RootPart.Velocity
+	local horizSpeed = Vector3.new(vel.X, 0, vel.Z).Magnitude
+	local isOnGround = Humanoid.FloorMaterial ~= Enum.Material.Air
+	local isCrouching = RootPart:GetAttribute("IsCrouching") or false
+	local isMoving   = horizSpeed &gt; 1.0
+	local isSprinting = Humanoid.WalkSpeed &gt;= CONFIG.SprintThreshold
+
+	-- ---- Pick parameters based on state ----
+	local targetHeight, targetSide, freq
+
+	if not isMoving or not isOnGround then
+		targetHeight = 0
+		targetSide   = 0
+		freq         = 0
+	elseif isCrouching then
+		targetHeight = CONFIG.CrouchBobHeight
+		targetSide   = CONFIG.CrouchBobSide
+		freq         = CONFIG.CrouchBobFreq
+	elseif isSprinting then
+		targetHeight = CONFIG.RunBobHeight
+		targetSide   = CONFIG.RunBobSide
+		freq         = CONFIG.RunBobFreq
+	else
+		targetHeight = CONFIG.WalkBobHeight
+		targetSide   = CONFIG.WalkBobSide
+		freq         = CONFIG.WalkBobFreq
+	end
+
+	-- ---- Advance bob timer only when moving on ground ----
+	-- This keeps the wave continuous and prevents snapping
+	if isMoving and isOnGround then
+		bobTimer = bobTimer + dt * freq
+	else
+		-- Smoothly wind timer back toward nearest zero crossing
+		-- so bob fades out at a natural point
+		bobTimer = bobTimer + dt * freq * 0.3
+	end
+
+	-- ---- Raw bob values from timer ----
+	-- Y uses sin (goes up then down = one full step cycle)
+	-- X uses cos at half frequency (sways left/right once per two steps)
+	local rawBobY = math.sin(bobTimer) * targetHeight
+	local rawBobX = math.cos(bobTimer * 0.5) * targetSide
+
+	-- ---- Smooth bob values ----
+	local bobAlpha = isMoving and isOnGround
+		and (CONFIG.BobSmoothing * (dt * 60))
+		or  (CONFIG.ReturnSmoothing * (dt * 60))
+
+	curBobY = lerp(curBobY, rawBobY, math.min(bobAlpha, 1))
+	curBobX = lerp(curBobX, rawBobX, math.min(bobAlpha, 1))
+
+	-- ---- Idle breathing (always present, very subtle) ----
+	local idleTarget = math.sin(tick() * CONFIG.IdleSwayFreq) * CONFIG.IdleSwayHeight
+	curIdleY = lerp(curIdleY, idleTarget, CONFIG.IdleSmoothing * (dt * 60))
+
+	-- ---- Landing impact ----
+	local isNowOnGround = isOnGround
+	if isNowOnGround and not wasOnGround then
+		-- Just landed — punch the camera down
+		local fallSpeed = math.abs(math.min(vel.Y, 0))
+		landingOffset = -math.min(fallSpeed * 0.012, CONFIG.LandingBob)
+		landingTimer  = CONFIG.LandingDuration
+	end
+	wasOnGround = isNowOnGround
+
+	if landingTimer &gt; 0 then
+		landingTimer = landingTimer - dt
+		landingOffset = lerp(landingOffset, 0, (dt / CONFIG.LandingDuration) * 3)
+	else
+		landingOffset = 0
+	end
+
+	-- ---- Strafe sway ----
+	-- Project velocity into camera-local space to get sideways component
+	local localVel = Camera.CFrame:VectorToObjectSpace(Vector3.new(vel.X, 0, vel.Z))
+	local strafeTarget = math.clamp(
+		-localVel.X * CONFIG.StrafeSway,
+		-CONFIG.MaxStrafeSway,
+		CONFIG.MaxStrafeSway
+	)
+	curStrafeSway = lerp(curStrafeSway, strafeTarget, CONFIG.SwaySmoothing * (dt * 60))
+
+	-- ---- Mouse tilt ----
+	local mouseDelta  = UIS:GetMouseDelta()
+	local tiltTarget  = math.clamp(
+		mouseDelta.X * CONFIG.MouseTilt,
+		-CONFIG.MaxMouseTilt,
+		CONFIG.MaxMouseTilt
+	)
+	curMouseTilt = lerp(curMouseTilt, tiltTarget, CONFIG.TiltSmoothing * (dt * 60))
+
+	-- ---- Derived rotations from bob ----
+	-- Pitch: camera nods forward/back in sync with vertical bob
+	local targetPitch = -curBobY * CONFIG.BobPitchScale
+	curPitch = lerp(curPitch, targetPitch, math.min(CONFIG.BobSmoothing * (dt * 60), 1))
+
+	-- Roll: camera tilts side to side in sync with horizontal bob
+	local targetRollBob = curBobX * CONFIG.BobRollScale
+	curRollB = lerp(curRollB, targetRollBob, math.min(CONFIG.BobSmoothing * (dt * 60), 1))
+
+	-- ---- Compose final offset ----
+	local totalY = curBobY + curIdleY + landingOffset
+	local totalX = curBobX
+
+	-- Position offset (moves camera physically up/down/side)
+	local posOffset = CFrame.new(totalX, totalY, 0)
+
+	-- Rotation offset:
+	-- pitch = nodding (X axis rotation)
+	-- roll  = tilting (Z axis rotation) from bob + strafe + mouse
+	local totalRoll = math.rad(
+		curRollB * 8             -- bob roll in degrees
+			+ curStrafeSway * 15     -- strafe lean
+		- curMouseTilt           -- mouse turn tilt
+	)
+	local totalPitch = math.rad(curPitch * 6)  -- nod in degrees
+
+	local rotOffset = CFrame.Angles(totalPitch, 0, totalRoll)
+
+	-- Apply both together
+	Camera.CFrame = Camera.CFrame * posOffset * rotOffset
+end)
+
+-- =============================================
+-- RESPAWN
+-- =============================================
+Player.CharacterAdded:Connect(function(newChar)
+	Character = newChar
+	Humanoid  = newChar:WaitForChild("Humanoid")
+	RootPart  = newChar:WaitForChild("HumanoidRootPart")
+
+	-- Reset all state
+	bobTimer      = 0
+	curBobY       = 0
+	curBobX       = 0
+	curIdleY      = 0
+	curRollB      = 0
+	curPitch      = 0
+	curStrafeSway = 0
+	curMouseTilt  = 0
+	landingOffset = 0
+	wasOnGround   = true
+	landingTimer  = 0
+end)</string>
+            <int64 name="SourceAssetId">11730333288</int64>
+            <BinaryString name="Tags" />
+          </Properties>
+        </Item>
+      <SharedStrings>
+    <SharedString md5="rxNJufX5oaagQE3qNtzJSQ==" />
+  </SharedStrings>
+</roblox>

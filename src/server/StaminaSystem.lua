@@ -1,0 +1,207 @@
+--!strict
+--[[
+	StaminaSystem
+	Fôlego de sprint, AUTORITATIVO NO SERVIDOR. Substituiu o StaminaSystem
+	client-side que vinha no pacote de movimento (aquele era 100% cliente:
+	dava pra editar o valor e correr pra sempre).
+
+	POR QUE É À PROVA DE EXPLOIT
+	  O cliente só manda a INTENÇÃO ("estou segurando Shift", Remotes.
+	  SprintIntent). Quem decide se o fôlego cai é este módulo, e ele NÃO
+	  confia na intenção: mede a velocidade horizontal real do
+	  HumanoidRootPart. Se o personagem está de fato se movendo acima do
+	  limiar de corrida, gasta -- tenha o cliente dito o que disser. Mentir
+	  "não estou correndo" não ajuda, porque a velocidade real entrega.
+	  A intenção só serve pra reagir rápido (soltar o Shift para o gasto no
+	  mesmo instante, sem esperar o corpo desacelerar).
+
+	COMO O SPRINT É BLOQUEADO
+	  Sem reescrever o pacote: o script Crouching já lê dois Attributes do
+	  HumanoidRootPart antes de deixar correr --
+	    "CanSprint"       (false = nem começa a correr)
+	    "ForceStopSprint" (true = para a corrida em andamento)
+	  Este módulo escreve os dois. É o mesmo contrato que o StaminaSystem
+	  original do pacote usava, então o Crouching não precisou mudar.
+
+	ATRIBUTO DO PERSONAGEM
+	  Stamina alta gasta MAIS DEVAGAR e recupera MAIS RÁPIDO -- as duas
+	  faixas em GameConfig.Characters (StaminaDrain é invertida de propósito).
+	  Marina/Rafael (Stamina 93-95) correm quase o dobro do tempo de
+	  Diego (Stamina 20).
+
+	VALOR PRO CLIENTE
+	  O fôlego atual (0..100) vai como Attribute "Stamina" no Player.
+	  Attributes replicam sozinhos -- a barra em client/StaminaHUD só lê,
+	  sem remote de volta.
+
+	Uso (uma vez no boot):
+		require(script.StaminaSystem).Init()
+]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
+local Remotes = require(ReplicatedStorage.Modules.Remotes)
+local StatScaling = require(ReplicatedStorage.Modules.StatScaling)
+
+local StaminaSystem = {}
+
+local MAX = 100
+local TICK = 0.1 -- resolução do loop (10 Hz -- suave o bastante pra barra)
+
+-- Fração do WalkSpeed atual acima da qual consideramos que ESTÁ correndo.
+-- O sprint do pacote é ~1.9x o andar, então 1.35x separa bem andar de correr
+-- sem depender de números fixos (o WalkSpeed varia com Velocidade do personagem).
+local SPRINT_SPEED_RATIO = 1.35
+
+type State = {
+	value: number, -- fôlego 0..100
+	intent: boolean, -- cliente segurando Shift
+	exhausted: boolean, -- zerou: só volta a correr em StaminaMinToSprint
+	idleFor: number, -- segundos sem gastar (gate do RegenDelay)
+}
+
+local states: { [Player]: State } = {}
+
+--------------------------------------------------------------------------------
+-- Helpers
+--------------------------------------------------------------------------------
+
+local function getState(player: Player): State
+	local state = states[player]
+	if not state then
+		state = { value = MAX, intent = false, exhausted = false, idleFor = 0 }
+		states[player] = state
+	end
+	return state
+end
+
+-- Só escreve quando MUDA: Attribute replica pra todos os clientes, e escrever
+-- o mesmo valor 10x por segundo pra cada jogador é tráfego à toa.
+local function setIfChanged(instance: Instance, name: string, value: unknown)
+	if instance:GetAttribute(name) ~= value then
+		instance:SetAttribute(name, value)
+	end
+end
+
+local function publish(player: Player, state: State)
+	setIfChanged(player, "Stamina", math.floor(state.value + 0.5))
+	setIfChanged(player, "StaminaExausto", state.exhausted or nil)
+end
+
+local function setSprintGate(character: Model, canSprint: boolean, forceStop: boolean)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if root then
+		setIfChanged(root, "CanSprint", canSprint)
+		setIfChanged(root, "ForceStopSprint", forceStop or nil)
+	end
+end
+
+local function horizontalSpeed(root: BasePart): number
+	local v = root.AssemblyLinearVelocity
+	return Vector3.new(v.X, 0, v.Z).Magnitude
+end
+
+--------------------------------------------------------------------------------
+-- Loop
+--------------------------------------------------------------------------------
+
+local function step(dt: number)
+	for _, player in Players:GetPlayers() do
+		local state = getState(player)
+		local character = player.Character
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+
+		if not character or not humanoid or not root or not root:IsA("BasePart") or humanoid.Health <= 0 then
+			-- Sem corpo vivo: recupera devagar e não trava nada.
+			state.value = math.min(MAX, state.value + StatScaling.StaminaRegen(player) * dt)
+			if state.value >= GameConfig.Characters.StaminaMinToSprint then
+				state.exhausted = false
+			end
+			publish(player, state)
+			continue
+		end
+
+		-- CORRENDO DE VERDADE? intenção + velocidade real acima do limiar.
+		-- O limiar sai do WalkSpeed do próprio personagem, então vale pra
+		-- todo mundo (Rafael anda mais rápido que Diego CORRE, e ainda assim
+		-- cada um gasta só quando está de fato em sprint).
+		local walkBase = StatScaling.WalkSpeed(player)
+		local moving = horizontalSpeed(root) > walkBase * SPRINT_SPEED_RATIO
+		local sprinting = state.intent and moving and not state.exhausted
+
+		if sprinting then
+			state.idleFor = 0
+			state.value = math.max(0, state.value - StatScaling.StaminaDrain(player) * dt)
+			if state.value <= 0 then
+				state.exhausted = true
+			end
+		else
+			state.idleFor += dt
+			if state.idleFor >= GameConfig.Characters.StaminaRegenDelay then
+				state.value = math.min(MAX, state.value + StatScaling.StaminaRegen(player) * dt)
+			end
+			if state.exhausted and state.value >= GameConfig.Characters.StaminaMinToSprint then
+				state.exhausted = false
+			end
+		end
+
+		-- Portão do sprint (contrato que o Crouching do pacote já lê).
+		setSprintGate(character, not state.exhausted, state.exhausted)
+		publish(player, state)
+	end
+end
+
+--------------------------------------------------------------------------------
+-- API
+--------------------------------------------------------------------------------
+
+--[[ Get(player) -- fôlego atual 0..100. ]]
+function StaminaSystem.Get(player: Player): number
+	return getState(player).value
+end
+
+--[[ Refill(player) -- enche o fôlego (respawn, item, começo de partida). ]]
+function StaminaSystem.Refill(player: Player)
+	local state = getState(player)
+	state.value = MAX
+	state.exhausted = false
+	state.idleFor = 0
+	publish(player, state)
+end
+
+function StaminaSystem.Init()
+	Remotes.SprintIntent.OnServerEvent:Connect(function(player: Player, holding: unknown)
+		getState(player).intent = holding == true
+	end)
+
+	local function watchPlayer(player: Player)
+		StaminaSystem.Refill(player)
+		player.CharacterAdded:Connect(function()
+			StaminaSystem.Refill(player)
+		end)
+	end
+
+	for _, player in Players:GetPlayers() do
+		watchPlayer(player)
+	end
+	Players.PlayerAdded:Connect(watchPlayer)
+	Players.PlayerRemoving:Connect(function(player)
+		states[player] = nil
+	end)
+
+	local acc = 0
+	RunService.Heartbeat:Connect(function(dt)
+		acc += dt
+		if acc < TICK then
+			return
+		end
+		step(acc)
+		acc = 0
+	end)
+end
+
+return StaminaSystem

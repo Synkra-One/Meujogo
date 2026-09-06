@@ -1,0 +1,155 @@
+<?xml version='1.0' encoding='utf-8'?>
+<roblox version="4"><Item class="LocalScript" referent="176">
+          <Properties>
+            <string name="Name">DamageScreen</string>
+            <BinaryString name="AttributesSerialize" />
+            <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+            <bool name="Disabled">false</bool>
+            <ContentId name="LinkedSource">
+              <null>
+              </null>
+            </ContentId>
+            <token name="RunContext">0</token>
+            <bool name="DefinesCapabilities">false</bool>
+            <string name="ScriptGuid">{8BCB8DBF-C5F0-4119-A4D7-F7A64EA5CEE5}</string>
+            <string name="Source">-- LocalScript, parent = StarterPlayerScripts
+-- Red damage vignette using a custom decal, reacts to Humanoid.HealthChanged
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+
+local Player = Players.LocalPlayer
+local PlayerGui = Player:WaitForChild("PlayerGui")
+
+--=========================================================
+-- CONFIG
+--=========================================================
+local CONFIG = {
+	-- Paste your custom decal's asset ID here.
+	-- (Select your Decal/Image in Explorer &gt; Properties &gt; copy the
+	-- "Texture" or "Image" field, e.g. "rbxassetid://123456789")
+	ImageId = "rbxassetid://176533208",
+
+	MaxOpacity = 0.60,     -- transparency at 0 (fully opaque) up to this cap
+	MinFlashOpacity = 0.45,-- how visible even a tiny scratch looks
+	FadeInTime = 0.08,     -- fast punch-in on hit
+	HoldTime = 0.12,       -- brief hold at peak before fading
+	FadeOutTime = 0.9,     -- slow smooth fade back to nothing
+	DamageForFullFlash = 35, -- damage amount that maxes out the flash in one hit
+}
+
+--=========================================================
+-- BUILD UI
+--=========================================================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "DamageVignette"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.DisplayOrder = 50 -- draw above most other UI
+ScreenGui.Parent = PlayerGui
+
+local Vignette = Instance.new("ImageLabel")
+Vignette.Name = "DamageImage"
+Vignette.AnchorPoint = Vector2.new(0.5, 0.5)
+Vignette.Position = UDim2.new(0.5, 0, 0.5, 0)
+Vignette.Size = UDim2.new(1.3, 0, 1.3, 0)
+Vignette.BackgroundTransparency = 1
+Vignette.Image = CONFIG.ImageId
+Vignette.ImageColor3 = Color3.fromRGB(255, 0, 0)
+Vignette.ImageTransparency = 1 -- fully invisible at rest
+Vignette.ScaleType = Enum.ScaleType.Stretch
+Vignette.ZIndex = 50
+Vignette.Parent = ScreenGui
+
+--=========================================================
+-- FLASH LOGIC
+--=========================================================
+local currentTween = nil
+local fadeOutTween = nil
+local currentOpacity = 0 -- 0 = invisible, 1 = fully at MaxOpacity
+
+local function setImageOpacity(opacity)
+	opacity = math.clamp(opacity, 0, 1)
+	local transparency = 1 - (opacity * CONFIG.MaxOpacity)
+	Vignette.ImageTransparency = transparency
+end
+
+local function flashDamage(damageAmount)
+	-- How strong this specific hit should push the flash
+	local hitStrength = math.clamp(damageAmount / CONFIG.DamageForFullFlash, 0, 1)
+	hitStrength = math.max(hitStrength, CONFIG.MinFlashOpacity) -- even tiny hits are visible
+
+	-- Stack on top of whatever's already showing (caps at 1) so rapid hits
+	-- feel more intense instead of just resetting to the same flash
+	local targetOpacity = math.clamp(currentOpacity + hitStrength, 0, 1)
+
+	if currentTween then currentTween:Cancel() end
+	if fadeOutTween then fadeOutTween:Cancel() end
+
+	currentOpacity = targetOpacity
+	local transparency = 1 - (targetOpacity * CONFIG.MaxOpacity)
+
+	currentTween = TweenService:Create(
+		Vignette,
+		TweenInfo.new(CONFIG.FadeInTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ ImageTransparency = transparency }
+	)
+	currentTween:Play()
+
+	currentTween.Completed:Connect(function()
+		task.wait(CONFIG.HoldTime)
+
+		fadeOutTween = TweenService:Create(
+			Vignette,
+			TweenInfo.new(CONFIG.FadeOutTime, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+			{ ImageTransparency = 1 }
+		)
+		fadeOutTween:Play()
+
+		fadeOutTween.Completed:Connect(function()
+			currentOpacity = 0
+		end)
+	end)
+end
+
+--=========================================================
+-- HOOK INTO HEALTH
+--=========================================================
+local healthConnection = nil
+
+local function onCharacterAdded(character)
+	if healthConnection then
+		healthConnection:Disconnect()
+		healthConnection = nil
+	end
+
+	local humanoid = character:WaitForChild("Humanoid")
+	local lastHealth = humanoid.Health
+
+	-- Reset vignette instantly on respawn
+	currentOpacity = 0
+	Vignette.ImageTransparency = 1
+	if currentTween then currentTween:Cancel() end
+	if fadeOutTween then fadeOutTween:Cancel() end
+
+	healthConnection = humanoid.HealthChanged:Connect(function(newHealth)
+		if newHealth &lt; lastHealth then
+			local damageTaken = lastHealth - newHealth
+			flashDamage(damageTaken)
+		end
+		lastHealth = newHealth
+	end)
+end
+
+if Player.Character then
+	onCharacterAdded(Player.Character)
+end
+Player.CharacterAdded:Connect(onCharacterAdded)</string>
+            <int64 name="SourceAssetId">-1</int64>
+            <BinaryString name="Tags" />
+          </Properties>
+        </Item>
+      <SharedStrings>
+    <SharedString md5="rxNJufX5oaagQE3qNtzJSQ==" />
+  </SharedStrings>
+</roblox>

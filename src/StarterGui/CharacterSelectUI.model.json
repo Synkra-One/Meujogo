@@ -1,0 +1,111 @@
+{
+  "className": "ScreenGui",
+  "properties": {
+    "ResetOnSpawn": false,
+    "IgnoreGuiInset": true,
+    "DisplayOrder": 12,
+    "Enabled": false
+  },
+  "children": [
+    {
+      "name": "Overlay",
+      "className": "Frame",
+      "properties": {
+        "Size": { "UDim2": [[1, 0], [1, 0]] },
+        "BackgroundColor3": [0.04, 0.045, 0.06],
+        "BackgroundTransparency": 0.15,
+        "BorderSizePixel": 0
+      },
+      "children": [
+        {
+          "name": "TitleText",
+          "className": "TextLabel",
+          "properties": {
+            "Size": { "UDim2": [[1, 0], [0, 34]] },
+            "Position": { "UDim2": [[0, 0], [0, 22]] },
+            "BackgroundTransparency": 1,
+            "Text": "ESCOLHA SEU PERSONAGEM",
+            "TextColor3": [1, 1, 1],
+            "TextSize": 26,
+            "Font": "GothamBlack",
+            "TextXAlignment": "Center"
+          }
+        },
+        {
+          "name": "SubtitleText",
+          "className": "TextLabel",
+          "properties": {
+            "Size": { "UDim2": [[1, 0], [0, 22]] },
+            "Position": { "UDim2": [[0, 0], [0, 56]] },
+            "BackgroundTransparency": 1,
+            "Text": "Todos somam 350 pontos — muda só a distribuição",
+            "TextColor3": [0.68, 0.68, 0.74],
+            "TextSize": 15,
+            "Font": "Gotham",
+            "TextXAlignment": "Center"
+          }
+        },
+        {
+          "name": "CardArea",
+          "className": "ScrollingFrame",
+          "properties": {
+            "Size": { "UDim2": [[1, -60], [1, -140]] },
+            "Position": { "UDim2": [[0, 30], [0, 92]] },
+            "BackgroundTransparency": 1,
+            "BorderSizePixel": 0,
+            "ScrollBarThickness": 6,
+            "CanvasSize": { "UDim2": [[0, 0], [0, 0]] },
+            "AutomaticCanvasSize": "Y",
+            "ScrollingDirection": "Y"
+          },
+          "children": [
+            {
+              "name": "Layout",
+              "className": "UIGridLayout",
+              "properties": {
+                "CellSize": { "UDim2": [[0, 250], [0, 300]] },
+                "CellPadding": { "UDim2": [[0, 14], [0, 14]] },
+                "HorizontalAlignment": "Center",
+                "SortOrder": "LayoutOrder"
+              }
+            }
+          ]
+        },
+        {
+          "name": "FooterText",
+          "className": "TextLabel",
+          "properties": {
+            "Size": { "UDim2": [[1, -260], [0, 24]] },
+            "Position": { "UDim2": [[0, 130], [1, -40]] },
+            "BackgroundTransparency": 1,
+            "Text": "",
+            "TextColor3": [0.8, 0.8, 0.86],
+            "TextSize": 15,
+            "Font": "GothamMedium",
+            "TextXAlignment": "Center",
+            "TextWrapped": true
+          }
+        },
+        {
+          "name": "CloseButton",
+          "className": "TextButton",
+          "properties": {
+            "Size": { "UDim2": [[0, 240], [0, 40]] },
+            "Position": { "UDim2": [[0.5, 0], [1, -12]] },
+            "AnchorPoint": [0.5, 1],
+            "BackgroundColor3": [0.16, 0.42, 0.28],
+            "BorderSizePixel": 0,
+            "AutoButtonColor": true,
+            "Text": "Fechar  (C reabre)",
+            "TextColor3": [1, 1, 1],
+            "TextSize": 17,
+            "Font": "GothamBold"
+          },
+          "children": [
+            { "name": "Corner", "className": "UICorner", "properties": { "CornerRadius": { "UDim": [0, 8] } } }
+          ]
+        }
+      ]
+    }
+  ]
+}
