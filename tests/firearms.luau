@@ -174,6 +174,9 @@ local remotes = setmetatable({}, { __index = function(t, key)
 end })
 local modules = {
 	Remotes = remotes,
+	-- Status behavior is exercised against the real module in survivor_powers.luau.
+	SurvivorPowerStatus = { BeginAttack = function() return false end, BlockAttack = function() return false end,
+		Active = function() return false end, Stun = function() return false end, Emit = function() end },
 	WeaponEffects = { CreateTracer = function() traces += 1 end, CreateImpact = function() end },
 	DamageSystem = {
 		IsDamageable = function(model) return model:FindFirstChildOfClass("Humanoid").Health > 0 end,
@@ -209,6 +212,9 @@ local function loadModule(name)
 	return modules[name]
 end
 environment.require = loadModule
+
+-- These reserve scenarios start empty, independently of the game's spawn loadout.
+loadModule("GameConfig").Firearms.StartingReserve.Pistola = 0
 
 local assets = object("Folder", "WeaponAssets", storage)
 local templates = object("Folder", "Tools", assets)
@@ -272,6 +278,8 @@ pistol.Parent = alice.Backpack; shoot(); assert(mag.Value == 16, "Cannot shoot a
 pistol.Parent = alice.Character
 alice:SetAttribute("Amarrado", true); shoot(); assert(mag.Value == 16, "Restrained player cannot fire")
 alice:SetAttribute("Amarrado", nil)
+alice.Character:SetAttribute("PowerStunned", true); shoot(); assert(mag.Value == 16, "Stunned player cannot fire")
+alice.Character:SetAttribute("PowerStunned", nil)
 alice:SetAttribute("InWaitingRoom", true); shoot(); assert(mag.Value == 16, "Waiting-room player cannot fire")
 alice:SetAttribute("InWaitingRoom", nil)
 mag.Value = 0; shoot(); assert(hits == 1, "Empty gun cannot deal damage")
@@ -304,7 +312,8 @@ assert(pistol.Components.Mag.Transparency == 1)
 shoot(); assert(mag.Value == 4, "No firing during reload")
 advance(1.69); assert(mag.Value == 4, "Reload cannot finish early")
 advance(0.02)
-assert(mag.Value == 12 and ammoSystem.GetReserve(alice, "Pistola") == 0, "Reload consumes only existing reserve, exactly once")
+assert(mag.Value == 12 and ammoSystem.GetReserve(alice, "Pistola") == 0,
+	`Reload consumes only existing reserve, exactly once (mag={mag.Value}, reserve={ammoSystem.GetReserve(alice, "Pistola")})`)
 assert(not pistol:GetAttribute("FirearmReloading") and pistol.Components.Mag.Transparency == 0)
 reload(); assert(not pistol:GetAttribute("FirearmReloading"), "No reserve means no reload")
 ammoSystem.AddReserve(alice, "Pistola", 20)

@@ -126,6 +126,8 @@ Remotes.ObjectiveProgress.OnClientEvent:Connect(function(objectiveId: string, cu
 	if objectiveId == "RadioPecas" then
 		setBarFill(radioBarFill, current, max)
 		radioBarText.Text = string.format("Peças: %d/%d", current, max)
+	elseif objectiveId == "RadioSintonia" then
+		radioTowerText.Text = string.format("Sintonia: %d%%", current)
 	elseif objectiveId == "RadioCompleto" then
 		radioTowerText.Text = "Torre: Ativada!"
 		radioTowerText.TextColor3 = Color3.new(0.4, 1, 0.4)

@@ -27,6 +27,7 @@ local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local Elimination = require(script.Parent.Elimination)
 local SoundManager = require(script.Parent.SoundManager)
+local PowerStatus = require(script.Parent.SurvivorPowerStatus)
 
 local LethalAbility = {}
 
@@ -75,6 +76,7 @@ local function isValidTarget(caster: Player, target: unknown): boolean
 end
 
 local function onLethalAbilityUsed(caster: Player, target: unknown)
+	if caster.Character and caster.Character:GetAttribute("PowerStunned") == true then return end
 	if caster:GetAttribute("Role") ~= GameConfig.Roles.Spy then
 		return
 	end
@@ -96,6 +98,10 @@ local function onLethalAbilityUsed(caster: Player, target: unknown)
 	local targetRoot = targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart")
 
 	lastLethalAt[caster.UserId] = os.clock()
+	if targetPlayer.Character and PowerStatus.BlockAttack(targetPlayer.Character) then
+		Remotes.CooldownUpdate:FireClient(caster, "HabilidadeLetal", os.time() + GameConfig.Spy.LethalCooldown)
+		return
+	end
 	Elimination.Eliminate(targetPlayer)
 
 	Remotes.PlayerKilled:FireAllClients(targetPlayer.UserId, caster.UserId, GameConfig.Roles.Spy)

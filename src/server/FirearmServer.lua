@@ -12,6 +12,7 @@ local Rules = require(ReplicatedStorage.Modules.FirearmRules)
 local Ammo = require(ReplicatedStorage.Modules.Ammo)
 local WeaponEffects = require(ReplicatedStorage.Modules.WeaponEffects)
 local DamageSystem = require(script.Parent.DamageSystem)
+local PowerStatus = require(script.Parent.SurvivorPowerStatus)
 local AmmoSystem = require(script.Parent.AmmoSystem)
 local assets = ReplicatedStorage:WaitForChild("WeaponAssets")
 local toolsFolder = assets:WaitForChild("Tools")
@@ -90,6 +91,7 @@ local function onReload(player: Player, candidate: unknown, action: unknown)
 		if state and state.tool == candidate then finishReload(player, false) end
 		return
 	end
+	if player.Character and player.Character:GetAttribute("ShadowRushBusy") == true then return end
 	if action ~= "Start" then return end
 	local tool = equipped(player, candidate)
 	if not tool or reloads[player] then return end
@@ -143,7 +145,7 @@ local function shotEffects(tool: Tool, muzzle: BasePart)
 	end
 end
 
-local function damageHit(player: Player, tool: Tool, part: Instance)
+local function damageHit(player: Player, tool: Tool, part: Instance, empowered: boolean)
 	local model: Instance? = part
 	while model and model ~= Workspace do
 		if model:IsA("Model") and model:FindFirstChildOfClass("Humanoid") then break end
@@ -164,16 +166,22 @@ local function damageHit(player: Player, tool: Tool, part: Instance)
 	local armour = model:FindFirstChild("Armour")
 	local health = armour and armour:FindFirstChild("Health")
 	if health and health:IsA("NumberValue") and health.Value > 0 then
+		if PowerStatus.BlockAttack(model) then return end
+		if empowered then damage *= 3; PowerStatus.Stun(model, 2)
+			PowerStatus.Emit("TiroCerteiro", model, (part :: BasePart).Position, 0.6, "Impact") end
+		if PowerStatus.Active(model, "PowerDamageReduction") then damage *= 0.5 end
 		health.Value = math.max(0, health.Value - damage)
 		Remotes.FirearmDamage:FireClient(player, if isHead then "HeadArmor" else "Armor")
 		return
 	end
-	local applied, died = DamageSystem.Apply(humanoid, damage, { Source = player, Cause = "Tiro" })
+	local applied, died = DamageSystem.Apply(humanoid, damage, { Source = player, Cause = "Tiro", Empowered = empowered })
 	if applied > 0 then Remotes.FirearmDamage:FireClient(player, if isHead then "Head" else "Hit") end
 	if died then Remotes.FirearmFeed:FireClient(player, "Kill", model.Name) end
 end
 
 local function onShoot(player: Player, candidate: unknown, target: unknown, aimed: unknown, sequence: unknown)
+	if player.Character and player.Character:GetAttribute("PowerStunned") == true then return end
+	if player.Character and player.Character:GetAttribute("ShadowRushBusy") == true then return end
 	local tool = equipped(player, candidate)
 	if not tool or typeof(target) ~= "Vector3" or type(aimed) ~= "boolean" then return end
 	local point = target :: Vector3
@@ -196,6 +204,7 @@ local function onShoot(player: Player, candidate: unknown, target: unknown, aime
 		return
 	end
 	lastShot[player] = now
+	local empowered = PowerStatus.BeginAttack(player)
 	ammo.Value -= 1
 	Remotes.FirearmShoot:FireClient(player, tool, sequence, true, ammo.Value)
 	local ignore: { Instance } = { character :: Model }
@@ -212,7 +221,7 @@ local function onShoot(player: Player, candidate: unknown, target: unknown, aime
 		* CFrame.Angles(math.rad(rng:NextNumber(-spread, spread)), math.rad(rng:NextNumber(-spread, spread)), 0)).LookVector
 	local result = obstruction or Workspace:Raycast(muzzle.Position, direction * Rules.Range, params)
 	local endpoint = if result then result.Position else muzzle.Position + direction * Rules.Range
-	if result then damageHit(player, tool, result.Instance) end
+	if result then damageHit(player, tool, result.Instance, empowered) end
 	local ok, err = pcall(function()
 		shotEffects(tool, muzzle)
 		WeaponEffects.CreateTracer(muzzle.CFrame, endpoint)

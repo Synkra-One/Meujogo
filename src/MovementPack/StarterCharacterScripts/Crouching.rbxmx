@@ -16,6 +16,9 @@
 local RunService   = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UIS          = game:GetService("UserInputService")
+local RushModules = game:GetService("ReplicatedStorage"):WaitForChild("Modules")
+local RushRules = require(RushModules:WaitForChild("ShadowRushRules"))
+local RushConfig = require(RushModules:WaitForChild("GameConfig")).Monster.ShadowRush
 
 local plr       = Players.LocalPlayer
 local Character = plr.Character or plr.CharacterAdded:Wait()
@@ -210,8 +213,14 @@ end
 local movementFOV = CONFIG.DefaultFOV
 local function tweenFOV(target, duration)
 	movementFOV = target
+	Camera = workspace.CurrentCamera
+	if not Camera then return end
 	if Character:GetAttribute("FirearmAiming") == true then
 		target = math.min(target, 62)
+	end
+	-- One FOV owner: compose the ability with the movement/aim target here.
+	if Character:GetAttribute("ShadowRushBusy") == true then
+		target = CONFIG.DefaultFOV + (Character:GetAttribute("ShadowRushFOV") or 0)
 	end
 	if fovTween then fovTween:Cancel() end
 	fovTween = TweenService:Create(
@@ -224,6 +233,15 @@ end
 
 Character:GetAttributeChangedSignal("FirearmAiming"):Connect(function()
 	tweenFOV(movementFOV, 0.18)
+end)
+Character:GetAttributeChangedSignal("ShadowRushFOV"):Connect(function()
+	tweenFOV(movementFOV, 0.12)
+end)
+Character:GetAttributeChangedSignal("ShadowRushBusy"):Connect(function()
+	tweenFOV(movementFOV, 0.2)
+end)
+workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+	tweenFOV(movementFOV, 0.2)
 end)
 
 local function tweenCamOffset(y, duration)
@@ -258,7 +276,16 @@ end
 
 local SPEED_FLOOR = 0.001
 
+local function rushSpeed()
+	local base = Character:GetAttribute("ShadowRushBaseSpeed") or CONFIG.NormalSpeed
+	return RushRules.Speed(Character:GetAttribute("ShadowRushState") or "Idle",
+		math.max(0, workspace:GetServerTimeNow() - (Character:GetAttribute("ShadowRushPhaseAt") or workspace:GetServerTimeNow())),
+		base, Character:GetAttribute("ShadowRushExitSpeed") or base, RushConfig)
+end
+
 local function safeSetSpeed(speed)
+	if Character:GetAttribute("PowerStunned") == true then Humanoid.WalkSpeed = 0; return end
+	if Character:GetAttribute("ShadowRushBusy") == true then Humanoid.WalkSpeed = rushSpeed(); return end
 	Humanoid.WalkSpeed = math.max(speed, SPEED_FLOOR)
 end
 
@@ -305,6 +332,7 @@ local function isObstructedForStand()
 end
 
 local function canSprintNow()
+	if Character:GetAttribute("FearTripping") == true then return false end
 	if Character:GetAttribute("FirearmAiming") == true then return false end
 	local can = RootPart:GetAttribute("CanSprint")
 	if can == nil then return true end
@@ -313,6 +341,7 @@ end
 
 local function shouldForceStopSprint()
 	return RootPart:GetAttribute("ForceStopSprint") == true or Character:GetAttribute("FirearmAiming") == true
+		or Character:GetAttribute("FearTripping") == true
 end
 
 -- =============================================
@@ -565,7 +594,7 @@ end
 -- INPUT
 -- =============================================
 UIS.InputBegan:Connect(function(input, typing)
-	if typing then return end
+	if typing or Character:GetAttribute("ShadowRushBusy") == true then return end
 
 	if input.KeyCode == CONFIG.CrouchKey then
 		if isCrawling then
@@ -613,6 +642,18 @@ end)
 -- HEARTBEAT
 -- =============================================
 RunService.Heartbeat:Connect(function(dt)
+	if Character:GetAttribute("PowerStunned") == true then
+		stopSprint()
+		Humanoid.WalkSpeed = 0
+		Humanoid.Jump = false
+		return
+	end
+	if Character:GetAttribute("ShadowRushBusy") == true then
+		stopSprint()
+		Humanoid.WalkSpeed = rushSpeed()
+		Humanoid.Jump = false
+		return
+	end
 	notMoving  = Humanoid.MoveDirection.Magnitude &lt; 0.1
 	isOnGround = Humanoid.FloorMaterial ~= Enum.Material.Air
 
@@ -652,6 +693,16 @@ RunService.Heartbeat:Connect(function(dt)
 	local statMul = Character:GetAttribute("SpeedMul")
 	if type(statMul) == "number" and statMul > 0 and Humanoid.WalkSpeed > SPEED_FLOOR then
 		Humanoid.WalkSpeed *= statMul
+	end
+
+	local powerMul = Character:GetAttribute("PowerSpeedMultiplier")
+	if type(powerMul) == "number" then Humanoid.WalkSpeed *= powerMul end
+
+	-- [Meujogo] FearSystem decide o tropeço no servidor. Limite próprio, sem
+	-- disputar CanSprint/ForceStopSprint com a stamina nem empilhar SpeedMul.
+	local fearSpeedCap = Character:GetAttribute("FearTripSpeedCap")
+	if type(fearSpeedCap) == "number" then
+		Humanoid.WalkSpeed = math.min(Humanoid.WalkSpeed, fearSpeedCap)
 	end
 
 	-- Safety nets: keep locks correctly synced every frame

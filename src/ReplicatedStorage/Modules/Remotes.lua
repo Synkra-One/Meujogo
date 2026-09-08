@@ -53,6 +53,17 @@ end
 
 local Remotes = {}
 
+-- C -> S: slot (1 | 2), no target/character/cooldown from client.
+-- S -> C: "Rejected", reason | "Direction", powerId, localUnitDirection, endsAt.
+-- Cooldowns replicate as Player.SurvivorPowerReadyAt1/2 (GetServerTimeNow).
+Remotes.UseSurvivorPower = getRemote("UseSurvivorPower")
+-- S -> C only: powerId, character?, position, duration, phase; nearby clients.
+Remotes.SurvivorPowerFX = getRemote("SurvivorPowerFX")
+
+-- Somente Server -> Client: ("Trip", character, duration). Apresentação do
+-- hook autoritativo do Fear; não existe listener OnServerEvent.
+Remotes.FearPresentation = getRemote("FearPresentation")
+
 -- Client -> Server: "Sync", "Ready", "Leave", "Skin"/"Perk" + id.
 -- Server -> Client: snapshot da sala (state, endsAt, members, roster).
 Remotes.WaitingRoom = getRemote("WaitingRoom")
@@ -60,6 +71,10 @@ Remotes.WaitingRoom = getRemote("WaitingRoom")
 -- Opcao secreta de teste local: cliente autorizado aperta M e pede ao servidor
 -- para vestir o rig Workspace.R6 como Character, sem expor isso para todos.
 Remotes.TestRigSwap = getRemote("TestRigSwap")
+
+-- Teste secreto de calibração da Glock17. O servidor valida UserId, Tool
+-- equipada e incrementos pequenos antes de mudar os Attributes do Grip.
+Remotes.PistolGripTest = getRemote("PistolGripTest")
 
 --------------------------------------------------------------------------------
 -- SabotageAction
@@ -132,6 +147,48 @@ Remotes.PlayerKilled = getRemote("PlayerKilled")
 --     "pop" do golpe ficar consistente.
 --------------------------------------------------------------------------------
 Remotes.MonsterAttack = getRemote("MonsterAttack")
+
+-- C -> S: ("Start", nil, direção horizontal), ("Move", token, direção),
+-- ("Stop", token). Nenhuma posição/velocidade é aceita. Estado, token e
+-- cooldown replicam por Attributes. S -> C: ("Pass") ou ("Rejected", motivo).
+Remotes.ShadowRush = getRemote("ShadowRush")
+
+--------------------------------------------------------------------------------
+-- MonsterTeleport
+-- Poder de teleporte do Monstro (client/MonsterTeleportController <->
+--   server/MonsterTeleport). Ver a sequência completa no cabeçalho de
+--   MonsterTeleport.lua.
+-- Client -> Server (FireServer):
+--   aimPoint: Vector3   -- ponto mirado (câmera). É só uma SUGESTÃO: o
+--     servidor clampa a distância (GameConfig.Monster.Teleport.Min/MaxRange),
+--     faz raycast pro chão, checa rampa/limites/água/espaço livre e decide a
+--     posição final. Cliente NUNCA teleporta sozinho.
+-- Server -> Client (FireClient), só pro Monstro:
+--   ("cooldown", readyAt: number)   -- cooldown iniciado (ativação aceita ou falha)
+--   ("cancel", motivo: string)      -- destino inválido / habilidade cancelada
+-- Validação que falha (não é Monstro, ocupado, cooldown, partida parada,
+--   amarrado) é rejeitada em silêncio, exceto destino inválido (manda "cancel").
+--------------------------------------------------------------------------------
+Remotes.MonsterTeleport = getRemote("MonsterTeleport")
+
+--------------------------------------------------------------------------------
+-- RiftVFX
+-- Apresentação da(s) fenda(s) do teleporte. O servidor manda por FireClient
+--   SÓ pros jogadores a até GameConfig.Monster.Teleport.VFXBroadcastRadius da
+--   fenda (jogador muito longe não recebe nada). O cliente
+--   (client/RiftVFXController) constrói/anima/limpa a fenda com TweenService e
+--   as partículas -- o servidor não controla efeito nenhum frame a frame.
+-- Server -> Client (FireClient):
+--   (op: string, data: table)
+--     op "open":   data = { id, cframe: CFrame, width: number, kind: "entrada"|"destino" }
+--     op "enter":  data = { id }                 -- monstro sendo engolido (puxa partículas + som)
+--     op "emerge": data = { id }                 -- monstro emergindo (jato + som)
+--     op "close":  data = { id }
+--     op "cancel": data = { id }                 -- aborta a fenda no meio da abertura
+-- Timings/escala/cores vêm de GameConfig.Monster.Teleport + Modules/RiftVFX
+--   (os dois lados leem a mesma config -- nada hardcoded aqui).
+--------------------------------------------------------------------------------
+Remotes.RiftVFX = getRemote("RiftVFX")
 
 --------------------------------------------------------------------------------
 -- DetectSuspect
@@ -267,8 +324,9 @@ Remotes.DropItem = getRemote("DropItem")
 --   personagem nesta partida. Se ok, guarda a escolha e reemite o roster pra
 --   todo mundo (CharacterRoster). Escolha inválida/tomada é ignorada em
 --   silêncio -- o roster que o cliente já tem mostra o card desabilitado.
---   Trocar de personagem antes da partida começar é permitido (libera o
---   anterior). Depois que a rodada começa, o remote é ignorado.
+--   A escolha acontece depois do sorteio do papel. Monstro não usa este
+--   remote: recebe Jason automaticamente. Depois de escolher, o servidor
+--   fecha CharacterSelectOpen para evitar troca no meio da rodada.
 --------------------------------------------------------------------------------
 Remotes.SelectCharacter = getRemote("SelectCharacter")
 

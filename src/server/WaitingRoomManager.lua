@@ -17,7 +17,9 @@ local state = "Lobby"
 local endsAt = 0
 local generation = 0
 local capacity = math.min(GameConfig.Players.Max, #CharacterData.Characters)
-local origin = Vector3.new(100, 10, -400)
+-- Fora do terreno da ilha (IslandLayout.AreaHalf = 960) e ao lado do Lobby
+-- (LobbyManager.LOBBY_ORIGIN).
+local origin = Vector3.new(120, 10, -1500)
 local lastRequest: { [Player]: number } = {}
 
 local function setState(value: string)
@@ -27,9 +29,20 @@ end
 
 local function minimum(): number
 	if GameConfig.Testing.SoloStart then
-		return if GameConfig.Testing.ForceRole then 1 else 2
+		return 1
 	end
 	return math.max(2, GameConfig.Players.Min)
+end
+
+local function isDevRoleTester(player: Player): boolean
+	return GameConfig.Testing.DevRoleChooser == true
+		and table.find(GameConfig.Testing.DevRoleUserIds, player.UserId) ~= nil
+end
+
+local function isRole(value: unknown): boolean
+	return value == GameConfig.Roles.Survivor
+		or value == GameConfig.Roles.Monster
+		or value == GameConfig.Roles.Spy
 end
 
 local function broadcast(only: Player?)
@@ -39,6 +52,8 @@ local function broadcast(only: Player?)
 			userId = player.UserId, name = player.DisplayName,
 			characterId = Selection.GetChoice(player),
 			skinId = player:GetAttribute("SkinId"), perkId = player:GetAttribute("PerkId"),
+			devRole = player:GetAttribute("DevForceRole"),
+			canDevRole = isDevRoleTester(player),
 			ready = player:GetAttribute("MatchReady") == true,
 		})
 	end
@@ -62,7 +77,7 @@ end
 local function allReady(): boolean
 	if #members < minimum() then return false end
 	for _, player in members do
-		if player.Parent ~= Players or player:GetAttribute("MatchReady") ~= true or not Selection.GetChoice(player) then
+		if player.Parent ~= Players or player:GetAttribute("MatchReady") ~= true then
 			return false
 		end
 	end
@@ -85,6 +100,7 @@ function WaitingRoomManager.Reset()
 		player:SetAttribute("MatchReady", nil)
 		player:SetAttribute("InRound", nil)
 		player:SetAttribute("Role", nil)
+		player:SetAttribute("DevForceRole", nil)
 		Selection.ClearChoice(player)
 	end
 	broadcast()
@@ -153,6 +169,7 @@ function WaitingRoomManager.Join(player: Player, canOpen: boolean)
 	player:SetAttribute("MatchReady", false)
 	player:SetAttribute("SkinId", "Padrao")
 	player:SetAttribute("PerkId", "Nenhum")
+	player:SetAttribute("DevForceRole", nil)
 	setState("Waiting")
 	player:SetAttribute("InWaitingRoom", true)
 	teleportToRoom(player)
@@ -165,6 +182,7 @@ local function leave(player: Player, disconnecting: boolean)
 	table.remove(members, index)
 	player:SetAttribute("InWaitingRoom", nil)
 	player:SetAttribute("MatchReady", nil)
+	player:SetAttribute("DevForceRole", nil)
 	Selection.ClearChoice(player)
 	updateCountdown()
 	if not disconnecting and player.Character then
@@ -258,11 +276,16 @@ function WaitingRoomManager.Init()
 		if state ~= "Waiting" or not table.find(members, player) then return end
 		if action == "Leave" then leave(player, false); return end
 		if action == "Ready" then
-			if not Selection.GetChoice(player) then
-				Remotes.LobbyMessage:FireClient(player, "Escolha um personagem antes de ficar pronto.")
+			player:SetAttribute("MatchReady", player:GetAttribute("MatchReady") ~= true)
+		elseif action == "DevRole" and isDevRoleTester(player) then
+			if value == nil or value == "Random" then
+				player:SetAttribute("DevForceRole", nil)
+			elseif isRole(value) then
+				player:SetAttribute("DevForceRole", value)
+			else
 				return
 			end
-			player:SetAttribute("MatchReady", player:GetAttribute("MatchReady") ~= true)
+			player:SetAttribute("MatchReady", false)
 		elseif action == "Skin" and LoadoutData.GetSkin(value) then
 			if player:GetAttribute("SkinId") == value then return end
 			player:SetAttribute("SkinId", value)

@@ -45,12 +45,14 @@ local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local StatScaling = require(ReplicatedStorage.Modules.StatScaling)
 local Elimination = require(script.Parent.Elimination)
+local PowerStatus = require(script.Parent.SurvivorPowerStatus)
 
 local DamageSystem = {}
 
 export type DamageInfo = {
 	Source: Player?, -- quem causou (pra PlayerKilled e futuras regras de time)
 	Cause: string?, -- texto da causa ("Tiro", "Monstro", "Ambiente"...)
+	Empowered: boolean?, -- server-only token consumed when a validated attack begins
 }
 
 -- character -> os.clock() do último dano tomado (gate da regeneração).
@@ -147,8 +149,8 @@ end
 	  danoAplicado = 0 e morreuAgora = false quando alguma guarda barra
 	  (ver cabeçalho) ou amount <= 0.
 ]]
-function DamageSystem.Apply(target: unknown, amount: number, info: DamageInfo?): (number, boolean)
-	if type(amount) ~= "number" or amount <= 0 then
+function DamageSystem.Apply(target: unknown, amount: number, info: DamageInfo?): (number, boolean, boolean?)
+	if type(amount) ~= "number" or amount ~= amount or amount == math.huge or amount < 0 then
 		return 0, false
 	end
 
@@ -157,15 +159,24 @@ function DamageSystem.Apply(target: unknown, amount: number, info: DamageInfo?):
 		return 0, false
 	end
 	if not DamageSystem.IsDamageable(model) then
-		return 0, false
+		return 0, false, true
 	end
 
 	-- Spawn protection: o ForceField fica no Character (irmão do Humanoid).
 	-- TakeDamage já ignora sozinho; a gente nem registra o "tomou dano" pra
 	-- não atrasar a regeneração à toa.
 	if model:FindFirstChildOfClass("ForceField") then
-		return 0, false
+		return 0, false, true
 	end
+	if model:GetAttribute("Imune") == true then return 0, false, true end
+	if info and info.Source and PowerStatus.BlockAttack(model) then return 0, false, true end
+	if info and info.Empowered then
+		amount *= 3
+		PowerStatus.Stun(model, 2)
+		local root = model:FindFirstChild("HumanoidRootPart")
+		if root and root:IsA("BasePart") then PowerStatus.Emit("TiroCerteiro", model, root.Position, 0.6, "Impact") end
+	end
+	if PowerStatus.Active(model, "PowerDamageReduction") then amount *= 0.5 end
 
 	-- ATRIBUTOS DE PERSONAGEM (CharacterStatsApplier publica; StatScaling
 	-- converte). Quem não escolheu personagem cai no fator neutro 1.

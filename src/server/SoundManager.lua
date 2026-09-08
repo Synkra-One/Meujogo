@@ -40,6 +40,9 @@ local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local AssetRegistry = require(ReplicatedStorage.Modules.AssetRegistry)
+local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
+local PresentationRules = require(ReplicatedStorage.Modules.FearPresentationRules)
+local Players = game:GetService("Players")
 
 local SoundManager = {}
 
@@ -51,6 +54,70 @@ local EFFECT_MAX_DISTANCE = 60
 local EFFECT_VOLUME = 1
 
 local phaseMusic: Sound? = nil
+local initialized = false
+local panicRng = Random.new()
+type PanicVoice = { anchor: BasePart, sound: Sound, sequence: number }
+local panicVoices: { [Player]: PanicVoice } = {}
+local panicWatches: { [Player]: { RBXScriptConnection } } = {}
+
+local function clearPanic(player: Player)
+	local voice = panicVoices[player]
+	if voice then voice.anchor:Destroy(); panicVoices[player] = nil end
+end
+
+local function stopAllPanic()
+	for player in panicVoices do clearPanic(player) end
+end
+
+local function panicEligible(player: Player): boolean
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	return player.Parent == Players and player:GetAttribute("InRound") == true
+		and player:GetAttribute("Role") == GameConfig.Roles.Survivor
+		and player:GetAttribute("Eliminado") ~= true and character ~= nil
+		and character:GetAttribute("Eliminado") ~= true and humanoid ~= nil and humanoid.Health > 0
+end
+
+-- Consumidor do hook da Parte 2: apenas seleção de asset e reprodução espacial.
+local function playPanic(player: Player, position: Vector3, radius: number)
+	if not panicEligible(player) then return end
+	local ids: { string } = {}
+	for _, value in GameConfig.Fear.PanicSounds do
+		local id = PresentationRules.AssetId(value)
+		if id then table.insert(ids, id) end
+	end
+	if #ids == 0 then return end
+	local voice = panicVoices[player]
+	if not voice then
+		local anchor = Instance.new("Part")
+		anchor.Name, anchor.Anchored, anchor.Transparency = "FearPanicOrigin", true, 1
+		anchor.CanCollide, anchor.CanQuery, anchor.CanTouch = false, false, false
+		anchor.Size = Vector3.new(0.2, 0.2, 0.2)
+		anchor.Parent = Workspace
+		local sound = Instance.new("Sound")
+		sound.Name, sound.RollOffMode = "FearPanic", Enum.RollOffMode.InverseTapered
+		sound.Parent = anchor
+		voice = { anchor = anchor, sound = sound, sequence = 0 }
+		panicVoices[player] = voice
+		local character = player.Character
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			local deathConnection = humanoid.Died:Connect(function() clearPanic(player) end)
+			anchor.Destroying:Once(function() deathConnection:Disconnect() end)
+		end
+	end
+	voice.sequence += 1
+	local sequence, current = voice.sequence, voice
+	voice.sound:Stop()
+	voice.anchor.Position = position
+	voice.sound.SoundId = ids[panicRng:NextInteger(1, #ids)]
+	voice.sound.Volume = GameConfig.Fear.PanicSoundVolume
+	voice.sound.RollOffMaxDistance = radius
+	voice.sound:Play()
+	task.delay(GameConfig.Fear.PanicSoundMaxDuration, function()
+		if panicVoices[player] == current and current.sequence == sequence then current.sound:Stop() end
+	end)
+end
 
 --------------------------------------------------------------------------------
 -- Música por fase
@@ -163,8 +230,39 @@ end
 	RoundManager.Init() (precisa que RoundManager.PhaseChanged já exista).
 ]]
 function SoundManager.Init()
+	if initialized then return end
+	initialized = true
 	local RoundManager = require(script.Parent.RoundManager)
 	RoundManager.PhaseChanged.Event:Connect(onPhaseChanged)
+	local Fear = require(script.Parent.FearSystem)
+	local Remotes = require(ReplicatedStorage.Modules.Remotes)
+	Fear.PanicSoundTriggered.Event:Connect(function(player, position, radius)
+		if RoundManager.IsRoundActive() then playPanic(player, position, radius) end
+	end)
+	Fear.TripTriggered.Event:Connect(function(player, _position, duration)
+		if RoundManager.IsRoundActive() and panicEligible(player) then
+			Remotes.FearPresentation:FireClient(player, "Trip", player.Character, duration)
+		end
+	end)
+	RoundManager.RoundEnded.Event:Connect(stopAllPanic)
+	RoundManager.RoundPrepared.Event:Connect(stopAllPanic)
+	local function watch(player: Player)
+		if panicWatches[player] then return end
+		local connections = { player.CharacterRemoving:Connect(function() clearPanic(player) end) }
+		panicWatches[player] = connections
+		for _, attribute in { "Role", "InRound", "Eliminado" } do
+			table.insert(connections, player:GetAttributeChangedSignal(attribute):Connect(function()
+				if not panicEligible(player) then clearPanic(player) end
+			end))
+		end
+	end
+	Players.PlayerAdded:Connect(watch)
+	for _, player in Players:GetPlayers() do watch(player) end
+	Players.PlayerRemoving:Connect(function(player)
+		clearPanic(player)
+		for _, connection in panicWatches[player] or {} do connection:Disconnect() end
+		panicWatches[player] = nil
+	end)
 end
 
 return SoundManager

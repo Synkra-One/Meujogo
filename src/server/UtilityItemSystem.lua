@@ -70,6 +70,7 @@ local function turnLanternaOff(tool: Tool)
 end
 
 local function onLanternaActivated(tool: Tool)
+	if tool.Parent and tool.Parent:GetAttribute("ShadowRushBusy") == true then return end
 	local light = getLanternaLight(tool)
 	if not light then
 		return
@@ -89,6 +90,7 @@ end
 
 local function onChocolateActivated(player: Player, tool: Tool)
 	local character = player.Character
+	if character and character:GetAttribute("ShadowRushBusy") == true then return end
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	if not humanoid then
 		return
@@ -143,6 +145,7 @@ local function playHealAnimation(humanoid: Humanoid): AnimationTrack?
 end
 
 local function onBandagemActivated(player: Player, tool: Tool)
+	if player.Character and player.Character:GetAttribute("ShadowRushBusy") == true then return end
 	if healingNow[player] then
 		return -- já está usando uma
 	end

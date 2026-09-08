@@ -43,6 +43,16 @@
 ]]
 
 local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
+local LightingPresets = require(ReplicatedStorage.Modules.LightingPresets)
+local lightingOk, lightingErr = pcall(function()
+	LightingPresets.Apply(GameConfig.Environment.LightingPreset)
+end)
+if not lightingOk then
+	warn("[Boot] LightingPresets.Apply falhou, continuando boot: " .. tostring(lightingErr))
+end
 
 if not Workspace:FindFirstChild("Ilha") then
 	warn(
@@ -51,7 +61,9 @@ if not Workspace:FindFirstChild("Ilha") then
 			.. "  local Gen = require(game.ServerScriptService.Server.Tools.IslandGenerator) Gen.Generate()\n"
 			.. "  local Crash = require(game.ServerScriptService.Server.Tools.PlaneCrashGenerator) Crash.Generate()\n"
 			.. "  local Spawner = require(game.ServerScriptService.Server.Tools.ItemSpawner) Spawner.Generate()\n"
-			.. "e então SALVE o lugar (Ctrl+S). Depois disso, é só dar Play -- não precisa gerar de novo."
+			.. "e então SALVE o lugar (Ctrl+S). Depois disso, é só dar Play -- não precisa gerar de novo.\n"
+			.. "(A Jangada do objetivo de fuga é montada sozinha por RaftObjective no boot, ou na\n"
+			.. " mão com Tools.RaftGenerator.Build() -- é 100% Part, não depende de asset.)"
 	)
 end
 
@@ -64,6 +76,10 @@ local function safeInit(name: string, module: { Init: () -> () })
 	end
 end
 
+safeInit("WaterRepair", require(script.WaterRepair))
+-- Duas variantes usadas por Arvore_597/Arvore_428 tem uma colisao de mesh
+-- muito maior que o visual. Corrige todas as copias dessas variantes salvas.
+safeInit("TreeCollisionFix", require(script.TreeCollisionFix))
 safeInit("LobbyManager", require(script.LobbyManager))
 
 safeInit("DataStoreManager", require(script.DataStoreManager))
@@ -74,6 +90,7 @@ safeInit("CharacterStatsApplier", require(script.CharacterStatsApplier))
 safeInit("WaitingRoomManager", require(script.WaitingRoomManager))
 safeInit("TestRigSwap", require(script.TestRigSwap))
 safeInit("StaminaSystem", require(script.StaminaSystem))
+safeInit("FearSystem", require(script.FearSystem))
 -- DamageSystem antes de FirearmServer/WeaponSystem: os dois roteiam o dano por
 -- ele (require no topo já resolve o módulo; Init() só liga MaxHealth + regen).
 safeInit("DamageSystem", require(script.DamageSystem))
@@ -84,11 +101,22 @@ safeInit("MonsterLightWeakness", require(script.MonsterLightWeakness))
 -- Depois de DamageSystem + MonsterLightWeakness: roteia o golpe do Monstro
 -- pelo DamageSystem e lê IsWeakened pra dano/velocidade reduzidos na luz.
 safeInit("MonsterCombat", require(script.MonsterCombat))
+-- Mapa da ilha (visão de cima) gerado de IslandLayout e publicado em
+-- ReplicatedStorage. É o que o Monstro abre com Q pra escolher o destino do
+-- teleporte -- proporção 1:1 com o mundo, então o clique vira um (x, z) real.
+safeInit("IslandMap", require(script.IslandMap))
+-- Poder de teleporte do Monstro (fenda -> engolido -> emerge no destino).
+-- Depois de RoundManager (escuta RoundEnded/RoundPrepared) e MonsterCombat
+-- (que lê o Attribute TeleportBusy pra bloquear o golpe). Carrega o asset da
+-- fenda (InsertService, só server) e publica em ReplicatedStorage.RiftAssets.
+safeInit("MonsterTeleport", require(script.MonsterTeleport))
+safeInit("ShadowRush", require(script.ShadowRush))
 safeInit("UtilityItemSystem", require(script.UtilityItemSystem))
 safeInit("DropItemSystem", require(script.DropItemSystem))
 safeInit("AmmoSystem", require(script.AmmoSystem))
 safeInit("RadioObjective", require(script.RadioObjective))
 safeInit("RaftObjective", require(script.RaftObjective))
+safeInit("SurvivorPowerSystem", require(script.SurvivorPowerSystem))
 safeInit("ConfrontSystem", require(script.ConfrontSystem))
 safeInit("CraftingSystem", require(script.CraftingSystem))
 safeInit("WeaponSystem", require(script.WeaponSystem))
@@ -96,6 +124,9 @@ safeInit("FirearmServer", require(script.FirearmServer))
 -- Depois de AmmoSystem + DropItemSystem: usa CreatePickup e PlaceInWorld.
 safeInit("WeaponSpawner", require(script.WeaponSpawner))
 safeInit("LobbyFiringRange", require(script.LobbyFiringRange))
+-- Portas das cabanas/lodge/celeiro (Parts com Attribute "Porta", ver
+-- Tools/Structures.lua): prompt Abrir/Fechar.
+safeInit("DoorSystem", require(script.DoorSystem))
 -- Depois de CharacterStatsApplier: o sorteio da caixa lê a Sorte publicada.
 safeInit("LootCrateSystem", require(script.LootCrateSystem))
 safeInit("SoundManager", require(script.SoundManager))

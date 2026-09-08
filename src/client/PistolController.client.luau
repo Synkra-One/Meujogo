@@ -8,7 +8,9 @@ local Workspace = game:GetService("Workspace")
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local Ammo = require(ReplicatedStorage.Modules.Ammo)
 local Rules = require(ReplicatedStorage.Modules.FirearmRules)
+local Grip = require(ReplicatedStorage.Modules.PistolGrip)
 local HUD = require(script.Parent.PistolHUD)
+local PistolPose = require(script.Parent.PistolPose)
 local player = Players.LocalPlayer
 local hud = HUD.new(player:WaitForChild("PlayerGui"))
 local animations = ReplicatedStorage:WaitForChild("WeaponAssets"):WaitForChild("Animations"):WaitForChild("PistolAnimations")
@@ -26,6 +28,12 @@ local sequence, shownAmmo = 0, 0
 local kick, previousKick = 0, 0
 local oldMouseIconEnabled = true
 local generation = 0
+local RELOAD_ANIMATION_SPEED = 0.82
+
+-- AimFire: segura no frame 10; clique percorre 10–15–20 e volta à mira.
+local pose: PistolPose.Controller? = nil
+local touchAim = false
+local windowFocused = true
 
 local function disconnect(list: { RBXScriptConnection })
 	for _, connection in list do connection:Disconnect() end
@@ -40,11 +48,22 @@ local function blocked(): boolean
 		or (character ~= nil and (character :: Model):GetAttribute("Amarrado") == true)
 end
 
+local function applyGrip()
+	local current = tool
+	if not current then return end
+	current.Grip = Grip.Resolve(current, aiming)
+end
+
 local function setAim(value: boolean)
 	value = value and tool ~= nil and not reloading and not blocked()
 	if value == aiming then return end
 	aiming = value
+	applyGrip()
 	if character then character:SetAttribute("FirearmAiming", value) end
+	if pose then
+		pose:SetAiming(value)
+		return
+	end
 	local track = tracks.Aim
 	if track then
 		if value then track:Play(0.15) else track:Stop(0.15) end
@@ -55,7 +74,10 @@ local function unequip()
 	local old = tool
 	if old and reloading then Remotes.FirearmReload:FireServer(old, "Cancel") end
 	setAim(false)
+	if old then old.Grip = Grip.Resolve(old, false) end
 	reloading = false
+	pose = nil
+	touchAim = false
 	disconnect(toolConnections)
 	for _, track in tracks do track:Stop(0.12); track:Destroy() end
 	table.clear(tracks)
@@ -63,6 +85,33 @@ local function unequip()
 	if old then UserInputService.MouseIconEnabled = oldMouseIconEnabled end
 	tool = nil
 	hud.Gui.Enabled = false
+end
+
+-- Brilho/fagulha saindo do cano ao disparar: usa os ParticleEmitters que a
+-- própria Tool já traz em Components/Muzzle (FrontView/SideView), mais um
+-- PointLight rápido pra dar o "flash" de luz.
+local function muzzleFlash(current: Tool)
+	local components = current:FindFirstChild("Components")
+	local muzzle = components and components:FindFirstChild("Muzzle")
+	if not muzzle or not muzzle:IsA("BasePart") then return end
+	for _, attachmentName in { "FrontView", "SideView" } do
+		local attachment = muzzle:FindFirstChild(attachmentName)
+		if attachment then
+			for _, emitter in attachment:GetChildren() do
+				if emitter:IsA("ParticleEmitter") then
+					emitter:Emit(8)
+				end
+			end
+		end
+	end
+	local light = Instance.new("PointLight")
+	light.Name = "TiroFlash"
+	light.Color = Color3.fromRGB(255, 214, 140)
+	light.Range = 12
+	light.Brightness = 8
+	light.Shadows = false
+	light.Parent = muzzle
+	task.delay(0.05, function() light:Destroy() end)
 end
 
 local function aimRay(): (Ray?, Vector2)
@@ -101,8 +150,13 @@ local function fire()
 	shownAmmo = math.max(0, shownAmmo - 1)
 	nextShot = os.clock() + Rules.ShotInterval + 0.01
 	Remotes.FirearmShoot:FireServer(current, point, aiming, sequence)
-	local track = tracks.Fire
-	if track then track:Play(0.02) end
+	muzzleFlash(current)
+	if pose and aiming then
+		pose:Fire()
+	else
+		local track = tracks.Fire
+		if track then track:Play(0.02) end
+	end
 	kick = math.min(kick + Rules.RecoilDegrees * (if aiming then 0.75 else 1), 3)
 end
 
@@ -121,6 +175,8 @@ local function equip(current: Tool)
 	if tool == current then return end
 	unequip()
 	tool = current
+	Grip.EnsureBase(current)
+	current.Grip = Grip.Resolve(current, false)
 	oldMouseIconEnabled = UserInputService.MouseIconEnabled
 	shownAmmo = Ammo.GetMagazine(current)
 	hud.Gui.Enabled = true
@@ -129,6 +185,7 @@ local function equip(current: Tool)
 		for name, priority in {
 			Holster = Enum.AnimationPriority.Action,
 			Aim = Enum.AnimationPriority.Action2,
+			AimFire = Enum.AnimationPriority.Action2, -- substitui Aim/Fire quando presente (ver setAim/fire)
 			Fire = Enum.AnimationPriority.Action3,
 			Reload = Enum.AnimationPriority.Action4,
 		} do
@@ -143,6 +200,7 @@ local function equip(current: Tool)
 			end
 		end
 	end
+	if tracks.AimFire then pose = PistolPose.new(tracks.AimFire) end
 	if tracks.Holster then tracks.Holster:Play(0.15) end
 	-- Diagnóstico de permissões sem travar tiro/recarga.
 	task.delay(5, function()
@@ -177,8 +235,8 @@ Remotes.FirearmReload.OnClientEvent:Connect(function(current: Tool, state: strin
 		reloading, reloadStarted, reloadDuration = true, os.clock(), duration or Rules.ReloadDuration
 		local track = tracks.Reload
 		if track then
-			track:Play(0.1)
-			if track.Length > 0 then track:AdjustSpeed(track.Length / reloadDuration) end
+			track:Stop(0)
+			track:Play(0.08, 1, RELOAD_ANIMATION_SPEED)
 		end
 	else
 		reloading = false
@@ -193,18 +251,24 @@ end)
 
 UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
 	if processed or not tool then return end
-	if input.UserInputType == Enum.UserInputType.MouseButton2 or input.KeyCode == Enum.KeyCode.ButtonL2 then
-		setAim(true)
-	elseif input.KeyCode == Enum.KeyCode.R or input.KeyCode == Enum.KeyCode.ButtonX then
+	if input.KeyCode == Enum.KeyCode.R or input.KeyCode == Enum.KeyCode.ButtonX then
 		tryReload()
 	end
 end)
-UserInputService.InputEnded:Connect(function(input: InputObject)
-	if input.UserInputType == Enum.UserInputType.MouseButton2 or input.KeyCode == Enum.KeyCode.ButtonL2 then setAim(false) end
+UserInputService.WindowFocusReleased:Connect(function()
+	windowFocused, touchAim = false, false
+	setAim(false)
 end)
-UserInputService.WindowFocusReleased:Connect(function() setAim(false) end)
+UserInputService.WindowFocused:Connect(function() windowFocused = true end)
+
+-- Input desejado e reprodução da pose são estados separados.
+local function wantsToAim(): boolean
+	return windowFocused and (touchAim or player:GetAttribute("PistolGripAimLock") == true
+		or UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+		or UserInputService:IsGamepadButtonDown(Enum.UserInputType.Gamepad1, Enum.KeyCode.ButtonL2))
+end
 hud.Buttons[1].Activated:Connect(fire)
-hud.Buttons[2].Activated:Connect(function() setAim(not aiming) end)
+hud.Buttons[2].Activated:Connect(function() touchAim = not touchAim; setAim(touchAim) end)
 hud.Buttons[3].Activated:Connect(tryReload)
 
 local function watchCharacter(model: Model)
@@ -234,6 +298,13 @@ end)
 player.CharacterAdded:Connect(watchCharacter)
 if player.Character then task.spawn(watchCharacter, player.Character) end
 
+RunService.PreAnimation:Connect(function(dt: number)
+	if not tool then return end
+	setAim(wantsToAim())
+	applyGrip()
+	if pose then pose:Update(dt) end
+end)
+
 RunService:BindToRenderStep("PistolFeedback", Enum.RenderPriority.Camera.Value + 5, function(dt: number)
 	-- Recuo angular aditivo; PlayerModule mantém colisão, zoom e posição da câmera.
 	kick *= math.exp(-13 * dt)
@@ -245,12 +316,14 @@ RunService:BindToRenderStep("PistolFeedback", Enum.RenderPriority.Camera.Value +
 	local current = tool
 	if not current then return end
 	local isBlocked = blocked()
-	if isBlocked then setAim(false) end
 	UserInputService.MouseIconEnabled = if isBlocked then oldMouseIconEnabled else false
 	if reloading and os.clock() - reloadStarted > reloadDuration + 3 then
 		Remotes.FirearmReload:FireServer(current, "Cancel")
 		reloading = false
 		if tracks.Reload then tracks.Reload:Stop(0.1) end
+	end
+	if reloading and tracks.Reload and tracks.Reload.IsPlaying then
+		tracks.Reload:AdjustSpeed(RELOAD_ANIMATION_SPEED)
 	end
 	for id, sent in pending do
 		if os.clock() - sent > 3 then pending[id] = nil; shownAmmo = Ammo.GetMagazine(current) end

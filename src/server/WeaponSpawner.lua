@@ -34,6 +34,7 @@ local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local SafeWait = require(ReplicatedStorage.Modules.SafeWait)
 local AmmoSystem = require(script.Parent.AmmoSystem)
 local DropItemSystem = require(script.Parent.DropItemSystem)
+local IslandLayout = require(script.Parent.Tools.IslandLayout)
 
 local WeaponSpawner = {}
 
@@ -89,10 +90,11 @@ local function beachPoints(rng: Random, count: number): { Vector3 }
 	params.FilterDescendantsInstances = { Workspace.Terrain }
 	params.IgnoreWater = true
 
+	local limit = IslandLayout.CoastRadiusMax()
 	local attempts = 0
 	while #points < count and attempts < count * 40 do
 		attempts += 1
-		local x, z = rng:NextNumber(-260, 260), rng:NextNumber(-260, 260)
+		local x, z = rng:NextNumber(-limit, limit), rng:NextNumber(-limit, limit)
 		local result = Workspace:Raycast(
 			Vector3.new(x, GROUND_PROBE_HEIGHT, z),
 			Vector3.new(0, -GROUND_PROBE_DEPTH, 0),

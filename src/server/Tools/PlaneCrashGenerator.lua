@@ -45,53 +45,57 @@ local Workspace = game:GetService("Workspace")
 local Terrain = Workspace.Terrain
 
 local IslandGenerator = require(script.Parent.IslandGenerator)
+local IslandLayout = require(script.Parent.IslandLayout)
 
 local PlaneCrashGenerator = {}
 
 --------------------------------------------------------------------------------
--- Ajustes
+-- Ajustes (escala pro mapa de ~1500 de diâmetro)
 --------------------------------------------------------------------------------
 
 local CONFIG = {
 	Seed = 2024,
 	AssetId = 15972190998,
 
-	PlaneLength = 72, -- comprimento do avião inteiro (studs) depois de escalado
-	SeaLevel = 0,
+	PlaneLength = 150, -- comprimento do avião inteiro (studs) depois de escalado
+	SeaLevel = IslandLayout.CONFIG.SeaLevel,
 
 	Trail = {
-		WaterStart = 95, -- quanto o rastro começa ANTES da costa (dentro do mar)
-		InlandEnd = 150, -- quanto o rastro termina DEPOIS da costa (mata adentro)
-		Drift = 26, -- curva lateral máxima do rastro (studs)
-		SpreadBase = 7, -- espalhamento lateral no começo
-		SpreadEnd = 22, -- espalhamento lateral no fim (leque)
+		WaterStart = 170, -- quanto o rastro começa ANTES da costa (dentro do mar)
+		InlandEnd = 280, -- quanto o rastro termina DEPOIS da costa (mata adentro)
+		Drift = 45, -- curva lateral máxima do rastro (studs)
+		SpreadBase = 12, -- espalhamento lateral no começo
+		SpreadEnd = 42, -- espalhamento lateral no fim (leque)
 	},
 
 	Outliers = {
 		Count = 2, -- peças arremessadas pra longe do eixo, na mata
-		DistanceMin = 55,
-		DistanceMax = 120,
+		DistanceMin = 90,
+		DistanceMax = 200,
 		MinT = 0.55, -- só a partir daqui (já em terra)
 	},
 
 	Debris = {
-		ExtraCount = 16, -- fragmentos extras (clones reduzidos das peças)
+		ExtraCount = 22, -- fragmentos extras (clones reduzidos das peças)
 		ScaleMin = 0.12,
 		ScaleMax = 0.38,
 	},
 
 	Scar = {
 		Enabled = true,
-		Depth = 2.8, -- profundidade da vala
-		Radius = 7.5, -- meia-largura
-		Step = 5, -- distância entre amostras ao longo do rastro
+		Depth = 3.6, -- profundidade da vala
+		Radius = 11, -- meia-largura
+		Step = 6, -- distância entre amostras ao longo do rastro
 	},
 
 	Clearing = {
-		TreeRemoveRadius = 15, -- árvores removidas (o avião passou por cima)
-		TreeFellRadius = 24, -- árvores tombadas (borda do impacto)
-		RockRemoveRadius = 10,
+		TreeRemoveRadius = 26, -- árvores removidas (o avião passou por cima)
+		TreeFellRadius = 42, -- árvores tombadas (borda do impacto)
+		RockRemoveRadius = 18,
 	},
+
+	-- Distância mínima do rastro a qualquer POI (marcadores em Ilha/Layout).
+	PoiAvoidRadius = 110,
 
 	Smoke = {
 		Enabled = true, -- fumaça fraca no destroço principal
@@ -129,7 +133,7 @@ local function findShoreline(angle: number): number
 	local dx, dz = math.cos(angle), math.sin(angle)
 	local lastLand = 0
 
-	for r = 0, 420, 4 do
+	for r = 0, IslandLayout.AreaHalf(), 4 do
 		local y = probe(dx * r, dz * r)
 		if y == nil or y < CONFIG.SeaLevel then
 			local lo, hi = lastLand, r
@@ -147,7 +151,7 @@ local function findShoreline(angle: number): number
 		lastLand = r
 	end
 
-	return 200
+	return IslandLayout.CONFIG.CoastRadius
 end
 
 -- AABB no espaço do mundo (GetBoundingBox segue a rotação do pivô, o que
@@ -207,6 +211,72 @@ local function resetDestrocos(): (Folder, Folder, Folder, Folder)
 	end
 
 	return root, sub("Mar"), sub("Praia"), sub("Floresta")
+end
+
+--------------------------------------------------------------------------------
+-- Avião de reserva (100% Part) -- usado quando InsertService não carrega o
+-- asset (asset privado/moderado, ou fora do modo de edição). Assim SEMPRE
+-- cai um avião: fuselagem em segmentos, asas, cauda, motores, bico.
+--------------------------------------------------------------------------------
+
+local function newPlanePart(parent: Instance, name: string, size: Vector3, cf: CFrame, color: Color3, shape: Enum.PartType?): Part
+	local p = Instance.new("Part")
+	p.Name = name
+	if shape then
+		p.Shape = shape
+	end
+	p.Size = size
+	p.CFrame = cf
+	p.Anchored = true
+	p.Material = Enum.Material.Metal
+	p.Color = color
+	p.Parent = parent
+	return p
+end
+
+local function buildPlaceholderPlane(): Model
+	local model = Instance.new("Model")
+	model.Name = "AviaoPlaceholder"
+
+	local hull = Color3.fromRGB(196, 198, 203)
+	local trim = Color3.fromRGB(150, 40, 44)
+	local dark = Color3.fromRGB(70, 72, 78)
+	local ALONG_Z = CFrame.Angles(0, math.pi / 2, 0)
+
+	-- Fuselagem: 5 segmentos ao longo de Z (comprimento total 60).
+	for i = 1, 5 do
+		local z = (i - 3) * 12
+		newPlanePart(model, "Fuselagem_" .. i, Vector3.new(12.4, 7.5, 7.5), CFrame.new(0, 0, z) * ALONG_Z, hull, Enum.PartType.Cylinder)
+	end
+	-- Bico.
+	for i, r in { 3.4, 2.4, 1.4, 0.7 } do
+		newPlanePart(model, "Bico_" .. i, Vector3.new(2.2, r * 2, r * 2), CFrame.new(0, 0, -30 - (i - 1) * 2) * ALONG_Z, hull, Enum.PartType.Cylinder)
+	end
+	-- Cabine.
+	newPlanePart(model, "Cabine", Vector3.new(4.5, 2.4, 5), CFrame.new(0, 3.4, -22), dark)
+	-- Faixa.
+	newPlanePart(model, "Faixa", Vector3.new(0.3, 1.6, 58), CFrame.new(3.85, 0.5, 0), trim)
+	newPlanePart(model, "Faixa2", Vector3.new(0.3, 1.6, 58), CFrame.new(-3.85, 0.5, 0), trim)
+
+	-- Asas (envergadura 64).
+	newPlanePart(model, "AsaE", Vector3.new(30, 1.2, 13), CFrame.new(-18, -1, 2) * CFrame.Angles(0, 0, math.rad(3)), hull)
+	newPlanePart(model, "AsaD", Vector3.new(30, 1.2, 13), CFrame.new(18, -1, 2) * CFrame.Angles(0, 0, math.rad(-3)), hull)
+	-- Motores sob as asas.
+	newPlanePart(model, "MotorE", Vector3.new(7, 4, 4), CFrame.new(-14, -3, 1) * ALONG_Z, dark, Enum.PartType.Cylinder)
+	newPlanePart(model, "MotorD", Vector3.new(7, 4, 4), CFrame.new(14, -3, 1) * ALONG_Z, dark, Enum.PartType.Cylinder)
+
+	-- Cauda.
+	newPlanePart(model, "Leme", Vector3.new(1, 11, 9), CFrame.new(0, 6, 27), hull)
+	newPlanePart(model, "EstabE", Vector3.new(14, 1, 6), CFrame.new(-6, 1, 28), hull)
+	newPlanePart(model, "EstabD", Vector3.new(14, 1, 6), CFrame.new(6, 1, 28), hull)
+
+	for _, d in model:GetChildren() do
+		if d:IsA("BasePart") then
+			d.TopSurface = Enum.SurfaceType.Smooth
+			d.BottomSurface = Enum.SurfaceType.Smooth
+		end
+	end
+	return model
 end
 
 --------------------------------------------------------------------------------
@@ -314,7 +384,8 @@ end
 -- Escolha do rastro
 --------------------------------------------------------------------------------
 
--- Pontos que o rastro deve evitar (vila e boca da caverna já existentes).
+-- Pontos que o rastro deve evitar: todos os POIs (marcadores em Ilha/Layout,
+-- criados por PoiGenerator) e a boca da caverna.
 local function collectAvoidPoints(): { Vector3 }
 	local points: { Vector3 } = {}
 	local ilha = Workspace:FindFirstChild("Ilha")
@@ -322,11 +393,12 @@ local function collectAvoidPoints(): { Vector3 }
 		return points
 	end
 
-	local vila = ilha:FindFirstChild("VilaNativa")
-	if vila then
-		local totem = vila:FindFirstChild("Totem")
-		if totem and totem:IsA("Model") then
-			table.insert(points, totem:GetPivot().Position)
+	local layout = ilha:FindFirstChild("Layout")
+	if layout then
+		for _, m in layout:GetChildren() do
+			if m:IsA("BasePart") and m:GetAttribute("Poi") ~= nil then
+				table.insert(points, m.Position)
+			end
 		end
 	end
 
@@ -364,7 +436,7 @@ local function trailIsClear(angle: number, shore: number, avoid: { Vector3 }): b
 		end
 
 		for _, p in avoid do
-			if (x - p.X) ^ 2 + (z - p.Z) ^ 2 < 55 ^ 2 then
+			if (x - p.X) ^ 2 + (z - p.Z) ^ 2 < CONFIG.PoiAvoidRadius ^ 2 then
 				return false
 			end
 		end
@@ -510,9 +582,11 @@ function PlaneCrashGenerator.Generate(seed: number?)
 	end
 
 	local template = IslandGenerator.LoadAssetModel(CONFIG.AssetId)
+	local usingPlaceholder = false
 	if not template then
-		warn(string.format("[PlaneCrash] Não consegui carregar o asset %d.", CONFIG.AssetId))
-		return
+		warn(string.format("[PlaneCrash] Asset %d não carregou (privado/moderado, ou fora do modo de edição). Usando avião de reserva em Part.", CONFIG.AssetId))
+		template = buildPlaceholderPlane()
+		usingPlaceholder = true
 	end
 
 	local rng = Random.new(currentSeed)
@@ -521,14 +595,14 @@ function PlaneCrashGenerator.Generate(seed: number?)
 	--    penhasco, vila nem caverna.
 	local avoid = collectAvoidPoints()
 	local angle, shore
-	for attempt = 1, 32 do
+	for attempt = 1, 64 do
 		local candidate = rng:NextNumber(0, TAU)
 		local candidateShore = findShoreline(candidate)
 		if trailIsClear(candidate, candidateShore, avoid) then
 			angle, shore = candidate, candidateShore
 			break
 		end
-		if attempt == 32 then
+		if attempt == 64 then
 			angle, shore = candidate, candidateShore
 			warn("[PlaneCrash] Nenhuma trajetória totalmente limpa; usando a última tentativa.")
 		end
@@ -738,15 +812,18 @@ function PlaneCrashGenerator.Generate(seed: number?)
 
 	print(
 		string.format(
-			"[PlaneCrash] Concluído em %.1fs (seed %d) -- peças: %d (mar %d | praia %d | floresta %d) | árvores removidas: %d, tombadas: %d",
+			"[PlaneCrash] Concluído em %.1fs (seed %d)%s -- peças: %d (mar %d | praia %d | floresta %d) | árvores removidas: %d, tombadas: %d | destroço principal em (%.0f, %.0f)",
 			os.clock() - t0,
 			currentSeed,
+			if usingPlaceholder then " [avião de reserva]" else "",
 			placed,
 			counts.Mar,
 			counts.Praia,
 			counts.Floresta,
 			treesRemoved,
-			treesFelled
+			treesFelled,
+			mainP.X,
+			mainP.Z
 		)
 	)
 end

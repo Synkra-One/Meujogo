@@ -134,6 +134,7 @@ local function playHitSound()
 end
 
 local function applyLunge()
+	if character and character:GetAttribute("ShadowRushBusy") == true then return end
 	local hrp = rootPart
 	local hum = humanoid
 	if not hrp or not hum or hum.Health <= 0 or ATK.LungeForce <= 0 then
@@ -167,6 +168,15 @@ end
 
 local function tryAttack()
 	if not isMonster then
+		return
+	end
+	-- Mapa do teleporte aberto (client/MonsterTeleportController): o clique é
+	-- pra escolher o destino, não pra golpear.
+	if LocalPlayer:GetAttribute("MapaAberto") == true then
+		return
+	end
+	-- Durante o teleporte o servidor já recusa, mas nem toca a animação aqui.
+	if character and (character:GetAttribute("TeleportBusy") == true or character:GetAttribute("ShadowRushBusy") == true) then
 		return
 	end
 	local hum = humanoid
@@ -220,6 +230,7 @@ end
 
 Remotes.MonsterAttack.OnClientEvent:Connect(function(kind: string, a: any)
 	if kind == "confirm" then
+		if character and character:GetAttribute("ShadowRushBusy") == true then return end
 		applyLunge()
 		local hitCount = tonumber(a) or 0
 		if hitCount > 0 then

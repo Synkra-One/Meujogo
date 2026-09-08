@@ -55,6 +55,40 @@ local function findTorso(character: Model): BasePart?
 	return (character:FindFirstChild("UpperTorso") :: BasePart?) or (character:FindFirstChild("Torso") :: BasePart?)
 end
 
+local function findPart(character: Model, name: string): BasePart?
+	local part = character:FindFirstChild(name)
+	return if part and part:IsA("BasePart") then part else nil
+end
+
+local function weldAccessory(name: string, part0: BasePart, size: Vector3, offset: CFrame, color: Color3, material: Enum.Material, parent: Instance): Part
+	local part = Instance.new("Part")
+	part.Name = name
+	part.Size = size
+	part.CFrame = part0.CFrame * offset
+	part.Color = color
+	part.Material = material
+	part.Anchored = false
+	part.CanCollide = false
+	part.CanTouch = false
+	part.CanQuery = false
+	part.Massless = true
+	part.Parent = parent
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = part0
+	weld.Part1 = part
+	weld.Parent = part
+	return part
+end
+
+local function paintPart(character: Model, name: string, color: Color3, material: Enum.Material?)
+	local part = findPart(character, name)
+	if not part then return end
+	part.Color = color
+	if material then
+		part.Material = material
+	end
+end
+
 -- Aplica um SpecialMesh real no torso (usado quando AssetRegistry já tem
 -- um MeshId configurado).
 local function applyMonsterMesh(torso: BasePart, meshId: string)
@@ -71,10 +105,13 @@ end
 
 local function applyMonsterAppearance(character: Model)
 	local asset = AssetRegistry.Monstro_Modelo
+	local oldCosmetic = character:FindFirstChild("MonsterCosmetic")
+	if oldCosmetic then oldCosmetic:Destroy() end
 
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if humanoid then
 		setHumanoidScale(humanoid, asset.ScaleMultiplier)
+		humanoid.DisplayName = "Jason"
 	end
 
 	local torso = findTorso(character)
@@ -82,11 +119,77 @@ local function applyMonsterAppearance(character: Model)
 		return
 	end
 
+	paintPart(character, "Torso", Color3.fromRGB(24, 26, 24), Enum.Material.Fabric)
+	paintPart(character, "Left Arm", Color3.fromRGB(42, 44, 42), Enum.Material.Fabric)
+	paintPart(character, "Right Arm", Color3.fromRGB(42, 44, 42), Enum.Material.Fabric)
+	paintPart(character, "Left Leg", Color3.fromRGB(19, 22, 25), Enum.Material.Fabric)
+	paintPart(character, "Right Leg", Color3.fromRGB(19, 22, 25), Enum.Material.Fabric)
+	paintPart(character, "Head", Color3.fromRGB(70, 63, 54), Enum.Material.SmoothPlastic)
+
+	local head = findPart(character, "Head")
+	local rightArm = findPart(character, "Right Arm")
+	local cosmetic = Instance.new("Folder")
+	cosmetic.Name = "MonsterCosmetic"
+	cosmetic.Parent = character
+
+	if head then
+		local face = head:FindFirstChild("face")
+		if face and face:IsA("Decal") then
+			face.Transparency = 1
+		end
+
+		local mask = weldAccessory(
+			"JasonMask",
+			head,
+			Vector3.new(head.Size.X * 0.9, head.Size.Y * 0.82, 0.12),
+			CFrame.new(0, 0, -head.Size.Z * 0.52),
+			Color3.fromRGB(218, 211, 188),
+			Enum.Material.SmoothPlastic,
+			cosmetic
+		)
+		local maskCorner = Instance.new("SpecialMesh")
+		maskCorner.MeshType = Enum.MeshType.Brick
+		maskCorner.Scale = Vector3.new(1, 1, 0.55)
+		maskCorner.Parent = mask
+
+		for index, x in { -0.18, 0.18 } do
+			local eye = weldAccessory(
+				"MaskEye" .. index,
+				head,
+				Vector3.new(0.16, 0.1, 0.04),
+				CFrame.new(x, 0.12, -head.Size.Z * 0.59),
+				Color3.fromRGB(10, 6, 5),
+				Enum.Material.SmoothPlastic,
+				cosmetic
+			)
+			local mesh = Instance.new("SpecialMesh")
+			mesh.MeshType = Enum.MeshType.Sphere
+			mesh.Scale = Vector3.new(1, 0.55, 0.35)
+			mesh.Parent = eye
+		end
+
+		weldAccessory("MaskScratch", head, Vector3.new(0.04, 0.48, 0.035), CFrame.new(0.28, 0.02, -head.Size.Z * 0.61) * CFrame.Angles(0, 0, math.rad(-22)), Color3.fromRGB(125, 16, 12), Enum.Material.Neon, cosmetic)
+	end
+
+	weldAccessory("MonsterBelt", torso, Vector3.new(torso.Size.X * 1.08, 0.16, torso.Size.Z * 1.16), CFrame.new(0, -torso.Size.Y * 0.23, 0), Color3.fromRGB(18, 14, 10), Enum.Material.Fabric, cosmetic)
+	weldAccessory("ChestGash", torso, Vector3.new(0.08, 0.75, 0.04), CFrame.new(0.34, 0.08, -torso.Size.Z * 0.54) * CFrame.Angles(0, 0, math.rad(24)), Color3.fromRGB(100, 7, 5), Enum.Material.Neon, cosmetic)
+
+	if rightArm then
+		weldAccessory(
+			"RustyMachete",
+			rightArm,
+			Vector3.new(0.16, 1.45, 0.08),
+			CFrame.new(0.26, -0.76, -0.38) * CFrame.Angles(math.rad(0), math.rad(0), math.rad(-12)),
+			Color3.fromRGB(116, 116, 108),
+			Enum.Material.Metal,
+			cosmetic
+		)
+	end
+
 	if asset.MeshId ~= "" then
 		applyMonsterMesh(torso, asset.MeshId)
 	else
-		-- Placeholder: sem modelo ainda, só cor.
-		torso.Color = asset.Placeholder.TorsoColor
+		torso.Color = asset.Placeholder.TorsoColor:Lerp(Color3.fromRGB(24, 26, 24), 0.65)
 	end
 end
 

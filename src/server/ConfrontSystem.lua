@@ -78,6 +78,7 @@ local RaftObjective = require(script.Parent.RaftObjective)
 local MonsterLightWeakness = require(script.Parent.MonsterLightWeakness)
 
 local ConfrontSystem = {}
+local PowerStatus = require(script.Parent.SurvivorPowerStatus)
 
 -- Hook público: disparado quando alguém executa um inocente.
 ConfrontSystem.PunicaoInocente = Instance.new("BindableEvent")
@@ -334,6 +335,7 @@ end
 --------------------------------------------------------------------------------
 
 local function onConfrontKill(killer: Player, target: unknown)
+	if killer.Character and killer.Character:GetAttribute("PowerStunned") == true then return end
 	local targetPlayer = toTargetPlayer(killer, target)
 	if not targetPlayer then
 		return
@@ -362,6 +364,7 @@ local function onConfrontKill(killer: Player, target: unknown)
 	local wasSpy = targetPlayer:GetAttribute("Role") == GameConfig.Roles.Spy
 	local targetRoot = targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart")
 
+	if targetPlayer.Character and PowerStatus.BlockAttack(targetPlayer.Character) then return end
 	Elimination.Eliminate(targetPlayer)
 	Remotes.PlayerKilled:FireAllClients(targetPlayer.UserId, killer.UserId, "Confronto")
 	print(string.format("[ConfrontSystem] %s executou %s.", killer.Name, targetPlayer.Name))

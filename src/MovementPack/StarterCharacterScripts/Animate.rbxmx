@@ -57,6 +57,7 @@ end
 
 -- [Meujogo] baforada curta atras do pe ao ENGATAR a corrida.
 local function emitSprintDust(amount)
+	if Figure:GetAttribute("ShadowRushBusy") == true then return end
 	for _, emitter in sprintEmitters do
 		emitter:Emit(amount)
 	end
@@ -217,7 +218,9 @@ local function playAnimation(animName, forcedTransition)
 	-- deprecado e as vezes nao toca com Animator ja presente).
 	local _animator = Humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", Humanoid)
 	currentAnimTrack    = _animator:LoadAnimation(anim)
-	currentAnimTrack.Priority = Enum.AnimationPriority.Core
+	-- Locomoção abaixo das ações da arma. Core também é inferior a Action;
+	-- seu valor numérico 1000 NÃO significa prioridade mais alta.
+	currentAnimTrack.Priority = Enum.AnimationPriority.Movement
 	-- [Meujogo] forca loop nas continuas: se a anim do usuario foi publicada
 	-- como nao-loopavel, sem isso ela toca uma vez e congela.
 	if animName == "idle" or animName == "walk" or animName == "run" then

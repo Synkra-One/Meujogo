@@ -97,6 +97,14 @@ local function onAttackRequest(player: Player)
 	if not character or not monsterRoot then
 		return
 	end
+	if character:GetAttribute("PowerStunned") == true then return end
+
+	-- Durante o teleporte (server/MonsterTeleport) o Monstro não ataca: está
+	-- abrindo/atravessando/saindo da fenda. TeleportBusy é Attribute do
+	-- character, setado pelo servidor.
+	if character:GetAttribute("TeleportBusy") == true or character:GetAttribute("ShadowRushBusy") == true then
+		return
+	end
 
 	local now = os.clock()
 	local last = lastAttackAt[player]

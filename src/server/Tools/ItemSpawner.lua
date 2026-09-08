@@ -45,6 +45,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local ItemRegistry = require(ReplicatedStorage.Modules.ItemRegistry)
 local ToolFactory = require(ReplicatedStorage.Modules.ToolFactory)
+local IslandLayout = require(script.Parent.IslandLayout)
 
 local ItemSpawner = {}
 
@@ -101,15 +102,32 @@ local function samplePraiaPoints(rng: Random, count: number): { Vector3 }
 	local points: { Vector3 } = {}
 	local attempts = 0
 
+	local limit = IslandLayout.CoastRadiusMax()
 	while #points < count and attempts < count * 40 do
 		attempts += 1
-		local x, z = rng:NextNumber(-260, 260), rng:NextNumber(-260, 260)
+		local x, z = rng:NextNumber(-limit, limit), rng:NextNumber(-limit, limit)
 		local y, material = probeGround(x, z)
 		if y and material == Enum.Material.Sand then
 			table.insert(points, Vector3.new(x, y, z))
 		end
 	end
 
+	return points
+end
+
+-- Zona "Construcoes": todo marcador PontoLoot (Structures.LootPoint) dentro
+-- das construções dos POIs -- armário, prateleira, mesa, mezanino etc.
+local function constructionPoints(): { Vector3 }
+	local points: { Vector3 } = {}
+	local ilha = getIlha()
+	if not ilha then
+		return points
+	end
+	for _, d in ilha:GetDescendants() do
+		if d:IsA("BasePart") and d:GetAttribute("PontoLoot") == true then
+			table.insert(points, d.Position)
+		end
+	end
 	return points
 end
 
@@ -123,6 +141,7 @@ local ZONE_PATHS: { [string]: { string } } = {
 }
 
 local praiaCache: { Vector3 }? = nil
+local construcoesCache: { Vector3 }? = nil
 
 local function candidatePoints(zone: string, rng: Random): { Vector3 }
 	if zone == ItemRegistry.Zone.Praia then
@@ -130,6 +149,12 @@ local function candidatePoints(zone: string, rng: Random): { Vector3 }
 			praiaCache = samplePraiaPoints(rng, 24)
 		end
 		return praiaCache :: { Vector3 }
+	end
+	if zone == ItemRegistry.Zone.Construcoes then
+		if not construcoesCache then
+			construcoesCache = constructionPoints()
+		end
+		return construcoesCache :: { Vector3 }
 	end
 
 	local path = ZONE_PATHS[zone]
@@ -295,6 +320,7 @@ function ItemSpawner.Generate(seed: number?)
 
 	ItemSpawner.ClearItems()
 	praiaCache = nil
+	construcoesCache = nil
 
 	local itens = Instance.new("Folder")
 	itens.Name = "Itens"
@@ -318,10 +344,17 @@ function ItemSpawner.Generate(seed: number?)
 
 				if #candidates > 0 then
 					local anchorPoint = candidates[rng:NextInteger(1, #candidates)]
-					local x = anchorPoint.X + rng:NextNumber(-4, 4)
-					local z = anchorPoint.Z + rng:NextNumber(-4, 4)
-					local groundY = probeGround(x, z)
-					local position = Vector3.new(x, (groundY or anchorPoint.Y) + 1, z)
+					local position: Vector3
+					if zone == ItemRegistry.Zone.Construcoes then
+						-- Dentro da construção: fica no ponto marcado, sem raycast
+						-- (o chão ali é piso de Part, não Terrain).
+						position = anchorPoint + Vector3.new(rng:NextNumber(-0.6, 0.6), 0, rng:NextNumber(-0.6, 0.6))
+					else
+						local x = anchorPoint.X + rng:NextNumber(-4, 4)
+						local z = anchorPoint.Z + rng:NextNumber(-4, 4)
+						local groundY = probeGround(x, z)
+						position = Vector3.new(x, (groundY or anchorPoint.Y) + 1, z)
+					end
 
 					if def.Category == "Tool" then
 						spawnToolPickup(itemId, def.DisplayName, position, itens)

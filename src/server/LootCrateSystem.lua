@@ -56,6 +56,7 @@ local ToolFactory = require(ReplicatedStorage.Modules.ToolFactory)
 
 local RadioObjective = require(script.Parent.RadioObjective)
 local RaftObjective = require(script.Parent.RaftObjective)
+local IslandLayout = require(script.Parent.Tools.IslandLayout)
 
 local LootCrateSystem = {}
 
@@ -285,11 +286,41 @@ groundParams.FilterType = Enum.RaycastFilterType.Include
 groundParams.FilterDescendantsInstances = { Workspace.Terrain }
 groundParams.IgnoreWater = true
 
+-- Marcadores "PontoLoot" das construções (cabanas, lodge, celeiro, casa de
+-- barcos, torre, farol, vila). No Friday the 13th o loot fica DENTRO das
+-- construções, não espalhado no mato -- então as caixas preferem esses
+-- pontos e só caem no chão aleatório se o mapa não tiver nenhum.
+local lootPointCache: { Vector3 }? = nil
+
+local function lootPoints(): { Vector3 }
+	if lootPointCache then
+		return lootPointCache
+	end
+	local points: { Vector3 } = {}
+	local ilha = Workspace:FindFirstChild("Ilha")
+	if ilha then
+		for _, d in ilha:GetDescendants() do
+			if d:IsA("BasePart") and d:GetAttribute("PontoLoot") == true then
+				table.insert(points, d.Position)
+			end
+		end
+	end
+	lootPointCache = points
+	return points
+end
+
 -- Um ponto de terra firme (areia ou grama) dentro da ilha.
 local function findGroundPoint(): Vector3?
+	local points = lootPoints()
+	if #points > 0 then
+		local p = points[rng:NextInteger(1, #points)]
+		return Vector3.new(p.X, p.Y - 1.5, p.Z)
+	end
+
+	local limit = IslandLayout.CoastRadiusMax()
 	for _ = 1, 40 do
-		local x = rng:NextNumber(-260, 260)
-		local z = rng:NextNumber(-260, 260)
+		local x = rng:NextNumber(-limit, limit)
+		local z = rng:NextNumber(-limit, limit)
 		local result = Workspace:Raycast(Vector3.new(x, 400, z), Vector3.new(0, -900, 0), groundParams)
 		if result then
 			local mat = result.Material
@@ -330,10 +361,17 @@ function LootCrateSystem.Generate()
 		if not anchor then
 			continue
 		end
-		local x = anchor.X + rng:NextNumber(-CFG.SpreadRadius, CFG.SpreadRadius)
-		local z = anchor.Z + rng:NextNumber(-CFG.SpreadRadius, CFG.SpreadRadius)
-		local result = Workspace:Raycast(Vector3.new(x, 400, z), Vector3.new(0, -900, 0), groundParams)
-		local y = if result then result.Position.Y else anchor.Y
+		-- Em PontoLoot a caixa fica NO ponto (dentro da construção); no chão
+		-- aleatório ganha o desvio de SpreadRadius.
+		local insidePoi = #lootPoints() > 0
+		local spread = if insidePoi then 1.2 else CFG.SpreadRadius
+		local x = anchor.X + rng:NextNumber(-spread, spread)
+		local z = anchor.Z + rng:NextNumber(-spread, spread)
+		local y = anchor.Y
+		if not insidePoi then
+			local result = Workspace:Raycast(Vector3.new(x, 400, z), Vector3.new(0, -900, 0), groundParams)
+			y = if result then result.Position.Y else anchor.Y
+		end
 
 		local crate = Instance.new("Part")
 		crate.Name = "CaixaLoot"

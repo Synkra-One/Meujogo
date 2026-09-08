@@ -28,10 +28,12 @@
 
 local ItemRegistry = {}
 
+-- Mapa grande (~1500 de diâmetro) com POIs espalhados: mais cópias, senão o
+-- jogador anda 5 minutos sem achar nada.
 ItemRegistry.RarityCount = {
-	Comum = 12,
-	Media = 7,
-	Rara = 3,
+	Comum = 22,
+	Media = 12,
+	Rara = 5,
 }
 
 ItemRegistry.Zone = {
@@ -42,6 +44,10 @@ ItemRegistry.Zone = {
 	Floresta = "Floresta",
 	Rochas = "Rochas",
 	Praia = "Praia",
+	-- Marcadores PontoLoot dentro das construções dos POIs (cabanas, lodge,
+	-- celeiro, casa de barcos, torre, farol, cabanas nativas). É onde a maior
+	-- parte do loot deve ficar, como nas cabanas do Friday the 13th.
+	Construcoes = "Construcoes",
 }
 
 local Zone = ItemRegistry.Zone
@@ -58,14 +64,14 @@ ItemRegistry.Items = {
 		DisplayName = "Corda",
 		Category = "MaterialJangada",
 		Rarity = "Media",
-		Zones = { Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta, Zone.VilaNativa },
+		Zones = { Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta, Zone.Construcoes, Zone.Construcoes },
 		Function = "Amarração da jangada OU amarrar o Espião (ConfrontSystem) -- mesmo estoque pessoal, um ou outro.",
 	},
 	Lona = {
 		DisplayName = "Lona (Pano de Vela)",
 		Category = "MaterialJangada",
 		Rarity = "Rara",
-		Zones = { Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta },
+		Zones = { Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta, Zone.Construcoes },
 		Function = "Vela da jangada. Também é o 'pano' da receita da Tocha -- concorre pelo mesmo item raro.",
 	},
 
@@ -73,14 +79,14 @@ ItemRegistry.Items = {
 		DisplayName = "Antena",
 		Category = "PecaRadio",
 		Rarity = "Media",
-		Zones = { Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta },
+		Zones = { Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta, Zone.Construcoes },
 		Function = "Peça de reparo do rádio.",
 	},
 	Bateria = {
 		DisplayName = "Bateria",
 		Category = "PecaRadio",
 		Rarity = "Media",
-		Zones = { Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta },
+		Zones = { Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta, Zone.Construcoes },
 		Function = "Peça de reparo do rádio.",
 	},
 	Transmissor = {
@@ -98,7 +104,7 @@ ItemRegistry.Items = {
 		Category = "Tool",
 		AttributeName = "FacaImprovisada",
 		Rarity = "Comum",
-		Zones = { Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta, Zone.Praia },
+		Zones = { Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta, Zone.Praia, Zone.Construcoes, Zone.Construcoes },
 		Function = "Dano fraco, afasta o Monstro brevemente. Não mata ninguém.",
 	},
 	LancaDeBambu = {
@@ -123,7 +129,7 @@ ItemRegistry.Items = {
 		Category = "Tool",
 		AttributeName = "Tocha", -- mesmo Attribute que MonsterLightWeakness.lua já usa
 		Rarity = "Media",
-		Zones = { Zone.Floresta, Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta },
+		Zones = { Zone.Floresta, Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta, Zone.Construcoes },
 		Craft = { Ingredients = { Madeira = 1, Lona = 1 } },
 		Function = "Luz + repele o Monstro (fraqueza dele). Gasta combustível com o tempo equipada.",
 	},
@@ -132,7 +138,7 @@ ItemRegistry.Items = {
 		Category = "Tool",
 		AttributeName = "Lanterna",
 		Rarity = "Media",
-		Zones = { Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta },
+		Zones = { Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta, Zone.Construcoes, Zone.Construcoes },
 		AssetId = 6302063371, -- modelo REAL do Toolbox, não placeholder (ver ToolFactory.lua)
 		Function = "Liga/desliga (Tool.Activated). Enquanto ligada, enfraquece o Monstro igual a Tocha -- mesmo raio, empurrão e combustível (120s) -- só o visual muda.",
 	},
@@ -141,7 +147,7 @@ ItemRegistry.Items = {
 		Category = "Tool",
 		AttributeName = "Chocolate",
 		Rarity = "Comum",
-		Zones = { Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta },
+		Zones = { Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta, Zone.Construcoes, Zone.Construcoes },
 		AssetId = 77169687128921, -- modelo REAL do Toolbox
 		Function = "Consumível: cura toda a vida do Humanoid ao usar e se destrói. Sem sistema de dano no jogo ainda, então hoje não tem efeito visível -- fica pronto pra quando houver dano de verdade.",
 	},
@@ -150,7 +156,7 @@ ItemRegistry.Items = {
 		Category = "Tool",
 		AttributeName = "Bandagem",
 		Rarity = "Media",
-		Zones = { Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta, Zone.VilaNativa },
+		Zones = { Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta, Zone.Construcoes, Zone.Construcoes },
 		Function = "Cura com canalização (estilo Left 4 Dead): usa por ~3,5s tocando a animação e só então cura GameConfig.Bandagem.Heal. Tomar dano, desequipar ou morrer no meio cancela sem gastar. A passiva da Sofia deixa a cura 40% melhor.",
 	},
 	LancaAncestral = {

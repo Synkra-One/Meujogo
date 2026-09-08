@@ -45,6 +45,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local StatScaling = require(ReplicatedStorage.Modules.StatScaling)
+local FearSystem = require(script.Parent.FearSystem)
 
 local StaminaSystem = {}
 
@@ -54,7 +55,8 @@ local TICK = 0.1 -- resolução do loop (10 Hz -- suave o bastante pra barra)
 -- Fração do WalkSpeed atual acima da qual consideramos que ESTÁ correndo.
 -- O sprint do pacote é ~1.9x o andar, então 1.35x separa bem andar de correr
 -- sem depender de números fixos (o WalkSpeed varia com Velocidade do personagem).
-local SPRINT_SPEED_RATIO = 1.35
+local SPRINT_SPEED_RATIO = GameConfig.Characters.SprintSpeedRatio
+local initialized = false
 
 type State = {
 	value: number, -- fôlego 0..100
@@ -131,7 +133,14 @@ local function step(dt: number)
 		-- cada um gasta só quando está de fato em sprint).
 		local walkBase = StatScaling.WalkSpeed(player)
 		local moving = horizontalSpeed(root) > walkBase * SPRINT_SPEED_RATIO
-		local sprinting = state.intent and moving and not state.exhausted
+		local shadowBusy = character:GetAttribute("ShadowRushBusy") == true
+		if character:GetAttribute("PowerInfiniteStamina") == true then
+			state.value, state.exhausted, state.idleFor = MAX, false, 0
+			setSprintGate(character, not shadowBusy and character:GetAttribute("PowerStunned") ~= true, shadowBusy)
+			publish(player, state)
+			continue
+		end
+		local sprinting = state.intent and moving and not state.exhausted and not shadowBusy
 
 		if sprinting then
 			state.idleFor = 0
@@ -142,7 +151,8 @@ local function step(dt: number)
 		else
 			state.idleFor += dt
 			if state.idleFor >= GameConfig.Characters.StaminaRegenDelay then
-				state.value = math.min(MAX, state.value + StatScaling.StaminaRegen(player) * dt)
+				state.value = math.min(MAX, state.value + StatScaling.StaminaRegen(player)
+					* FearSystem.GetStaminaRegenMultiplier(player) * dt)
 			end
 			if state.exhausted and state.value >= GameConfig.Characters.StaminaMinToSprint then
 				state.exhausted = false
@@ -150,7 +160,7 @@ local function step(dt: number)
 		end
 
 		-- Portão do sprint (contrato que o Crouching do pacote já lê).
-		setSprintGate(character, not state.exhausted, state.exhausted)
+		setSprintGate(character, not state.exhausted and not shadowBusy, state.exhausted or shadowBusy)
 		publish(player, state)
 	end
 end
@@ -174,6 +184,8 @@ function StaminaSystem.Refill(player: Player)
 end
 
 function StaminaSystem.Init()
+	if initialized then return end
+	initialized = true
 	Remotes.SprintIntent.OnServerEvent:Connect(function(player: Player, holding: unknown)
 		getState(player).intent = holding == true
 	end)

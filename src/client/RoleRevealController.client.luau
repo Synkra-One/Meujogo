@@ -50,10 +50,10 @@ local ROLE_INFO: { [string]: { Label: string, Title: string, Color: Color3, Obje
 		Objective = "Fuja da ilha: monte o Rádio ou a Jangada antes que o tempo acabe.",
 	},
 	[GameConfig.Roles.Monster] = {
-		Label = "MONSTRO",
-		Title = "VOCÊ É O MONSTRO",
+		Label = "JASON",
+		Title = "VOCÊ É JASON",
 		Color = Color3.fromRGB(210, 55, 45),
-		Objective = "Cace e elimine todos os Sobreviventes. Cuidado com a luz.",
+		Objective = "Você nasceu na caverna. Cace e elimine os Sobreviventes. Cuidado com a luz.",
 	},
 	[GameConfig.Roles.Spy] = {
 		Label = "ESPIÃO",

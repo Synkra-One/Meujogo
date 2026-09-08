@@ -96,14 +96,94 @@ GameConfig.Bandagem = {
 -- cliente, dava pra correr pra sempre editando o valor).
 
 --------------------------------------------------------------------------------
+-- FEAR -- gameplay no servidor e apresentação local (partes 1, 2 e 3)
+--------------------------------------------------------------------------------
+GameConfig.Fear = {
+	MaxFear = 100,
+	MaxFearDistance = 300,
+	MinFearDistance = 20,
+	MaxProximityFearPerSecond = 10,
+	ProximityCurveExponent = 2, -- smoothstep(t ^ expoente); maior = menos medo à distância
+	FearRecoveryDelay = 4,
+	BaseFearRecoveryPerSecond = 3.5,
+	FearUpdateInterval = 0.2,
+	-- Usa a Compostura EXISTENTE (0..100). Min/Max são os extremos do atributo.
+	ComposureGain = { Min = 1.5, Max = 0.55 },
+	ComposureGainExponent = 0.93, -- Compostura 50 fica em aproximadamente 1x
+	ComposureRecovery = { Min = 0.65, Max = 1.35 },
+	ComposureRecoveryExponent = 1,
+	DebugMode = false, -- ative para ver [Fear] no Output do servidor
+	DebugPrintInterval = 2, -- segundos; independente da frequência do cálculo
+	LineOfSightMultiplier = 1.35,
+	LineOfSightUpdateInterval = 0.4,
+	ChaseDistance = 80,
+	ChaseFearMultiplier = 1.4,
+	ChaseMinSpeed = 2, -- velocidade horizontal real, studs/s, de ambos
+	ChaseTowardDot = 0.35, -- monstro deve avançar na direção da vítima
+	ChaseAwayDot = 0, -- vítima não pode estar avançando contra o monstro
+	ChaseRequiresLineOfSight = true,
+	ChaseConfirmTime = 0.6, -- evita classificar um movimento passageiro como perseguição
+	MaxFearGainPerSecond = 20, -- teto DEPOIS de Compostura, LOS e Chase
+	FearStates = { Nervous = 25, Scared = 50, Panicked = 75, ExtremePanic = 90 },
+	StaminaPenaltyStartFear = 25,
+	MinStaminaRegenMultiplier = 0.5,
+	StaminaRegenCurveExponent = 1.5,
+	TripMinFear = 75,
+	TripCheckInterval = 3,
+	TripCooldown = 8,
+	TripChanceMin = 0.03,
+	TripChanceMax = 0.12,
+	TripDuration = 0.65,
+	TripSpeedMultiplier = 0.55, -- limite temporário relativo ao ANDAR normal
+	PanicSoundMinFear = 75,
+	PanicSoundCheckInterval = 5,
+	PanicSoundCooldown = 12,
+	PanicSoundChanceMin = 0.02,
+	PanicSoundChanceMax = 0.08,
+	PanicSoundRadius = 100, -- alcance entregue ao SoundManager pelo hook existente
+	PanicSounds = { "", "", "" }, -- apenas IDs reais; vazios não tocam
+	PanicSoundVolume = 0.7,
+	PanicSoundMaxDuration = 6,
+	-- Parte 3: apresentação. Não altera as regras/valores de Fear do servidor.
+	HeartbeatSoundId = "",
+	HeartbeatStartFear = 30,
+	HeartbeatMaxVolume = 0.45,
+	HeartbeatMinPlaybackSpeed = 0.9,
+	HeartbeatMaxPlaybackSpeed = 1.25,
+	BreathingSoundId = "",
+	BreathingStartFear = 45,
+	BreathingMaxVolume = 0.35,
+	BreathingMinPlaybackSpeed = 0.95,
+	BreathingMaxPlaybackSpeed = 1.15,
+	VignetteStartFear = 50,
+	VignetteMaxFear = 100,
+	VignetteMaxOpacity = 0.22,
+	VignetteEdgeSize = 0.2, -- centro livre; fração da largura/altura de cada borda
+	BlurStartFear = 75,
+	BlurMaxSize = 4,
+	EnableFearFOV = false, -- reservado: movimento/mira já controlam o tween de FOV
+	FearFOVStart = 75,
+	FearFOVMaxOffset = 3,
+	PresentationUpdateInterval = 0.05,
+	PresentationSmoothTime = 0.35,
+	FearAnimations = { FearIdle = "", FearWalk = "", FearRun = "", LookAround = "", Trip = "" },
+	FearLocomotionStart = 75,
+	FearAnimationFadeTime = 0.15,
+	FearAnimationLoadTimeout = 8,
+	FearIdleSpeedThreshold = 0.75,
+	FearInteractionGrace = 0.4, -- reserva curta para ações disparadas por ProximityPrompt
+	LookAroundMinFear = 60,
+	LookAroundCheckInterval = 6,
+	LookAroundCooldown = 20,
+	LookAroundChance = 0.06,
+	LookAroundMaxDuration = 3,
+}
+
+--------------------------------------------------------------------------------
 -- MONSTRO -- combate e locomoção
 --------------------------------------------------------------------------------
--- MonsterCombat.lua (servidor) é o dono do combate do Monstro: valida o golpe
--- (client -> Remotes.MonsterAttack), faz o hitbox em cone à frente e roteia o
--- dano pelo DamageSystem (Cause = "Monstro"). Também é o dono da VELOCIDADE do
--- Monstro: escreve o Attribute "MonsterSpeedMul" no character, que o script
--- Crouching (pacote de movimento, dono do WalkSpeed) multiplica todo frame.
-
+-- MonsterCombat.lua valida o golpe, roteia dano pelo DamageSystem e publica
+-- MonsterSpeedMul, lido pelo Crouching do pacote de movimento.
 GameConfig.Monster = {
 	-- Velocidade: multiplicador sobre a do Sobrevivente (andar 12 / sprint 23).
 	SpeedMultiplier = 1.16, -- Monstro ~16% mais rápido -> alcança quem foge
@@ -124,6 +204,93 @@ GameConfig.Monster = {
 	-- Animação de golpe (R6). 129967390 = "tool slash" padrão da Roblox,
 	-- pública. Trocar por uma sua depois é só mudar aqui.
 	SwingAnimationId = "rbxassetid://129967390",
+
+	-- Shadow Rush: F / L1 / botão touch. Segundo toque inicia materialização.
+	ShadowRush = {
+		ShadowRushEnterDuration = 0.16,
+		ShadowRushDuration = 5,
+		ShadowRushMaxSpeed = 75,
+		ShadowRushAcceleration = 0.28, -- aceleração, direção usa o controle normal
+		ShadowRushExitDeceleration = 0.24,
+		ShadowRushMaterializeDuration = 0.24,
+		ShadowRushRecovery = 0.12, -- apenas combate; pode continuar andando
+		ShadowRushCooldown = 25, -- contado a partir da ativação aceita
+		ShadowRushSafetyTimeout = 10,
+		ShadowPassDistance = 12,
+		ShadowPassFear = 8, -- pontos finais; FearSystem.AddFear aplica o teto
+		ShadowPassCooldown = 6, -- por vítima por ativação (padrão: uma vez)
+		ShadowRushEnterSoundId = "",
+		ShadowRushLoopSoundId = "",
+		ShadowRushExitSoundId = "",
+		ShadowPassSoundId = "",
+		SoundMaxDistance = 90,
+		SoundVolume = 0.65,
+		FOVOffset = 24, -- 70 -> 94 (sprint normal já usa 90); mesmo dono de FOV
+		InputInterval = 0.05,
+		ServerInterval = 1 / 30,
+		ReplicationSlack = 0.5, -- tolerância de rajadas na replicação física
+		ValidationSpeedMargin = 1.2,
+		CollisionRadius = 0.8, -- somente margem da borda da ilha
+		MinGroundNormalY = 0.65,
+		BoundsMargin = 6,
+	},
+
+	----------------------------------------------------------------------------
+	-- TELEPORTE ("Fenda") -- server/MonsterTeleport.lua + client/MonsterTeleport
+	-- Controller + Modules/RiftVFX.lua. Poder sobrenatural: abre uma fenda nos
+	-- pés, é engolido, e emerge de uma segunda fenda no destino. TODOS os
+	-- números de timing/escala/alcance/cooldown vivem aqui.
+	----------------------------------------------------------------------------
+	Teleport = {
+		-- ALCANCE / DESTINO (servidor é autoridade -- o cliente só sugere um ponto)
+		-- O destino é escolhido no MAPA (tecla Q), então o alcance cobre a ilha
+		-- inteira: o limite real é o próprio mapa + as checagens de chão/rampa/
+		-- água/limites/espaço livre. Baixe isto se quiser um teleporte curto.
+		MaxRange = 2200, -- studs; distância máxima do salto
+		MinRange = 18, -- não vale teleportar "em cima de si mesmo"
+		GroundSnapUp = 60, -- raycast começa a esta altura acima do ponto mirado
+		GroundSnapDown = 140, -- ...e desce até isto procurando chão
+		MaxSlopeCos = 0.55, -- cos do ângulo máx. da rampa no destino (~57°)
+		BoundsMargin = 30, -- fica pelo menos isto pra dentro da borda do mapa
+		ClearanceRadius = 2.6, -- meia-largura da checagem de "cabe o rig?"
+		ClearanceHeight = 6.5, -- altura da checagem (rig R6 ~5.5)
+
+		-- TIMINGS (segundos) -- ver a sequência no cabeçalho de MonsterTeleport.lua
+		RiftOpenDuration = 1.1, -- fenda: pequena+invisível -> aberta
+		EnterDuration = 0.85, -- monstro afunda + some
+		TravelDuration = 0.55, -- "vazio" entre uma fenda e outra
+		DestRiftLeadTime = 0.45, -- quanto a fenda do DESTINO abre ANTES do monstro sair
+		ExitDuration = 1.0, -- monstro emerge + reaparece
+		RiftCloseDuration = 0.85, -- fenda: aberta -> recolhida
+		PostTeleportRecovery = 0.55, -- tonto: sem atacar/reativar logo após sair
+		TeleportCooldown = 30, -- segundos até poder de novo
+		FailureCooldown = 2.5, -- cooldown curto quando o destino é inválido (anti-spam)
+		SafetyTimeout = 14, -- se algo travar, restaura tudo à força depois disto
+
+		-- ESCALA (a fenda combina com o TAMANHO REAL do rig -- medido em runtime)
+		RiftScale = 1.0, -- multiplicador extra por cima do automático
+		RiftWidthFactor = 1.7, -- fenda ~1.7x a altura do monstro de largura
+		SinkDepth = 7.0, -- quanto o monstro afunda ao ser engolido
+
+		-- ORIENTAÇÃO DO ASSET (ver AssetRegistry.RiftTeleport.AssetId)
+		-- "auto" mede o asset e deita a menor dimensão no chão. Se a fenda
+		-- renderizar de lado/em pé, force "Y" | "Z" | "X" (qual eixo local é a
+		-- "face" da fenda), ou mexa em RiftExtraRotationDeg.
+		RiftAssetFaceAxis = "auto",
+		RiftExtraRotationDeg = { 0, 0, 0 }, -- ajuste fino da rotação, em graus (X, Y, Z)
+		RiftGroundOffset = -0.2, -- <0 crava a fenda um pouco no chão (nunca flutua)
+		RiftUpright = false, -- true = fenda vertical virada pro monstro, em vez de deitada
+
+		-- ANIMAÇÕES (opcionais). VAZIO = usa só o afundar+fade, que funciona em
+		-- qualquer rig. Se tiver animações R6 próprias, cole o rbxassetid aqui.
+		TeleportEnterAnimationId = "",
+		TeleportExitAnimationId = "",
+
+		-- REDE / PERFORMANCE
+		VFXBroadcastRadius = 190, -- só clientes a até isto recebem os VFX da fenda
+		RiftLightBrightness = 0.55, -- PointLight MUITO sutil (0 = sem luz)
+		RiftLightRangeFactor = 1.6, -- Range da luz = largura da fenda * isto
+	},
 }
 
 --------------------------------------------------------------------------------
@@ -145,6 +312,7 @@ GameConfig.Characters = {
 	-- Referência: o WalkSpeed "normal" do pacote é 12.
 	WalkSpeed = { Min = 10, Max = 17 },
 	ReferenceWalkSpeed = 12, -- CONFIG.NormalSpeed do script Crouching
+	SprintSpeedRatio = 1.35, -- limiar real compartilhado por StaminaSystem e Fear (tropeço)
 
 	-- Stamina -> duração do sprint. Gasto por segundo e recuperação por
 	-- segundo (o valor de fôlego vai de 0 a 100).
@@ -462,7 +630,7 @@ GameConfig.Firearms = {
 	DefaultAmmoType = "Pistola",
 
 	-- Reserva por tipo de munição.
-	StartingReserve = { Pistola = 0 }, -- ao nascer (0 = só o pente da arma achada)
+	StartingReserve = { Pistola = 34 }, -- teste: reserva inicial enquanto a pistola do lobby esta ativa
 	MaxReserve = { Pistola = 68 }, -- teto que dá pra carregar (~4 pentes)
 	PickupAmount = { Pistola = 17 }, -- quanto cada caixa no chão dá (1 pente)
 
@@ -472,6 +640,17 @@ GameConfig.Firearms = {
 		AmmoBoxes = 10,
 		SpreadRadius = 18, -- studs de dispersão ao redor de cada ponto-âncora
 	},
+}
+
+--------------------------------------------------------------------------------
+-- AMBIENTE / CLIMA
+--------------------------------------------------------------------------------
+-- Ver ReplicatedStorage/Modules/LightingPresets.lua pros valores de cada um.
+-- "Night" fica salvo para voltar ao clima de jogo depois. "CloudyMorning"
+-- está ativo agora para o Play nascer de dia enquanto depuramos mapa/gameplay.
+
+GameConfig.Environment = {
+	LightingPreset = "CloudyMorning",
 }
 
 --------------------------------------------------------------------------------
@@ -490,14 +669,17 @@ GameConfig.Testing = {
 	-- Força TODO MUNDO nesse papel, em vez do sorteio normal
 	-- (RoleAssignment.lua). nil = sorteio normal.
 	--
-	-- Precisa existir por dois motivos, os dois fatais em teste solo:
-	--   1) AssignRoles exige >= 2 jogadores (1 Monstro + 1 Espião), então
-	--      sozinho ele erraria e a partida nem começaria;
-	--   2) sozinho como Monstro, "Sobreviventes vivos = 0" dispara vitória
-	--      instantânea e a partida acabaria no primeiro segundo.
-	-- Troque pra "Monstro" ou "Espiao" pra testar os outros papéis (aí a
-	-- partida vai encerrar sozinha rápido, o que é esperado).
-	ForceRole = "Sobrevivente",
+	-- Em teste solo, nil sorteia entre Sobrevivente/Monstro/Espião para
+	-- facilitar testar todos os fluxos sem abrir múltiplos clients.
+	-- Troque pra "Monstro" ou "Espiao" se quiser forçar um papel específico.
+	-- Atualmente fica nil para você testar o sorteio real, inclusive podendo
+	-- cair como Jason/Monstro.
+	ForceRole = nil,
+
+	-- Painel dev dentro da sala de espera para escolher o papel da próxima
+	-- partida sem depender da sorte. O servidor valida por UserId.
+	DevRoleChooser = true,
+	DevRoleUserIds = { 11555748600 } :: { number },
 
 	-- Larga uma amostra de itens do lado de onde os jogadores desembarcam,
 	-- pra dar pra testar pegar/usar item sem procurar pela ilha inteira.
@@ -507,11 +689,16 @@ GameConfig.Testing = {
 	-- VAZIO = ninguém nasce armado, que é o certo: as armas ficam no CHÃO
 	-- (WeaponSpawner.lua / GameConfig.Firearms.WorldSpawns).
 	-- Pra depurar sem procurar arma no mapa, ponha { "Glock17" } aqui.
-	GiveTestWeapons = {} :: { string },
+	GiveTestWeapons = { "Glock17" } :: { string },
 
 	-- Bancada à direita do LobbySpawn: uma Glock17 e caixa de 34 cartuchos.
 	-- Arma de treino só causa dano no alvo. false remove a bancada no próximo Play.
 	LobbyPistol = true,
+
+	-- Larga material de jangada suficiente pra fechar 100% ao lado da própria
+	-- LocalJangada (RaftObjective.lua). Pra testar montar/empurrar a jangada
+	-- sem catar Madeira/Corda/Lona pela ilha. false = tira o kit.
+	RaftKit = true,
 }
 
 return GameConfig

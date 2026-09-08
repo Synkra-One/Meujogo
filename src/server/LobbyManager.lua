@@ -27,9 +27,10 @@
 	  1) Jogador interage com o Part "IniciarPartida" (ProximityPrompt).
 	  2) WaitingRoomManager valida a abertura pelo host, a fase e as vagas;
 	     teleporta apenas quem interagiu para a sala de espera.
-	  3) Na sala, cada participante escolhe personagem, skin e perk e marca
-	     Pronto. Com o mínimo e todos prontos, inicia a contagem. Só os membros
-	     da sala são enviados a RoundManager.StartRound(participants).
+	  3) Na sala, cada participante escolhe skin/perk e marca Pronto. Com o
+	     mínimo e todos prontos, inicia a contagem. Só os membros da sala são
+	     enviados a RoundManager.StartRound(participants). O personagem humano
+	     é escolhido depois do sorteio do papel; Monstro recebe Jason.
 	  4) RoundManager.RoundPrepared dispara logo depois do LoadCharacter de
 	     todo mundo (ainda no Lobby, já que LoadCharacter manda pra
 	     LobbySpawn) -- aí sim teleportamos: Monstro pro marcador
@@ -62,6 +63,7 @@ local Workspace = game:GetService("Workspace")
 local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local RoundManager = require(script.Parent.RoundManager)
 local WaitingRoomManager = require(script.Parent.WaitingRoomManager)
+local IslandLayout = require(script.Parent.Tools.IslandLayout)
 
 local LobbyManager = {}
 
@@ -77,10 +79,11 @@ end
 -- Lobby (posição sempre FORÇADA aqui -- ver nota no cabeçalho)
 --------------------------------------------------------------------------------
 
--- Fica longe da área que o IslandGenerator escreve terreno (AreaHalf = 324)
--- e do raio máximo da ilha, pra nada da geração encostar no Lobby.
--- Precisa bater com default.project.json.
-local LOBBY_ORIGIN = Vector3.new(0, 10, -400)
+-- Fica longe da área que o IslandGenerator escreve terreno (IslandLayout
+-- AreaHalf = 960 -> terreno até z = -960) e do raio máximo da ilha, pra nada
+-- da geração encostar no Lobby. Precisa bater com default.project.json e
+-- com a sala de espera (WaitingRoomManager.origin).
+local LOBBY_ORIGIN = Vector3.new(0, 10, -1500)
 
 -- Acha a instância pelo nome (recriando com a classe certa se existir com
 -- outra, ou não existir) e devolve pronta pra configurar.
@@ -202,8 +205,9 @@ beachRaycastParams.FilterType = Enum.RaycastFilterType.Include
 beachRaycastParams.FilterDescendantsInstances = { Workspace.Terrain }
 beachRaycastParams.IgnoreWater = true
 
--- Mesmo raio de busca que ItemSpawner.lua usa pra amostrar a zona "Praia".
-local BEACH_SEARCH_RADIUS = 260
+-- Raio de busca = raio máximo da costa (IslandLayout), o mesmo que
+-- ItemSpawner/WeaponSpawner/LootCrateSystem usam.
+local BEACH_SEARCH_RADIUS = IslandLayout.CoastRadiusMax()
 
 -- Acha UM ponto de areia real (Terrain, material Sand) via raycast --
 -- não depende de nenhuma Part fixa, então funciona não importa onde a
@@ -220,25 +224,60 @@ local function findBeachAnchor(): Vector3?
 	return nil
 end
 
+-- Marcadores "SpawnPOI" (Structures.SpawnPoint) espalhados pelos pontos de
+-- interesse: porta de cada cabana, lodge, celeiro, torre, farol, vila,
+-- ruínas. Embaralhados, um por sobrevivente -- é o "todo mundo começa num
+-- canto diferente do acampamento" do Friday the 13th.
+local function collectPoiSpawns(): { Vector3 }
+	local points: { Vector3 } = {}
+	local ilha = Workspace:FindFirstChild("Ilha")
+	if not ilha then
+		return points
+	end
+	for _, d in ilha:GetDescendants() do
+		if d:IsA("BasePart") and d:GetAttribute("SpawnPOI") == true then
+			table.insert(points, d.Position)
+		end
+	end
+	-- Fisher-Yates.
+	for i = #points, 2, -1 do
+		local j = math.random(1, i)
+		points[i], points[j] = points[j], points[i]
+	end
+	return points
+end
+
+-- Com StreamingEnabled o cliente ainda não carregou o pedaço do mapa onde
+-- ele vai cair; pedir o stream antes evita cair no void por um instante.
+local function prepareStream(player: Player, position: Vector3)
+	pcall(function()
+		player:RequestStreamAroundAsync(position, 3)
+	end)
+end
+
 local function teleportToIsland(players: { Player })
 	local monsterSpawn = findMonsterSpawn()
 	if not monsterSpawn then
-		warn("[LobbyManager] Sem marcador MonstroSpawn (gere a caverna) -- Monstro nasce na praia com os outros.")
+		warn("[LobbyManager] Sem marcador MonstroSpawn (gere a caverna) -- Monstro nasce com os outros.")
 	end
 
-	-- Um ponto de praia só por rodada -- todo mundo desembarca perto, não
-	-- espalhado em pontos fixos de antes da ilha existir.
-	local beachAnchor = findBeachAnchor()
+	local poiSpawns = collectPoiSpawns()
+	local beachAnchor: Vector3? = nil
 	local fallbackSpawns: { BasePart } = {}
-	if not beachAnchor then
-		fallbackSpawns = getIslandSpawns()
-		if #fallbackSpawns == 0 then
-			warn("[LobbyManager] Não achei praia (Terrain Sand) nem IlhaSpawns -- gere a ilha primeiro (IslandGenerator.Generate()).")
-			return
+	if #poiSpawns == 0 then
+		-- Mapa sem POIs (versão antiga salva): todo mundo numa praia.
+		beachAnchor = findBeachAnchor()
+		if not beachAnchor then
+			fallbackSpawns = getIslandSpawns()
+			if #fallbackSpawns == 0 then
+				warn("[LobbyManager] Não achei POIs, praia (Terrain Sand) nem IlhaSpawns -- gere a ilha primeiro (IslandGenerator.Generate()).")
+				return
+			end
+			warn("[LobbyManager] Não achei POIs nem praia por raycast -- usando IlhaSpawns como fallback.")
 		end
-		warn("[LobbyManager] Não achei praia por raycast -- usando IlhaSpawns como fallback.")
 	end
 
+	local poiIndex = 0
 	local fallbackIndex = 0
 	for _, player in players do
 		local character = player.Character
@@ -246,12 +285,23 @@ local function teleportToIsland(players: { Player })
 			if monsterSpawn and player:GetAttribute("Role") == GameConfig.Roles.Monster then
 				-- Dentro da caverna o raycast de cima bateria no topo da
 				-- montanha, então usa a posição do marcador direto.
-				character:PivotTo(CFrame.new(monsterSpawn.Position + Vector3.new(0, 3, 0)))
+				local target = monsterSpawn.Position + Vector3.new(0, 3, 0)
+				prepareStream(player, target)
+				character:PivotTo(CFrame.new(target))
+			elseif #poiSpawns > 0 then
+				poiIndex += 1
+				local p = poiSpawns[((poiIndex - 1) % #poiSpawns) + 1]
+				local groundY = findGroundY(p.X, p.Z, p.Y)
+				local target = Vector3.new(p.X, groundY + 4, p.Z)
+				prepareStream(player, target)
+				character:PivotTo(CFrame.new(target))
 			elseif beachAnchor then
 				local x = beachAnchor.X + math.random(-12, 12)
 				local z = beachAnchor.Z + math.random(-12, 12)
 				local groundY = findGroundY(x, z, beachAnchor.Y)
-				character:PivotTo(CFrame.new(x, groundY + 4, z))
+				local target = Vector3.new(x, groundY + 4, z)
+				prepareStream(player, target)
+				character:PivotTo(CFrame.new(target))
 			else
 				-- Distribui em sequência; com mais jogadores que pontos, repete
 				-- os pontos (não deveria acontecer dentro de Players.Max).
@@ -275,12 +325,14 @@ local function teleportToIsland(players: { Player })
 	--
 	-- O require é preguiçoso: fora do modo de teste, o gameplay não passa a
 	-- depender de um módulo de Tools/.
-	if beachAnchor and GameConfig.Testing.ItemsNearSpawn then
-		local anchor = beachAnchor :: Vector3
-		task.spawn(function()
-			local ItemSpawner = require(script.Parent.Tools.ItemSpawner)
-			ItemSpawner.SpawnSampleNear(anchor)
-		end)
+	if GameConfig.Testing.ItemsNearSpawn then
+		local anchor = beachAnchor or poiSpawns[1]
+		if anchor then
+			task.spawn(function()
+				local ItemSpawner = require(script.Parent.Tools.ItemSpawner)
+				ItemSpawner.SpawnSampleNear(anchor)
+			end)
+		end
 	end
 end
 

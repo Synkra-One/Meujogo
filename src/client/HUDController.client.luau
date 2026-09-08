@@ -37,6 +37,8 @@ local roleText = SafeWait.Child(SafeWait.Child(mainHUD, "RoleFrame"), "RoleText"
 local spyCooldownFrame = SafeWait.Child(mainHUD, "SpyCooldownFrame") :: Frame
 local sabotageCooldownText = SafeWait.Child(spyCooldownFrame, "SabotageCooldownText") :: TextLabel
 local lethalCooldownText = SafeWait.Child(spyCooldownFrame, "LethalCooldownText") :: TextLabel
+local monsterCooldownFrame = SafeWait.Child(mainHUD, "MonsterCooldownFrame") :: Frame
+local teleportCooldownText = SafeWait.Child(monsterCooldownFrame, "TeleportCooldownText") :: TextLabel
 
 local function formatDuration(seconds: number): string
 	seconds = math.max(0, math.ceil(seconds))
@@ -76,6 +78,7 @@ local function refreshRoleText()
 	local role = LocalPlayer:GetAttribute("Role")
 	roleText.Text = "Papel: " .. ((type(role) == "string") and role or "--")
 	spyCooldownFrame.Visible = role == GameConfig.Roles.Spy
+	monsterCooldownFrame.Visible = role == GameConfig.Roles.Monster
 end
 
 LocalPlayer:GetAttributeChangedSignal("Role"):Connect(refreshRoleText)
@@ -86,11 +89,12 @@ LocalPlayer:GetAttributeChangedSignal("Role"):Connect(refreshRoleText)
 
 local sabotageReadyAt = 0
 local lethalReadyAt = 0
+local teleportReadyAt = 0
 
-local function refreshCooldownText(label: TextLabel, actionName: string, readyAt: number)
+local function refreshCooldownText(label: TextLabel, actionName: string, readyAt: number, readyWord: string?)
 	local remaining = readyAt - os.time()
 	if remaining <= 0 then
-		label.Text = string.format("%s: pronta", actionName)
+		label.Text = string.format("%s: %s", actionName, readyWord or "pronta")
 	else
 		label.Text = string.format("%s: %s", actionName, formatDuration(remaining))
 	end
@@ -99,6 +103,7 @@ end
 local function refreshCooldownTexts()
 	refreshCooldownText(sabotageCooldownText, "Sabotagem", sabotageReadyAt)
 	refreshCooldownText(lethalCooldownText, "Habilidade letal", lethalReadyAt)
+	refreshCooldownText(teleportCooldownText, "Teleporte (Q)", teleportReadyAt, "pronto")
 end
 
 Remotes.CooldownUpdate.OnClientEvent:Connect(function(abilityName: string, readyAt: number)
@@ -108,6 +113,13 @@ Remotes.CooldownUpdate.OnClientEvent:Connect(function(abilityName: string, ready
 		lethalReadyAt = readyAt
 	end
 	refreshCooldownTexts()
+end)
+
+Remotes.MonsterTeleport.OnClientEvent:Connect(function(kind: string, value: any)
+	if kind == "cooldown" then
+		teleportReadyAt = tonumber(value) or 0
+		refreshCooldownTexts()
+	end
 end)
 
 --------------------------------------------------------------------------------

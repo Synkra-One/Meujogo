@@ -38,6 +38,7 @@ local SafeAttribute = require(ReplicatedStorage.Modules.SafeAttribute)
 local StatScaling = require(ReplicatedStorage.Modules.StatScaling)
 local SoundManager = require(script.Parent.SoundManager)
 local DamageSystem = require(script.Parent.DamageSystem)
+local PowerStatus = require(script.Parent.SurvivorPowerStatus)
 
 local WeaponSystem = {}
 
@@ -96,31 +97,41 @@ end
 
 local function onMeleeActivated(player: Player, range: number, weaponName: string, damage: number)
 	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if not humanoid or humanoid.Health <= 0 or player:GetAttribute("Amarrado") == true then return end
+	if character and character:GetAttribute("PowerStunned") == true then return end
+	if character and character:GetAttribute("ShadowRushBusy") == true then return end
 	local root = character and getRootPart(character)
 	if not root then
 		return
 	end
 
+	local empowered = PowerStatus.BeginAttack(player)
 	local monsterRoot = findMonsterInFrontOf(root, range)
 	if not monsterRoot then
 		return
 	end
 
-	pushMonster(monsterRoot, root.Position, player)
+	local monsterModel = monsterRoot:FindFirstAncestorOfClass("Model")
+	if not monsterModel then return end
 
 	-- Dano de verdade só se configurado (GameConfig.Weapons.*Damage > 0);
 	-- senão a arma continua sendo só empurrão, como era antes.
-	if damage > 0 then
-		local monsterModel = monsterRoot:FindFirstAncestorOfClass("Model")
-		local applied = DamageSystem.Apply(monsterModel, damage, { Source = player, Cause = weaponName })
+	if damage > 0 or empowered then
+		local applied, _, blocked = DamageSystem.Apply(monsterModel, damage, { Source = player, Cause = weaponName, Empowered = empowered })
+		if blocked then return end
 		print(string.format("[WeaponSystem] %s acertou o Monstro com %s (-%d HP).", player.Name, weaponName, applied))
 	else
+		if PowerStatus.BlockAttack(monsterModel) then return end
 		print(string.format("[WeaponSystem] %s acertou o Monstro com %s (empurrão placeholder).", player.Name, weaponName))
 	end
+	if not PowerStatus.Active(monsterModel, "PowerStunImmune") then pushMonster(monsterRoot, root.Position, player) end
 end
 
 local function onPedraActivated(player: Player)
 	local character = player.Character
+	if character and character:GetAttribute("PowerStunned") == true then return end
+	if character and character:GetAttribute("ShadowRushBusy") == true then return end
 	local root = character and getRootPart(character)
 	if not root then
 		return

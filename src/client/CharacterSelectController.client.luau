@@ -24,6 +24,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local CharacterData = require(ReplicatedStorage.Modules.CharacterData)
+local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local LoadoutData = require(ReplicatedStorage.Modules.LoadoutData)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local SafeWait = require(ReplicatedStorage.Modules.SafeWait)
@@ -126,7 +127,7 @@ local function sideLabel(text: string, order: number): TextLabel
 end
 sideLabel("PARTICIPANTES", 1)
 local memberLabel = sideLabel("", 2)
-sideLabel("SKIN · visual do sobrevivente", 3)
+sideLabel("SKIN · visual humano", 3)
 local skinButtons: { [string]: TextButton } = {}
 local perkButtons: { [string]: TextButton } = {}
 
@@ -153,20 +154,45 @@ sideLabel("PERK · escolha um bônus", 10)
 for index, perk in LoadoutData.Perks do
 	perkButtons[perk.Id] = optionButton(perk.Id, perk.Nome, perk.Descricao, 10 + index, "Perk")
 end
+local devRoleTitle = sideLabel("DEV · papel da partida", 20)
+local devRoleHint = sideLabel("Escolha um papel para testar sem depender do sorteio. Só aparece para dev autorizado.", 21)
+local devRoleButtons: { [string]: TextButton } = {}
+
+local function devRoleButton(id: string, name: string, description: string, order: number): TextButton
+	return optionButton(id, name, description, order, "DevRole")
+end
+
+devRoleButtons.Random = devRoleButton("Random", "Sorteio normal", "Deixa o jogo sortear normalmente.", 22)
+devRoleButtons[GameConfig.Roles.Monster] = devRoleButton(GameConfig.Roles.Monster, "Jason / Monstro", "Força você a nascer como Jason na caverna.", 23)
+devRoleButtons[GameConfig.Roles.Survivor] = devRoleButton(GameConfig.Roles.Survivor, "Sobrevivente", "Força gameplay humana de sobrevivência.", 24)
+devRoleButtons[GameConfig.Roles.Spy] = devRoleButton(GameConfig.Roles.Spy, "Espião", "Força gameplay de sabotagem.", 25)
+
+local selectingCharacter = false
 
 local function layoutPanels()
 	local width = overlay.AbsoluteSize.X
 	local bodyHeight = math.max(80, overlay.AbsoluteSize.Y - 210)
+	cardArea.Visible = selectingCharacter
 	if width >= 900 then
-		cardArea.Position = UDim2.fromOffset(16, 84)
-		cardArea.Size = UDim2.new(0.68, -24, 0, bodyHeight)
-		side.Position = UDim2.new(0.68, 0, 0, 84)
-		side.Size = UDim2.new(0.32, -16, 0, bodyHeight)
+		if selectingCharacter then
+			cardArea.Position = UDim2.fromOffset(16, 84)
+			cardArea.Size = UDim2.new(0.68, -24, 0, bodyHeight)
+			side.Position = UDim2.new(0.68, 0, 0, 84)
+			side.Size = UDim2.new(0.32, -16, 0, bodyHeight)
+		else
+			side.Position = UDim2.fromOffset(120, 84)
+			side.Size = UDim2.new(1, -240, 0, bodyHeight)
+		end
 	else
-		cardArea.Position = UDim2.fromOffset(12, 84)
-		cardArea.Size = UDim2.new(1, -24, 0, math.floor(bodyHeight * 0.6))
-		side.Position = UDim2.fromOffset(12, 92 + math.floor(bodyHeight * 0.6))
-		side.Size = UDim2.new(1, -24, 0, math.floor(bodyHeight * 0.4) - 8)
+		if selectingCharacter then
+			cardArea.Position = UDim2.fromOffset(12, 84)
+			cardArea.Size = UDim2.new(1, -24, 0, math.floor(bodyHeight * 0.6))
+			side.Position = UDim2.fromOffset(12, 92 + math.floor(bodyHeight * 0.6))
+			side.Size = UDim2.new(1, -24, 0, math.floor(bodyHeight * 0.4) - 8)
+		else
+			side.Position = UDim2.fromOffset(12, 84)
+			side.Size = UDim2.new(1, -24, 0, bodyHeight)
+		end
 	end
 	local grid = cardArea:FindFirstChildOfClass("UIGridLayout")
 	if grid then
@@ -360,7 +386,7 @@ local function buildCard(character: CharacterData.Character, order: number)
 	status.Parent = button
 
 	button.Activated:Connect(function()
-		if not inRoom then return end
+		if not selectingCharacter then return end
 		local ownerId = roster[character.Id]
 		if ownerId and ownerId ~= LocalPlayer.UserId then
 			return -- já é de outro
@@ -380,9 +406,24 @@ end
 --------------------------------------------------------------------------------
 
 local function setVisible(visible: boolean)
-	visible = visible and inRoom
+	visible = visible and (inRoom or selectingCharacter)
 	gui.Enabled = visible
-	reopen.Visible = inRoom and not visible
+	reopen.Visible = (inRoom or selectingCharacter) and not visible
+	readyButton.Visible = inRoom
+	leaveButton.Visible = inRoom
+	cardArea.Visible = selectingCharacter
+
+	if selectingCharacter then
+		title.Text = "ESCOLHA SEU PERSONAGEM"
+		subtitle.Text = "Seu papel já foi sorteado. Cada personagem humano só pode ser escolhido por 1 jogador."
+		closeButton.Text = "Escolher depois"
+		reopen.Text = "Escolher personagem  [C]"
+	else
+		title.Text = "SALA DE ESPERA"
+		closeButton.Text = "Ver sala"
+		reopen.Text = "Preparar skin/perk  [C]"
+	end
+	layoutPanels()
 
 	-- LIBERA O CURSOR enquanto a tela está aberta. A câmera de ombro
 	-- (SmoothShiftLock, pacote de movimento) trava a mira no centro; ela lê
@@ -437,10 +478,13 @@ local function refreshCards()
 		end
 	end
 
-	if myPick then
+	if not selectingCharacter then
+		footer.Text = "O papel será sorteado quando a partida começar. Se você cair como Sobrevivente ou Espião, a escolha de personagem abre depois do aviso. Se cair como Monstro, você vira Jason automaticamente."
+		footer.TextColor3 = Color3.fromRGB(220, 190, 120)
+	elseif myPick then
 		local character = CharacterData.GetById(myPick)
 		footer.Text = string.format(
-			"%s (%s) reservado para você. Ajuste sua skin e perk e marque Pronto.",
+			"%s (%s) reservado para você.",
 			character and character.Nome or myPick,
 			character and character.Apelido or ""
 		)
@@ -468,7 +512,7 @@ readyButton.Activated:Connect(function() Remotes.WaitingRoom:FireServer("Ready")
 leaveButton.Activated:Connect(function() Remotes.WaitingRoom:FireServer("Leave") end)
 
 UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
-	if gameProcessed or not inRoom then
+	if gameProcessed or (not inRoom and not selectingCharacter) then
 		return
 	end
 	if input.KeyCode == Enum.KeyCode.C then
@@ -485,8 +529,11 @@ Remotes.WaitingRoom.OnClientEvent:Connect(function(newSnapshot)
 	for _, member in snapshot.members do
 		if member.userId == LocalPlayer.UserId then me = member end
 		local character = CharacterData.GetById(member.characterId)
+		local devSuffix = if member.canDevRole == true and type(member.devRole) == "string"
+			then "\nDEV: " .. member.devRole
+			else ""
 		table.insert(lines, string.format("%s %s\n%s", if member.ready then "✓" else "○", member.name,
-			if character then character.Nome else "Escolhendo personagem…"))
+			(if character then character.Nome else "Aguardando sorteio do papel…") .. devSuffix))
 	end
 	inRoom = snapshot.state == "Waiting" and me ~= nil
 	roster = snapshot.roster
@@ -499,11 +546,45 @@ Remotes.WaitingRoom.OnClientEvent:Connect(function(newSnapshot)
 	for id, button in perkButtons do
 		button.BackgroundColor3 = if me and me.perkId == id then Color3.fromRGB(43, 92, 68) else Color3.fromRGB(32, 38, 43)
 	end
+	local canDevRole = me ~= nil and me.canDevRole == true and inRoom
+	devRoleTitle.Visible = canDevRole
+	devRoleHint.Visible = canDevRole
+	local selectedDevRole = if me and type(me.devRole) == "string" then me.devRole else "Random"
+	for id, button in devRoleButtons do
+		button.Visible = canDevRole
+		button.BackgroundColor3 = if selectedDevRole == id then Color3.fromRGB(109, 45, 45) else Color3.fromRGB(32, 38, 43)
+	end
 	refreshCards()
 	setVisible(inRoom and (not wasInRoom or gui.Enabled))
 end)
 
+local function refreshCharacterSelectionState()
+	local role = LocalPlayer:GetAttribute("Role")
+	selectingCharacter = LocalPlayer:GetAttribute("CharacterSelectOpen") == true
+		and type(role) == "string"
+		and role ~= GameConfig.Roles.Monster
+	refreshCards()
+	if selectingCharacter then
+		setVisible(true)
+	elseif not inRoom and gui.Enabled then
+		setVisible(false)
+	else
+		layoutPanels()
+	end
+end
+
+LocalPlayer:GetAttributeChangedSignal("CharacterSelectOpen"):Connect(refreshCharacterSelectionState)
+LocalPlayer:GetAttributeChangedSignal("Role"):Connect(refreshCharacterSelectionState)
+
 RunService.Heartbeat:Connect(function()
+	if selectingCharacter then
+		local role = LocalPlayer:GetAttribute("Role")
+		subtitle.Text = string.format(
+			"Você é %s. Escolha um personagem humano livre para aplicar seus atributos.",
+			if type(role) == "string" then role else "participante"
+		)
+		return
+	end
 	if not inRoom or not snapshot then return end
 	if snapshot.endsAt > 0 then
 		local seconds = math.max(0, math.ceil(snapshot.endsAt - Workspace:GetServerTimeNow()))
@@ -520,5 +601,6 @@ end)
 
 refreshCards()
 setVisible(false)
+refreshCharacterSelectionState()
 -- Handshake após conectar os listeners: cobre entrada tardia e cliente lento.
 Remotes.WaitingRoom:FireServer("Sync")

@@ -42,6 +42,14 @@ export type Character = {
 	Apelido: string,
 	Stats: Stats,
 	PassivaUnica: string?,
+	Role: string?,
+	-- Active survivor slots: Q / E. Cooldowns in seconds, enforced by the server.
+	PowerId1: string?,
+	PowerName1: string?,
+	PowerCooldown1: number?,
+	PowerId2: string?,
+	PowerName2: string?,
+	PowerCooldown2: number?,
 }
 
 local CharacterData = {}
@@ -89,6 +97,12 @@ CharacterData.Characters = {
 			Forca = 40,
 			Sorte = 58,
 		},
+		PowerId1 = "RajadaFinal",
+		PowerName1 = "RajadaFinal",
+		PowerCooldown1 = 90,
+		PowerId2 = "SaltoLongo",
+		PowerName2 = "SaltoLongo",
+		PowerCooldown2 = 60,
 	},
 	{
 		Id = "DiegoFerreira",
@@ -103,6 +117,12 @@ CharacterData.Characters = {
 			Forca = 30,
 			Sorte = 53,
 		},
+		PowerId1 = "ConsertoRelampago",
+		PowerName1 = "ConsertoRelampago",
+		PowerCooldown1 = 240,
+		PowerId2 = "ArmadilhaImprovisada",
+		PowerName2 = "ArmadilhaImprovisada",
+		PowerCooldown2 = 150,
 	},
 	{
 		Id = "MarinaAlbuquerque",
@@ -117,6 +137,12 @@ CharacterData.Characters = {
 			Forca = 20,
 			Sorte = 43,
 		},
+		PowerId1 = "TiroCerteiro",
+		PowerName1 = "TiroCerteiro",
+		PowerCooldown1 = 120,
+		PowerId2 = "InstintoDeCacadora",
+		PowerName2 = "InstintoDeCacadora",
+		PowerCooldown2 = 180,
 	},
 	{
 		Id = "KevinNakamura",
@@ -131,6 +157,12 @@ CharacterData.Characters = {
 			Forca = 20,
 			Sorte = 12,
 		},
+		PowerId1 = "MantoDeSombras",
+		PowerName1 = "MantoDeSombras",
+		PowerCooldown1 = 150,
+		PowerId2 = "PassoFantasma",
+		PowerName2 = "PassoFantasma",
+		PowerCooldown2 = 100,
 	},
 	{
 		Id = "SofiaRibeiro",
@@ -146,6 +178,12 @@ CharacterData.Characters = {
 			Sorte = 84,
 		},
 		PassivaUnica = "Cura 40% mais eficaz com Chocolate e Bandagem",
+		PowerId1 = "AdrenalinaDeEmergencia",
+		PowerName1 = "AdrenalinaDeEmergencia",
+		PowerCooldown1 = 200,
+		PowerId2 = "EscudoProtetor",
+		PowerName2 = "EscudoProtetor",
+		PowerCooldown2 = 160,
 	},
 	{
 		Id = "BrunoCarvalho",
@@ -161,6 +199,12 @@ CharacterData.Characters = {
 			Sorte = 20,
 		},
 		PassivaUnica = "Carrega o dobro de material por slot de inventário",
+		PowerId1 = "InvestidaBrutal",
+		PowerName1 = "InvestidaBrutal",
+		PowerCooldown1 = 120,
+		PowerId2 = "PosturaInabalavel",
+		PowerName2 = "PosturaInabalavel",
+		PowerCooldown2 = 140,
 	},
 	{
 		Id = "CamilaDuarte",
@@ -175,6 +219,34 @@ CharacterData.Characters = {
 			Forca = 33,
 			Sorte = 96,
 		},
+		PowerId1 = "GolpeDeSorte",
+		PowerName1 = "GolpeDeSorte",
+		PowerCooldown1 = 150,
+		PowerId2 = "IntuicaoSortuda",
+		PowerName2 = "IntuicaoSortuda",
+		PowerCooldown2 = 200,
+	},
+} :: { Character }
+
+-- Personagens exclusivos do papel Monstro. Ficam fora de `Characters` para
+-- não aparecerem na escolha dos Sobreviventes/Espião, mas entram no índice
+-- geral (`GetById`) para aplicar atributos/nome normalmente.
+CharacterData.MonsterCharacters = {
+	{
+		Id = "Jason",
+		Nome = "Jason",
+		Apelido = "O Predador da Caverna",
+		Role = "Monstro",
+		Stats = {
+			Velocidade = 75,
+			Stamina = 65,
+			Compostura = 85,
+			Furtividade = 10,
+			Reparo = 0,
+			Forca = 100,
+			Sorte = 15,
+		},
+		PassivaUnica = "Nasce na caverna e caça os sobreviventes.",
 	},
 } :: { Character }
 
@@ -183,8 +255,19 @@ CharacterData.Characters = {
 --------------------------------------------------------------------------------
 
 local byId: { [string]: Character } = {}
+local directIndex = CharacterData :: any
 for _, character in CharacterData.Characters do
 	byId[character.Id] = character
+	directIndex[character.Id] = character
+end
+for _, character in CharacterData.MonsterCharacters do
+	byId[character.Id] = character
+	directIndex[character.Id] = character
+end
+
+function CharacterData.IsMonsterCharacter(id: unknown): boolean
+	local character = CharacterData.GetById(id)
+	return character ~= nil and character.Role == "Monstro"
 end
 
 --[[ GetById(id) -- devolve o personagem, ou nil se o id não existir. ]]
@@ -216,7 +299,12 @@ end
 -- Validação do orçamento (roda no require -- falha cedo e com mensagem clara)
 --------------------------------------------------------------------------------
 
-for _, character in CharacterData.Characters do
+local allCharacters = table.clone(CharacterData.Characters)
+for _, character in CharacterData.MonsterCharacters do
+	table.insert(allCharacters, character)
+end
+
+for _, character in allCharacters do
 	local total = CharacterData.SumStats(character)
 	if total ~= CharacterData.TotalPoints then
 		error(

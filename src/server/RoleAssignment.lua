@@ -36,15 +36,52 @@ local function shuffle(list: { Player }): { Player }
 	return shuffled
 end
 
+local function isValidRole(role: unknown): boolean
+	return role == GameConfig.Roles.Survivor
+		or role == GameConfig.Roles.Monster
+		or role == GameConfig.Roles.Spy
+end
+
+local function devForcedRole(player: Player): string?
+	if GameConfig.Testing.DevRoleChooser ~= true then
+		return nil
+	end
+	local role = player:GetAttribute("DevForceRole")
+	return if isValidRole(role) then role :: string else nil
+end
+
+local function pickRequested(shuffled: { Player }, role: string, taken: { [Player]: boolean }): Player?
+	for _, player in shuffled do
+		if not taken[player] and devForcedRole(player) == role then
+			return player
+		end
+	end
+	return nil
+end
+
+local function pickAny(shuffled: { Player }, taken: { [Player]: boolean }): Player?
+	for _, player in shuffled do
+		if not taken[player] and devForcedRole(player) == nil then
+			return player
+		end
+	end
+	for _, player in shuffled do
+		if not taken[player] then
+			return player
+		end
+	end
+	return nil
+end
+
 --[[
 	AssignRoles(players)
-	Embaralha `players` e distribui: posição 1 -> Monstro, posição 2 -> Espiao,
-	demais -> Sobrevivente. Funciona com qualquer lista de tamanho >= 2,
-	cobrindo a faixa de partida (GameConfig.Players.Min..Max = 6..10).
+	Distribui: 1 Monstro, 1 Espiao, resto Sobrevivente.
 
-	MODO DE TESTE: com GameConfig.Testing.ForceRole preenchido, todo mundo
-	recebe esse papel e o sorteio (e a exigência de 2+ jogadores) é pulado
-	-- é o que permite testar a partida sozinho. Ver GameConfig.Testing.
+	MODO DE TESTE:
+	  - GameConfig.Testing.ForceRole força todo mundo no mesmo papel;
+	  - Player.DevForceRole, definido pela sala dev, força o papel daquele
+	    jogador específico quando possível;
+	  - em teste solo, DevForceRole vence a sorte.
 ]]
 function RoleAssignment.AssignRoles(players: { Player })
 	local forcedRole = GameConfig.Testing.ForceRole
@@ -56,15 +93,32 @@ function RoleAssignment.AssignRoles(players: { Player })
 		return
 	end
 
+	if #players == 1 and GameConfig.Testing.SoloStart then
+		local roles = { GameConfig.Roles.Survivor, GameConfig.Roles.Monster, GameConfig.Roles.Spy }
+		local role = devForcedRole(players[1]) or roles[rng:NextInteger(1, #roles)]
+		players[1]:SetAttribute("Role", role)
+		print(string.format("[RoleAssignment] MODO DE TESTE SOLO: %s caiu como '%s'.", players[1].Name, role))
+		return
+	end
+
 	assert(#players >= 2, "AssignRoles precisa de pelo menos 2 jogadores (1 Monstro + 1 Espiao)")
 
 	local shuffled = shuffle(players)
+	local taken: { [Player]: boolean } = {}
+	local monster = pickRequested(shuffled, GameConfig.Roles.Monster, taken) or pickAny(shuffled, taken)
+	if monster then
+		taken[monster] = true
+	end
+	local spy = pickRequested(shuffled, GameConfig.Roles.Spy, taken) or pickAny(shuffled, taken)
+	if spy then
+		taken[spy] = true
+	end
 
-	for index, player in shuffled do
+	for _, player in shuffled do
 		local role: string
-		if index == 1 then
+		if player == monster then
 			role = GameConfig.Roles.Monster
-		elseif index == 2 then
+		elseif player == spy then
 			role = GameConfig.Roles.Spy
 		else
 			role = GameConfig.Roles.Survivor

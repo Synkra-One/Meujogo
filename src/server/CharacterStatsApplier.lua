@@ -42,6 +42,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local CharacterData = require(ReplicatedStorage.Modules.CharacterData)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local StatScaling = require(ReplicatedStorage.Modules.StatScaling)
@@ -50,6 +51,8 @@ local RoundManager = require(script.Parent.RoundManager)
 
 local CharacterStatsApplier = {}
 CharacterStatsApplier.SelectionChanged = Instance.new("BindableEvent")
+
+local MONSTER_CHARACTER_ID = "Jason"
 
 -- characterId -> Player que pegou. Fonte da verdade da exclusividade.
 local takenBy: { [string]: Player } = {}
@@ -163,6 +166,22 @@ function CharacterStatsApplier.ClearChoice(player: Player)
 	broadcastRoster()
 end
 
+local function canSelectDuringRound(player: Player, characterId: unknown): boolean
+	if player:GetAttribute("InRound") ~= true
+		or player:GetAttribute("CharacterSelectOpen") ~= true
+		or ReplicatedStorage:GetAttribute("MatchState") ~= "Playing"
+		or RoundManager.IsRoundActive() ~= true then
+		return false
+	end
+	if player:GetAttribute("Role") == GameConfig.Roles.Monster then
+		return false
+	end
+	if CharacterData.IsMonsterCharacter(characterId) then
+		return false
+	end
+	return true
+end
+
 local function setChoice(player: Player, characterId: string): boolean
 	local owner = takenBy[characterId]
 	if owner and owner ~= player and owner.Parent then
@@ -176,10 +195,9 @@ local function setChoice(player: Player, characterId: string): boolean
 end
 
 local function onSelect(player: Player, characterId: unknown)
-	-- Apenas participantes da sala em preparação podem reservar personagens.
-	if player:GetAttribute("InWaitingRoom") ~= true
-		or ReplicatedStorage:GetAttribute("MatchState") ~= "Waiting"
-		or RoundManager.IsRoundActive() then
+	-- A escolha de personagem agora acontece DEPOIS do sorteio do papel. Antes
+	-- da partida, a sala só prepara skin/perk/pronto.
+	if not canSelectDuringRound(player, characterId) then
 		return
 	end
 	if not CharacterData.Exists(characterId) then
@@ -187,7 +205,7 @@ local function onSelect(player: Player, characterId: unknown)
 	end
 	if choiceOf[player] == characterId then return end
 	if setChoice(player, characterId :: string) then
-		player:SetAttribute("MatchReady", false)
+		player:SetAttribute("CharacterSelectOpen", nil)
 		CharacterStatsApplier.SelectionChanged:Fire(player)
 		broadcastRoster()
 	else
@@ -269,14 +287,28 @@ function CharacterStatsApplier.Init()
 		broadcastRoster()
 	end)
 
-	-- A sala exige escolha antes de Pronto. Reaplica os atributos no respawn.
+	-- Depois do sorteio: Jason automático para Monstro; humanos escolhem
+	-- personagem quando a partida já está em Playing.
 	RoundManager.RoundPrepared.Event:Connect(function(players: { Player })
 		for _, player in players do
-			local chosen = choiceOf[player]
-			if chosen then
-				CharacterStatsApplier.ApplyCharacter(player, chosen)
+			if player:GetAttribute("Role") == GameConfig.Roles.Monster then
+				if setChoice(player, MONSTER_CHARACTER_ID) then
+					player:SetAttribute("CharacterSelectOpen", nil)
+				end
+			else
+				local chosen = choiceOf[player]
+				if chosen then
+					CharacterStatsApplier.ApplyCharacter(player, chosen)
+					player:SetAttribute("CharacterSelectOpen", nil)
+				else
+					player:SetAttribute("CharacterSelectOpen", true)
+					if player.Character then
+						applyToCharacter(player, player.Character)
+					end
+				end
 			end
 		end
+		broadcastRoster()
 	end)
 
 	print(

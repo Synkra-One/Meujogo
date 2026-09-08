@@ -61,7 +61,10 @@ As animações OTS são R6 e pertencem a terceiros:
 | Holster | 17837420732 |
 | Aim | 17834125927 |
 | Fire | 17861277580 |
-| Reload | 17837428175 |
+| Reload | 100982287999803 |
+
+Pickups com ActionText `Pegar`/`Pegar munição` tocam a animação local
+`103236301003312` ao confirmar o `E`, junto de um efeito sonoro curto local.
 
 A autorização destes assets na experiência não pode ser confirmada pelo build.
 Se o Output mostrar falha de carregamento, autorize os assets para a experiência

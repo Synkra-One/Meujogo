@@ -87,7 +87,9 @@ local function weakenMonster(character: Model, sourcePosition: Vector3)
 	local state = weakenState[character]
 	if not state then
 		state = {
-			baseWalkSpeed = humanoid.WalkSpeed,
+			baseWalkSpeed = if character:GetAttribute("ShadowRushBusy") == true
+				then GameConfig.Movement.WalkSpeed * GameConfig.Monster.SpeedMultiplier
+				else humanoid.WalkSpeed,
 			weakenedUntil = 0,
 		}
 		weakenState[character] = state
@@ -106,7 +108,7 @@ local function weakenMonster(character: Model, sourcePosition: Vector3)
 
 			if weakenState[character] == state then
 				weakenState[character] = nil
-				if humanoid.Parent then
+				if humanoid.Parent and character:GetAttribute("ShadowRushBusy") ~= true then
 					humanoid.WalkSpeed = state.baseWalkSpeed
 				end
 			end

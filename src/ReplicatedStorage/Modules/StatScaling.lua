@@ -111,6 +111,20 @@ function StatScaling.DamageTakenMultiplier(player: Player?): number
 	return StatScaling.Lerp(StatScaling.Of(player, "Compostura"), CFG.DamageTaken) * perkMultiplier(player, "DamageTaken")
 end
 
+-- Fear usa a mesma escala/prefixo/fallback dos demais atributos. Não publica
+-- outro Composure e não muda as faixas existentes de vida/dano.
+function StatScaling.FearGainMultiplier(player: Player?): number
+	local t = StatScaling.Lerp(StatScaling.Of(player, "Compostura"), { Min = 0, Max = 1 })
+	local range = GameConfig.Fear.ComposureGain
+	return range.Min + (range.Max - range.Min) * t ^ GameConfig.Fear.ComposureGainExponent
+end
+
+function StatScaling.FearRecoveryMultiplier(player: Player?): number
+	local t = StatScaling.Lerp(StatScaling.Of(player, "Compostura"), { Min = 0, Max = 1 })
+	local range = GameConfig.Fear.ComposureRecovery
+	return range.Min + (range.Max - range.Min) * t ^ GameConfig.Fear.ComposureRecoveryExponent
+end
+
 --[[ Força -> multiplicador do dano CAUSADO. ]]
 function StatScaling.DamageDealtMultiplier(player: Player?): number
 	return StatScaling.Lerp(StatScaling.Of(player, "Forca"), CFG.DamageDealt)

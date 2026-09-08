@@ -65,6 +65,17 @@ local rng = Random.new()
 -- Sobreviventes (ver nota de design acima).
 local collectedPieces: { [string]: boolean } = {}
 local radioCompleted = false
+local tuningProgress = 0
+local interacting: { [Player]: { tower: BasePart, untilTime: number } } = {}
+
+local function completeRadio()
+	if radioCompleted then return end
+	radioCompleted = true
+	tuningProgress = 100
+	Remotes.ObjectiveProgress:FireAllClients("RadioSintonia", 100, 100)
+	Remotes.ObjectiveProgress:FireAllClients("RadioCompleto", 1, 1)
+	RadioObjective.RescueCountdownStarted:Fire(GameConfig.RadioObjective.RescueCountdownDuration)
+end
 
 local function hasAllPieces(): boolean
 	for _, tipo in REQUIRED_PIECES do
@@ -169,20 +180,45 @@ local function attemptTuning(player: Player, tower: BasePart)
 	-- REPARO -> multiplica a chance de sintonizar (teto de 95%, pra nunca ser
 	-- garantido). Diego (Reparo 96) acerta ~96% das vezes; Marina (Reparo 10)
 	-- ~35%. É o atributo mais decisivo do objetivo do Rádio.
-	local chance = math.min(0.95, GameConfig.RadioObjective.SuccessChance * StatScaling.RepairMultiplier(player))
+	local chance = math.min(0.95, GameConfig.RadioObjective.SuccessChance * StatScaling.RepairMultiplier(player) + tuningProgress / 100)
 	local success = rng:NextNumber() <= chance
 
 	if success then
-		radioCompleted = true
-		Remotes.ObjectiveProgress:FireAllClients("RadioCompleto", 1, 1)
+		completeRadio()
 		print(string.format("[RadioObjective] %s sintonizou o rádio com sucesso!", player.Name))
 
-		RadioObjective.RescueCountdownStarted:Fire(GameConfig.RadioObjective.RescueCountdownDuration)
 		print(string.format("[RadioObjective] Contagem de vitória por resgate iniciada (%ds).", GameConfig.RadioObjective.RescueCountdownDuration))
 	else
 		print(string.format("[RadioObjective] %s falhou a sintonia do rádio.", player.Name))
 		RadioObjective.TuningFailed:Fire(tower.Position)
 	end
+end
+
+local function canInteract(player: Player, tower: BasePart): boolean
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if player:GetAttribute("InRound") ~= true or player:GetAttribute("Role") ~= GameConfig.Roles.Survivor
+		or player:GetAttribute("Eliminado") == true or player:GetAttribute("Amarrado") == true
+		or not humanoid or humanoid.Health <= 0 or not root or not root:IsA("BasePart")
+		or character:GetAttribute("PowerStunned") == true or not tower:IsDescendantOf(Workspace)
+		or (root.Position - tower.Position).Magnitude > 12 then return false end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { character, tower }
+	params.RespectCanCollide = true
+	return Workspace:Raycast(root.Position, tower.Position - root.Position, params) == nil
+end
+
+-- Adds exactly 25 percentage points to tuning, never fabricates missing pieces.
+function RadioObjective.ApplyPowerRepair(player: Player): BasePart?
+	local state = interacting[player]
+	if not state or state.untilTime < Workspace:GetServerTimeNow() or radioCompleted or not hasAllPieces()
+		or not canInteract(player, state.tower) then return nil end
+	tuningProgress = math.min(100, tuningProgress + 25)
+	Remotes.ObjectiveProgress:FireAllClients("RadioSintonia", tuningProgress, 100)
+	if tuningProgress >= 100 then completeRadio() end
+	return state.tower
 end
 
 local function setupTowerPrompt()
@@ -200,8 +236,16 @@ local function setupTowerPrompt()
 		prompt.Parent = tower
 	end
 
+	prompt.HoldDuration = 2
+	prompt.MaxActivationDistance = 10
+	prompt.PromptButtonHoldBegan:Connect(function(player)
+		if canInteract(player, tower :: BasePart) then
+			interacting[player] = { tower = tower :: BasePart, untilTime = Workspace:GetServerTimeNow() + 3 }
+		end
+	end)
+	prompt.PromptButtonHoldEnded:Connect(function(player) interacting[player] = nil end)
 	prompt.Triggered:Connect(function(playerWhoTriggered)
-		attemptTuning(playerWhoTriggered, tower :: BasePart)
+		if canInteract(playerWhoTriggered, tower :: BasePart) then attemptTuning(playerWhoTriggered, tower :: BasePart) end
 	end)
 end
 
@@ -233,6 +277,8 @@ end
 function RadioObjective.Reset()
 	table.clear(collectedPieces)
 	radioCompleted = false
+	tuningProgress = 0
+	table.clear(interacting)
 end
 
 --[[
@@ -241,6 +287,7 @@ end
 	boot do servidor.
 ]]
 function RadioObjective.Init()
+	Players.PlayerRemoving:Connect(function(player) interacting[player] = nil end)
 	forEachTagged(Workspace, "PecaRadio", watchPiece)
 	setupTowerPrompt()
 end

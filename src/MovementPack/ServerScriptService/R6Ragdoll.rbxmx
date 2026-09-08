@@ -27,7 +27,7 @@ local function SetupRagdoll(char)
 	CollectionService:AddTag(char,"Rig")
 	if game.Players:GetPlayerFromCharacter(char) then
 		local humanoid = char.Humanoid
-		char.Head.Size = Vector3.new(1, 1, 1)
+		-- Preserve the head dimensions authored in StarterCharacter.
 		humanoid.BreakJointsOnDeath = false
 		humanoid.RequiresNeck = false
 

@@ -37,10 +37,16 @@ end
 function LobbyFiringRange.Init()
 	if initialized or not GameConfig.Testing.LobbyPistol then return end
 	initialized = true
-	local spawn = Workspace:FindFirstChild("LobbySpawn")
-	local assets = ReplicatedStorage:FindFirstChild("WeaponAssets")
-	local templates = assets and assets:FindFirstChild("Tools")
-	local template = templates and templates:FindFirstChild("Glock17")
+
+	local oldFolder = Workspace:FindFirstChild("TestePistolaLobby")
+	if oldFolder then
+		oldFolder:Destroy()
+	end
+
+	local spawn = Workspace:WaitForChild("LobbySpawn", 10)
+	local assets = ReplicatedStorage:WaitForChild("WeaponAssets", 10)
+	local templates = assets and assets:WaitForChild("Tools", 10)
+	local template = templates and templates:WaitForChild("Glock17", 10)
 	if not spawn or not spawn:IsA("BasePart") or not template or not template:IsA("Tool") then
 		warn("[LobbyFiringRange] LobbySpawn ou WeaponAssets/Tools/Glock17 ausente.")
 		return
@@ -50,7 +56,7 @@ function LobbyFiringRange.Init()
 	-- Origem no topo do piso, relativa ao lobby existente.
 	local origin = CFrame.new(spawn.Position.X, spawn.Position.Y - spawn.Size.Y / 2, spawn.Position.Z)
 	local dark, accent = Color3.fromRGB(36, 43, 49), Color3.fromRGB(209, 159, 68)
-	local bench = origin * CFrame.new(14, 0, -6)
+	local bench = origin * CFrame.new(9, 0, -5)
 	part(folder, "Bancada", Vector3.new(7, 0.4, 3), bench * CFrame.new(0, 2.6, 0), dark)
 	for _, x in { -2.8, 2.8 } do
 		part(folder, "Suporte", Vector3.new(0.35, 2.4, 2.4), bench * CFrame.new(x, 1.2, 0), dark)
@@ -60,9 +66,9 @@ function LobbyFiringRange.Init()
 	sign(plaque, "TESTE DE PISTOLA\nE PEGAR  •  1 EQUIPAR\nBOTÃO DIREITO MIRAR  •  R RECARREGAR", Enum.NormalId.Back)
 	local pad = part(folder, "BasePistola", Vector3.new(3, 0.08, 2.4), bench * CFrame.new(-1.65, 2.85, 0), Color3.fromRGB(18, 23, 27))
 	local status = sign(pad, "GLOCK 17\n17 CARTUCHOS", Enum.NormalId.Top)
-	part(folder, "FaixaDeTiro", Vector3.new(6, 0.03, 0.3), origin * CFrame.new(14, 0.02, -10), accent).CanCollide = false
-	part(folder, "Anteparo", Vector3.new(9, 8, 0.7), origin * CFrame.new(14, 4, -27), dark)
-	for _, x in { 9.5, 18.5 } do
+	part(folder, "FaixaDeTiro", Vector3.new(6, 0.03, 0.3), origin * CFrame.new(9, 0.02, -10), accent).CanCollide = false
+	part(folder, "Anteparo", Vector3.new(9, 8, 0.7), origin * CFrame.new(9, 4, -27), dark)
+	for _, x in { 4.5, 13.5 } do
 		part(folder, "ProtecaoLateral", Vector3.new(0.3, 6, 12), origin * CFrame.new(x, 3, -21), dark)
 	end
 
@@ -71,7 +77,7 @@ function LobbyFiringRange.Init()
 		local model = Instance.new("Model")
 		model.Name = "Alvo de treino"
 		model:SetAttribute("FirearmTestTarget", true)
-		local target = origin * CFrame.new(14, 0, -23)
+		local target = origin * CFrame.new(9, 0, -23)
 		local root = part(model, "HumanoidRootPart", Vector3.new(2, 2, 1), target * CFrame.new(0, 3, 0), dark)
 		root.Transparency, root.CanCollide, root.CanQuery = 1, false, false
 		local torso = part(model, "Torso", Vector3.new(2.6, 2.8, 0.7), target * CFrame.new(0, 3.2, 0), Color3.fromRGB(166, 171, 167))
@@ -137,6 +143,7 @@ function LobbyFiringRange.Init()
 		box.Destroying:Once(function() task.delay(5, createAmmo) end)
 	end
 	createAmmo()
+	print("[LobbyFiringRange] Bancada de teste criada no lobby com Glock17 e munição.")
 end
 
 return LobbyFiringRange

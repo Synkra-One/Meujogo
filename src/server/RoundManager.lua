@@ -181,7 +181,7 @@ local function startWinCheckLoop()
 		while roundActive do
 			local survivorsAlive = countAlive(GameConfig.Roles.Survivor)
 
-			if survivorsAlive <= GameConfig.Round.MonsterWinsAtSurvivorsAlive then
+			if #participants >= 2 and survivorsAlive <= GameConfig.Round.MonsterWinsAtSurvivorsAlive then
 				finishRound(
 					GameConfig.Roles.Monster,
 					string.format("Sobreviventes vivos: %d", survivorsAlive)
@@ -238,10 +238,18 @@ local function prepareRound(players: { Player })
 	escapeSucceeded = false
 	outcome = nil
 
+	local connected = {}
 	for _, player in players do
-		if player.Parent ~= Players then continue end
+		if player.Parent == Players then table.insert(connected, player) end
+	end
+	local minimum = if GameConfig.Testing.SoloStart then 1 else math.max(2, GameConfig.Players.Min)
+	assert(#connected >= minimum, "Jogadores insuficientes após preparar a partida.")
+	RoleAssignment.AssignRoles(connected)
+
+	for _, player in connected do
 		player:SetAttribute("InRound", true)
 		player:SetAttribute("Amarrado", false)
+		player:SetAttribute("CharacterSelectOpen", nil)
 		-- A marca de eliminado agora vive no Player (sobrevive ao respawn do
 		-- DeathRespawnHandler do pacote de movimento), então precisa ser
 		-- limpa aqui -- senão quem morreu na partida passada nasce eliminado.
@@ -249,13 +257,6 @@ local function prepareRound(players: { Player })
 		player:LoadCharacter()
 	end
 
-	local connected = {}
-	for _, player in players do
-		if player.Parent == Players then table.insert(connected, player) end
-	end
-	local minimum = if GameConfig.Testing.SoloStart then (if GameConfig.Testing.ForceRole then 1 else 2) else math.max(2, GameConfig.Players.Min)
-	assert(#connected >= minimum, "Jogadores insuficientes após preparar a partida.")
-	RoleAssignment.AssignRoles(connected)
 	participants = connected
 end
 
@@ -289,12 +290,6 @@ function RoundManager.StartRound(players: { Player })
 	participants = table.clone(players)
 	local ok, err = pcall(function()
 		assert(#participants > 0, "A sala está vazia.")
-		local seen: { [string]: boolean } = {}
-		for _, player in participants do
-			local id = player:GetAttribute("CharacterId")
-			assert(type(id) == "string" and not seen[id], "Cada participante precisa de um personagem exclusivo.")
-			seen[id :: string] = true
-		end
 		prepareRound(participants)
 	end)
 	if not ok then

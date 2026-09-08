@@ -181,7 +181,7 @@
         <Properties>
           <string name="Name">Reload</string>
           <Content name="AnimationContent">
-            <uri>rbxassetid://17837428175</uri>
+            <uri>rbxassetid://100982287999803</uri>
           </Content>
           <BinaryString name="AttributesSerialize" />
           <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -194,6 +194,18 @@
           <string name="Name">Aim</string>
           <Content name="AnimationContent">
             <uri>rbxassetid://17834125927</uri>
+          </Content>
+          <BinaryString name="AttributesSerialize" />
+          <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+          <bool name="DefinesCapabilities">false</bool>
+          <BinaryString name="Tags" />
+        </Properties>
+      </Item>
+      <Item class="Animation" referent="1202">
+        <Properties>
+          <string name="Name">AimFire</string>
+          <Content name="AnimationContent">
+            <uri>rbxassetid://105192292093875</uri>
           </Content>
           <BinaryString name="AttributesSerialize" />
           <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>

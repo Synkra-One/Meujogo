@@ -46,10 +46,16 @@ end
 
 -- nil = ficar parado aqui é proposital. número = segundos de tolerância.
 local function graceFor(character: Model, humanoid: Humanoid, hrp: BasePart): number?
+	if character:GetAttribute("PowerStunned") == true or character:GetAttribute("PowerMoving") == true then return nil end
 	if LocalPlayer:GetAttribute("Amarrado") == true or character:GetAttribute("Amarrado") == true then
 		return nil
 	end
 	if LocalPlayer:GetAttribute("Eliminado") == true or character:GetAttribute("Eliminado") == true then
+		return nil
+	end
+	-- Teleporte do Monstro: o HRP fica ancorado e é movido por TweenService de
+	-- propósito (server/MonsterTeleport). Não "destravar".
+	if character:GetAttribute("TeleportBusy") == true or character:GetAttribute("ShadowRushBusy") == true then
 		return nil
 	end
 	if humanoid.Health <= 0 or humanoid.Sit then

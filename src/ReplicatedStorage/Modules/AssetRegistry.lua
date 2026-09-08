@@ -64,6 +64,29 @@ AssetRegistry.ArmaRara_Item = {
 }
 
 --------------------------------------------------------------------------------
+-- FENDA DO TELEPORTE DO MONSTRO
+--------------------------------------------------------------------------------
+-- server/MonsterTeleport.lua carrega o AssetId UMA vez no boot (InsertService,
+-- só server) e publica o Model normalizado em ReplicatedStorage.RiftAssets.
+-- Se o asset não carregar, entra uma fenda primitiva de reserva -- o sistema
+-- funciona igual. Trocar o visual = trocar o AssetId aqui, nada mais.
+AssetRegistry.RiftTeleport = {
+	AssetId = 16376740571,
+
+	-- Sons por etapa. VAZIO ("") = etapa não toca nada (o sistema funciona sem).
+	-- Abertura/fechamento tocam em 3D na posição da fenda (um Sobrevivente perto
+	-- do destino ouve "algo surgindo"). Cole os rbxassetid quando tiver os sons.
+	Sounds = {
+		TeleportCharge = "", -- ativação, nos pés do monstro
+		RiftOpen = "", -- fenda começa a abrir
+		RiftEnter = "", -- monstro é engolido
+		RiftTravel = "", -- fenda do destino surgindo (antecipação)
+		RiftExit = "", -- monstro emerge no destino
+		RiftClose = "", -- fenda se recolhe (as duas usam este)
+	},
+}
+
+--------------------------------------------------------------------------------
 -- SONS (placeholder -- troque cada rbxassetid quando tiver o som real)
 --------------------------------------------------------------------------------
 
@@ -84,5 +107,29 @@ AssetRegistry.Sounds = {
 	-- AmbientSoundController.client.luau: tensão por ficar fora de zona segura.
 	HeartbeatTension = "rbxassetid://0",
 }
+
+-- Survivor powers: replace each icon/sound/optional animation independently.
+-- AnimationId stays empty until an animation owned by the experience is supplied.
+AssetRegistry.SurvivorPowers = {
+	RajadaFinal = { Label = "Rajada Final", Color = Color3.fromRGB(169, 221, 238), Style = "Trail" },
+	SaltoLongo = { Label = "Salto Longo", Color = Color3.fromRGB(193, 177, 148), Style = "Dust" },
+	ConsertoRelampago = { Label = "Conserto Relâmpago", Color = Color3.fromRGB(150, 210, 242), Style = "Sparks" },
+	ArmadilhaImprovisada = { Label = "Armadilha Improvisada", Color = Color3.fromRGB(127, 188, 241), Style = "Electric" },
+	TiroCerteiro = { Label = "Tiro Certeiro", Color = Color3.fromRGB(213, 82, 72), Style = "Weapon" },
+	InstintoDeCacadora = { Label = "Instinto de Caçadora", Color = Color3.fromRGB(208, 116, 95), Style = "Sense" },
+	MantoDeSombras = { Label = "Manto de Sombras", Color = Color3.fromRGB(100, 91, 123), Style = "Shadow" },
+	PassoFantasma = { Label = "Passo Fantasma", Color = Color3.fromRGB(151, 150, 176), Style = "Smoke" },
+	AdrenalinaDeEmergencia = { Label = "Adrenalina de Emergência", Color = Color3.fromRGB(102, 220, 150), Style = "Heal" },
+	EscudoProtetor = { Label = "Escudo Protetor", Color = Color3.fromRGB(160, 217, 242), Style = "Shield" },
+	InvestidaBrutal = { Label = "Investida Brutal", Color = Color3.fromRGB(196, 164, 130), Style = "Charge" },
+	PosturaInabalavel = { Label = "Postura Inabalável", Color = Color3.fromRGB(165, 175, 176), Style = "Stone" },
+	GolpeDeSorte = { Label = "Golpe de Sorte", Color = Color3.fromRGB(233, 193, 99), Style = "Gold" },
+	IntuicaoSortuda = { Label = "Intuição Sortuda", Color = Color3.fromRGB(233, 193, 99), Style = "Sense" },
+} :: { [string]: { Label: string, Color: Color3, Style: string, Icon: string?, SoundId: string?, AnimationId: string? } }
+for _, power in AssetRegistry.SurvivorPowers do
+	power.Icon = power.Icon or "rbxassetid://0" -- generic placeholder; HUD shows a glyph until replaced
+	power.SoundId = power.SoundId or "rbxasset://sounds/impact_generic.mp3"
+	power.AnimationId = power.AnimationId or ""
+end
 
 return AssetRegistry
