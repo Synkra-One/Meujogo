@@ -79,6 +79,15 @@
         "StreamingMinRadius": 128,
         "StreamingTargetRadius": 768
       },
+
+      "R6 Monster": {
+        "$path": "src/Workspace/R6Monster.rbxmx"
+      },
+
+      "R6 novo": {
+        "$path": "rigR6.rbxmx"
+      },
+
       "LobbyFloor": {
         "$className": "Part",
         "$properties": {

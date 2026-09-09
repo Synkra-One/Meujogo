@@ -39,17 +39,10 @@ local LoadoutData = require(ReplicatedStorage.Modules.LoadoutData)
 
 local AppearanceManager = {}
 
-local function setHumanoidScale(humanoid: Humanoid, multiplier: number)
-	-- Só R15 suporta escala; R6 ignora essas propriedades.
-	if humanoid.RigType ~= Enum.HumanoidRigType.R15 then
-		return
-	end
-
-	humanoid.HeadScale = multiplier
-	humanoid.BodyDepthScale = multiplier
-	humanoid.BodyHeightScale = multiplier
-	humanoid.BodyWidthScale = multiplier
-end
+local ORIGINAL_SCALE_ATTRIBUTE = "MonsterR6OriginalScale"
+local ORIGINAL_HIP_HEIGHT_ATTRIBUTE = "MonsterR6OriginalHipHeight"
+local ACTIVE_SCALE_ATTRIBUTE = "MonsterScaleMultiplier"
+local SCALE_EPSILON = 1e-4
 
 local function findTorso(character: Model): BasePart?
 	return (character:FindFirstChild("UpperTorso") :: BasePart?) or (character:FindFirstChild("Torso") :: BasePart?)
@@ -58,6 +51,66 @@ end
 local function findPart(character: Model, name: string): BasePart?
 	local part = character:FindFirstChild(name)
 	return if part and part:IsA("BasePart") then part else nil
+end
+
+-- Model:ScaleTo e a operacao correta para um rig R6: alem de redimensionar
+-- as BaseParts, o engine escala os offsets posicionais de Motor6D/joints,
+-- attachments e meshes de forma uniforme. Alterar Size parte por parte
+-- separaria ombros, quadris, pescoco e RootJoint.
+--
+-- A escala e sempre calculada a partir do tamanho original deste spawn e
+-- aplicada como valor absoluto. Assim CharacterAdded +
+-- CharacterAppearanceLoaded + mudanca de Role podem chamar esta funcao sem
+-- transformar 1.2x em 1.44x. Ao deixar de ser Monstro, somente um rig que
+-- tenha sido escalado aqui volta ao tamanho que possuia antes.
+local function setMonsterR6Scale(character: Model, humanoid: Humanoid, multiplier: number?)
+	if humanoid.RigType ~= Enum.HumanoidRigType.R6 then
+		return
+	end
+
+	local originalScale = character:GetAttribute(ORIGINAL_SCALE_ATTRIBUTE)
+	local originalHipHeight = character:GetAttribute(ORIGINAL_HIP_HEIGHT_ATTRIBUTE)
+
+	if multiplier == nil then
+		if type(originalScale) ~= "number" or type(originalHipHeight) ~= "number" then
+			return -- Survivor novo: nunca foi tocado por este sistema.
+		end
+	else
+		if type(originalScale) ~= "number" then
+			originalScale = character:GetScale()
+			character:SetAttribute(ORIGINAL_SCALE_ATTRIBUTE, originalScale)
+		end
+		if type(originalHipHeight) ~= "number" then
+			originalHipHeight = humanoid.HipHeight
+			character:SetAttribute(ORIGINAL_HIP_HEIGHT_ATTRIBUTE, originalHipHeight)
+		end
+	end
+
+	local targetScale = originalScale :: number
+	if multiplier ~= nil then
+		targetScale *= multiplier
+	end
+
+	if math.abs(character:GetScale() - targetScale) > SCALE_EPSILON then
+		-- O StarterCharacter tem PrimaryPart = HumanoidRootPart e o pivot fica
+		-- nela. A correcao elimina deriva caso esse detalhe do template mude;
+		-- ScaleTo preserva a rotacao do rig.
+		local root = findPart(character, "HumanoidRootPart")
+		local rootPosition = if root then root.Position else nil
+		character:ScaleTo(targetScale)
+		if root and rootPosition then
+			local correction = rootPosition - root.Position
+			if correction.Magnitude > SCALE_EPSILON then
+				character:PivotTo(character:GetPivot() + correction)
+			end
+		end
+	end
+
+	-- R6 padrao usa HipHeight 0. Se o template ganhar um valor customizado,
+	-- ele acompanha a mesma proporcao e os pes continuam apoiados no chao.
+	local relativeScale = targetScale / (originalScale :: number)
+	humanoid.HipHeight = (originalHipHeight :: number) * relativeScale
+	character:SetAttribute(ACTIVE_SCALE_ATTRIBUTE, multiplier)
 end
 
 local function weldAccessory(name: string, part0: BasePart, size: Vector3, offset: CFrame, color: Color3, material: Enum.Material, parent: Instance): Part
@@ -110,7 +163,7 @@ local function applyMonsterAppearance(character: Model)
 
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if humanoid then
-		setHumanoidScale(humanoid, asset.ScaleMultiplier)
+		setMonsterR6Scale(character, humanoid, asset.ScaleMultiplier)
 		humanoid.DisplayName = "Jason"
 	end
 
@@ -193,8 +246,14 @@ local function applyMonsterAppearance(character: Model)
 	end
 end
 
--- Sobrevivente / Espiao: aparência humana padrão, nada a fazer.
-local function applyDefaultAppearance(_character: Model) end
+-- Survivor/Espiao novos nunca sao redimensionados. O reset abaixo so age no
+-- raro caso de o Role mudar no mesmo Model que antes era o Monstro.
+local function applyDefaultAppearance(character: Model)
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		setMonsterR6Scale(character, humanoid, nil)
+	end
+end
 
 -- Dispatch por Role. Para adicionar um novo papel com aparência própria,
 -- basta adicionar uma entrada aqui.
@@ -219,6 +278,8 @@ function AppearanceManager.ApplyAppearance(player: Player)
 
 	local existing = character:FindFirstChild("LoadoutVest")
 	if existing then existing:Destroy() end
+	local monsterCosmetic = character:FindFirstChild("MonsterCosmetic")
+	if monsterCosmetic then monsterCosmetic:Destroy() end
 	local skin = LoadoutData.GetSkin(player:GetAttribute("SkinId"))
 	local torso = findTorso(character)
 	if skin and skin.Color and torso and role ~= GameConfig.Roles.Monster then

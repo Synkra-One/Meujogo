@@ -237,7 +237,7 @@ end
 
 -- Devolve (standCF, ok) ou (nil, motivo). standCF = onde o HumanoidRootPart
 -- deve ficar (pés no chão), virado pra mesma direção que o monstro estava.
-local function resolveDestination(monsterRoot: BasePart, hrpAboveFeet: number, rawPoint: unknown): (CFrame?, string?)
+local function resolveDestination(monsterRoot: BasePart, hrpAboveFeet: number, rigScale: number, rawPoint: unknown): (CFrame?, string?)
 	if typeof(rawPoint) ~= "Vector3" then
 		return nil, "ponto inválido"
 	end
@@ -281,8 +281,12 @@ local function resolveDestination(monsterRoot: BasePart, hrpAboveFeet: number, r
 		return nil, "destino na água"
 	end
 
-	-- Cabe o rig? Nada sólido ocupando o volume onde ele vai ficar de pé.
-	local boxCenter = groundPos + Vector3.new(0, CFG.ClearanceHeight / 2 + 0.3, 0)
+	-- Cabe o rig? A configuracao descreve um R6 de escala 1; a caixa acompanha
+	-- o ScaleTo real do Monstro para nao aprovar um destino onde o corpo 1.2x
+	-- atravessaria parede ou teto.
+	local clearanceRadius = CFG.ClearanceRadius * rigScale
+	local clearanceHeight = CFG.ClearanceHeight * rigScale
+	local boxCenter = groundPos + Vector3.new(0, clearanceHeight / 2 + 0.3, 0)
 	local overlap = OverlapParams.new()
 	overlap.FilterType = Enum.RaycastFilterType.Exclude
 	local overlapIgnore = table.clone(ignore)
@@ -290,7 +294,7 @@ local function resolveDestination(monsterRoot: BasePart, hrpAboveFeet: number, r
 	overlap.FilterDescendantsInstances = overlapIgnore
 	local parts = Workspace:GetPartBoundsInBox(
 		CFrame.new(boxCenter),
-		Vector3.new(CFG.ClearanceRadius * 2, CFG.ClearanceHeight, CFG.ClearanceRadius * 2),
+		Vector3.new(clearanceRadius * 2, clearanceHeight, clearanceRadius * 2),
 		overlap
 	)
 	for _, p in parts do
@@ -304,7 +308,7 @@ local function resolveDestination(monsterRoot: BasePart, hrpAboveFeet: number, r
 	upParams.FilterType = Enum.RaycastFilterType.Exclude
 	upParams.FilterDescendantsInstances = ignore
 	upParams.IgnoreWater = true
-	local upHit = Workspace:Raycast(groundPos + Vector3.new(0, 0.4, 0), Vector3.new(0, CFG.ClearanceHeight, 0), upParams)
+	local upHit = Workspace:Raycast(groundPos + Vector3.new(0, 0.4, 0), Vector3.new(0, clearanceHeight, 0), upParams)
 	if upHit then
 		return nil, "teto baixo no destino"
 	end
@@ -731,7 +735,7 @@ local function onTeleportRequest(player: Player, rawPoint: unknown)
 	local minY = select(1, characterBounds(character))
 	local hrpAboveFeet = root.Position.Y - minY
 
-	local destCF, reason = resolveDestination(root, hrpAboveFeet, rawPoint)
+	local destCF, reason = resolveDestination(root, hrpAboveFeet, character:GetScale(), rawPoint)
 	if not destCF then
 		Remotes.MonsterTeleport:FireClient(player, "cancel", reason or "destino inválido")
 		lastUseAt[player.UserId] = os.clock() - (CFG.TeleportCooldown - CFG.FailureCooldown)

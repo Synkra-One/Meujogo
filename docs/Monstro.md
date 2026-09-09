@@ -28,6 +28,29 @@ gerada. Rode no Command Bar (modo de edição) e salve:
 require(game.ServerScriptService.Server.Tools.IslandGenerator).Generate()
 ```
 
+## Escala do R6
+
+Todos os jogadores continuam nascendo do mesmo `StarterCharacter` R6. Depois
+que `RoleAssignment` define o papel, `AppearanceManager` aplica somente ao
+Monstro a escala `AssetRegistry.Monstro_Modelo.ScaleMultiplier` (atualmente
+`1.2`). A operacao usa `Model:ScaleTo`, que redimensiona o modelo de forma
+uniforme e preserva os offsets dos joints/`Motor6D`; nao altera `Size` de cada
+parte isoladamente.
+
+A escala alvo e absoluta e a escala original fica registrada no proprio spawn,
+portanto reaplicacoes de `CharacterAdded`, `CharacterAppearanceLoaded` ou
+mudanca de `Role` nao acumulam `1.2 * 1.2`. Survivors/Espiao novos permanecem
+em escala 1; se um mesmo Model deixar de ser Monstro, ele volta a escala e ao
+`HipHeight` originais. A caixa de espaco livre da Fenda multiplica suas medidas
+por `Model:GetScale()`, enquanto a largura visual da fenda e o assentamento dos
+pes ja sao calculados pelos limites reais do rig.
+
+Para criar animações com a silhueta final, use `Workspace.R6 Monster` no
+Animation Editor: essa referência fica fisicamente em 1.2x no modo de edição,
+inclusive Parts, attachments e offsets C0/C1. Os keyframes continuam canônicos
+e o Roblox aplica a escala do Model aos offsets quando a animação toca no
+Monster.
+
 ## Combate (`server/MonsterCombat` + `client/MonsterController`)
 
 Botão esquerdo (ou R2 no controle) → golpe em cone à frente.

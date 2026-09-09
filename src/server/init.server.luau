@@ -77,6 +77,7 @@ local function safeInit(name: string, module: { Init: () -> () })
 end
 
 safeInit("WaterRepair", require(script.WaterRepair))
+safeInit("AnimationRigReference", require(script.AnimationRigReference))
 -- Duas variantes usadas por Arvore_597/Arvore_428 tem uma colisao de mesh
 -- muito maior que o visual. Corrige todas as copias dessas variantes salvas.
 safeInit("TreeCollisionFix", require(script.TreeCollisionFix))

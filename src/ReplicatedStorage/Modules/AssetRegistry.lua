@@ -39,7 +39,9 @@ AssetRegistry.Monstro_Modelo = {
 	MeshId = "",
 
 	-- Vale nos dois casos (com ou sem MeshId real).
-	ScaleMultiplier = 1.5,
+	-- O StarterCharacter e R6 para todos. AppearanceManager aplica este valor
+	-- ao Model inteiro (parts + offsets dos joints), somente no Monstro.
+	ScaleMultiplier = 1.2,
 
 	-- Fallback enquanto MeshId estiver vazio.
 	Placeholder = {

@@ -252,6 +252,8 @@ GameConfig.Monster = {
 		GroundSnapDown = 140, -- ...e desce até isto procurando chão
 		MaxSlopeCos = 0.55, -- cos do ângulo máx. da rampa no destino (~57°)
 		BoundsMargin = 30, -- fica pelo menos isto pra dentro da borda do mapa
+		-- Medidas-base para escala 1. MonsterTeleport multiplica ambas pelo
+		-- Model:GetScale() real (1.2 para o Monstro atual).
 		ClearanceRadius = 2.6, -- meia-largura da checagem de "cabe o rig?"
 		ClearanceHeight = 6.5, -- altura da checagem (rig R6 ~5.5)
 
