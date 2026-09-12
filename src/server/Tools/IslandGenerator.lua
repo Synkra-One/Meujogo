@@ -13,7 +13,7 @@
 	Etapas isoladas (pra ajustar sem regerar tudo):
 		Gen.GenerateTerrain()           -- mar, praia, colinas, montanha, campo, lago, trilhas
 		Gen.GenerateRockFormations()    -- grupos de rochas + afloramentos grandes
-		Gen.GenerateCave()              -- caverna do Monstro na base da montanha
+		Gen.GenerateCave()              -- covil do Monstro dentro da montanha (CaveInterior)
 		Gen.GenerateForest(1.0)         -- árvores (densidade 0..2)
 		Gen.GenerateUndergrowth()       -- arbustos e troncos caídos
 		Gen.GenerateRuins()             -- Ruínas + Lança Ancestral
@@ -47,6 +47,7 @@ local Terrain = Workspace.Terrain
 local ToolFactory = require(ReplicatedStorage.Modules.ToolFactory)
 local Layout = require(script.Parent.IslandLayout)
 local PoiGenerator = require(script.Parent.PoiGenerator)
+local CaveInterior = require(script.Parent.CaveInterior)
 local S = require(script.Parent.Structures)
 local TreeCollisionFix = require(script.Parent.Parent.TreeCollisionFix)
 
@@ -58,10 +59,8 @@ local IslandGenerator = {}
 
 local CONFIG = {
 	Cave = {
-		TunnelWidth = 11,
-		TunnelHeight = 11,
-		ChamberRadius = 17,
-		EntranceRocks = 6,
+		-- Forma do covil (túnel, salão, níveis) fica em CaveInterior.CONFIG.
+		EntranceRocks = 8,
 	},
 
 	Rocks = {
@@ -798,7 +797,8 @@ end
 function IslandGenerator.GenerateCave(): number
 	Layout.Plan()
 	local caverna = resetFolder("Caverna")
-	local rng = Random.new(Layout.Seed() + 3)
+	local seed = Layout.Seed() + 3
+	local rng = Random.new(seed)
 
 	local mx, mz = Layout.MountainSite()
 	local R = LC.Mountain.Radius
@@ -806,54 +806,38 @@ function IslandGenerator.GenerateCave(): number
 	local dir = if len > 0.01 then Vector3.new(-mx / len, 0, -mz / len) else Vector3.new(1, 0, 0)
 	local side = Vector3.new(-dir.Z, 0, dir.X)
 
-	local mountainCenter = Vector3.new(mx, 0, mz)
-	local entrance = mountainCenter + dir * (R * 0.72)
-	local chamber = mountainCenter + dir * (R * 0.32)
+	local mouthDist = R * 0.72
+	local entrance = Vector3.new(mx, 0, mz) + dir * mouthDist
+	-- A boca fica na encosta; o salão fica MAIS FUNDO (o túnel desce Drop
+	-- studs), o que deixa o covil abaixo do nível da ilha lá fora.
+	local mouthY = surfaceHeight(entrance.X, entrance.Z) - 1
+	local floorY = mouthY - CaveInterior.CONFIG.Tunnel.Drop
 
-	local floorY = surfaceHeight(entrance.X, entrance.Z) - 1
-	local W, H = CONFIG.Cave.TunnelWidth, CONFIG.Cave.TunnelHeight
-	local CR = CONFIG.Cave.ChamberRadius
+	local frame: CaveInterior.Frame = {
+		Center = Vector3.new(mx, 0, mz),
+		Dir = dir,
+		Side = side,
+		FloorY = floorY,
+		MouthY = mouthY,
+		MouthDist = mouthDist,
+		SurfaceY = surfaceHeight,
+		PlanY = Layout.Height,
+	}
 
-	local tunnelStart = entrance + dir * 10
-	local tunnelLen = (chamber - tunnelStart).Magnitude
-	local tunnelCenter = (tunnelStart + chamber) / 2
-	local tunnelCF = CFrame.lookAt(Vector3.new(tunnelCenter.X, floorY + H / 2, tunnelCenter.Z), Vector3.new(chamber.X, floorY + H / 2, chamber.Z))
+	local spawnPos = CaveInterior.Build(caverna, frame, seed)
 
-	Terrain:FillBlock(tunnelCF * CFrame.new(0, -H / 2 - 3, 0), Vector3.new(W + 4, 6, tunnelLen + 4), Enum.Material.Rock)
-	Terrain:FillCylinder(CFrame.new(chamber.X, floorY - 3, chamber.Z), 6, CR + 2, Enum.Material.Rock)
-
-	Terrain:FillBlock(tunnelCF, Vector3.new(W, H, tunnelLen), Enum.Material.Air)
-	Terrain:FillBall(Vector3.new(entrance.X, floorY + 5, entrance.Z), 7.5, Enum.Material.Air)
-	Terrain:FillBall(Vector3.new(chamber.X, floorY + CR * 0.55, chamber.Z), CR, Enum.Material.Air)
-	Terrain:FillCylinder(CFrame.new(chamber.X, floorY - 3, chamber.Z), 6, CR + 1, Enum.Material.Rock)
-	Terrain:FillBlock(tunnelCF * CFrame.new(0, -H / 2 - 3, 0), Vector3.new(W + 2, 6, tunnelLen + 2), Enum.Material.Rock)
-
-	local spawnPos = chamber + dir * (CR * 0.35)
-	local marker = newPart("MonstroSpawn", Vector3.new(2, 1, 2), CFrame.new(spawnPos.X, floorY + 0.5, spawnPos.Z), Enum.Material.SmoothPlastic, Color3.fromRGB(200, 40, 40), caverna)
+	-- Marcador lido por LobbyManager (spawn do Monstro) e por
+	-- PlaneCrashGenerator (pra desviar os rastros da caverna).
+	local marker = newPart("MonstroSpawn", Vector3.new(2, 1, 2), CFrame.new(spawnPos), Enum.Material.SmoothPlastic, Color3.fromRGB(200, 40, 40), caverna)
 	marker.Transparency = 1
 	marker.CanCollide = false
 	marker:SetAttribute("MonstroSpawn", true)
 
-	local lightSpots = {
-		Vector3.new(chamber.X, floorY + CR * 0.6, chamber.Z),
-		Vector3.new(chamber.X + side.X * CR * 0.5, floorY + CR * 0.35, chamber.Z + side.Z * CR * 0.5),
-		Vector3.new(tunnelCenter.X, floorY + H * 0.7, tunnelCenter.Z),
-	}
-	for i, pos in lightSpots do
-		local anchor = newPart("Luz_" .. i, Vector3.new(1, 1, 1), CFrame.new(pos), Enum.Material.SmoothPlastic, Color3.new(0, 0, 0), caverna)
-		anchor.Transparency = 1
-		anchor.CanCollide = false
-		local light = Instance.new("PointLight")
-		light.Color = if i == 2 then Color3.fromRGB(120, 200, 160) else Color3.fromRGB(120, 180, 200)
-		light.Brightness = 0.5
-		light.Range = CR * 1.8
-		light.Shadows = false
-		light.Parent = anchor
-	end
-
+	-- Rochas soltas escondendo a boca de quem passa pela trilha.
+	local W = CaveInterior.CONFIG.Tunnel.Width
 	for i = 1, CONFIG.Cave.EntranceRocks do
 		local s = if i % 2 == 0 then 1 else -1
-		local p = entrance + dir * rng:NextNumber(-2, 10) + side * (s * rng:NextNumber(W / 2 + 5, W / 2 + 14))
+		local p = entrance + dir * rng:NextNumber(-2, 12) + side * (s * rng:NextNumber(W / 2 + 6, W / 2 + 16))
 		local groundY = surfaceHeight(p.X, p.Z)
 		local size = rng:NextNumber(10, 20)
 		local template = pickAsset(rng, CONFIG.Assets.Rocks)

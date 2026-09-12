@@ -29,17 +29,22 @@
 
 local IslandMapData = {}
 
-IslandMapData.Version = 3
+IslandMapData.Version = 4
 IslandMapData.ValueName = "IslandMapData"
-IslandMapData.Resolution = 100 -- células por lado (a grade é quadrada)
+-- 144 (era 100): contornos mais finos, a costa e o relevo ficam menos
+-- "pixelados" sem pesar muito na fusão de retângulos (IslandMapData.MergeRects).
+IslandMapData.Resolution = 144
 
 --------------------------------------------------------------------------------
 -- Paleta: tipo de terreno x nível de sombreamento (relevo)
 --------------------------------------------------------------------------------
 
-IslandMapData.ShadeLevels = 7
-IslandMapData.ShadeMin = 0.68
-IslandMapData.ShadeMax = 1.26
+-- Mais níveis + faixa mais estreita = degraus de sombra bem mais finos
+-- (passo antigo ~0.097 por nível; agora ~0.032) -- é o que tira a cara de
+-- "blocos" do relevo, junto com o hillshading mais suave em IslandMap.lua.
+IslandMapData.ShadeLevels = 16
+IslandMapData.ShadeMin = 0.72
+IslandMapData.ShadeMax = 1.20
 
 -- Ordem IMPORTA: o índice do tipo é a posição nesta lista.
 IslandMapData.TerrainNames = {
@@ -55,17 +60,20 @@ IslandMapData.TerrainNames = {
 	"Lake",
 }
 
+-- Tons menos saturados / mais "foto de satélite": água com 3 faixas bem
+-- distintas (funda -> rasa), praia neutra, floresta mais escura que campo
+-- aberto (pra ler a diferença de bioma), rocha/pico mais frios.
 local TERRAIN_COLORS: { [string]: Color3 } = {
-	DeepSea = Color3.fromRGB(8, 20, 38),
-	Sea = Color3.fromRGB(14, 38, 64),
-	Shallow = Color3.fromRGB(28, 68, 96),
-	Beach = Color3.fromRGB(190, 172, 126),
-	Grass = Color3.fromRGB(70, 98, 55),
-	Forest = Color3.fromRGB(36, 60, 35),
-	Ground = Color3.fromRGB(88, 72, 52),
-	Rock = Color3.fromRGB(96, 93, 90),
-	Peak = Color3.fromRGB(140, 137, 133),
-	Lake = Color3.fromRGB(26, 64, 78),
+	DeepSea = Color3.fromRGB(6, 16, 32),
+	Sea = Color3.fromRGB(10, 30, 54),
+	Shallow = Color3.fromRGB(24, 58, 86),
+	Beach = Color3.fromRGB(196, 179, 141),
+	Grass = Color3.fromRGB(66, 94, 52),
+	Forest = Color3.fromRGB(30, 52, 32),
+	Ground = Color3.fromRGB(84, 69, 50),
+	Rock = Color3.fromRGB(100, 97, 93),
+	Peak = Color3.fromRGB(150, 148, 145),
+	Lake = Color3.fromRGB(22, 58, 74),
 }
 IslandMapData.TerrainColors = TERRAIN_COLORS
 

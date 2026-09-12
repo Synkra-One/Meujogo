@@ -24,7 +24,7 @@ local MINUTE = 60
 --------------------------------------------------------------------------------
 
 GameConfig.Players = {
-	Min = 6, -- partida não inicia com menos que isso
+	Min = 2, -- 1 Monstro + 1 Sobrevivente; Espiao entra a partir de 3 jogadores
 	Max = 10, -- lotação máxima do servidor/partida
 }
 
@@ -205,6 +205,32 @@ GameConfig.Monster = {
 	-- pública. Trocar por uma sua depois é só mudar aqui.
 	SwingAnimationId = "rbxassetid://129967390",
 
+	-- Grab: E / ButtonX. O servidor escolhe a vitima, alinha os rigs e usa os
+	-- markers da animacao para matar, soltar e encerrar a execucao.
+	Grab = {
+		InputKey = Enum.KeyCode.E,
+		GamepadKey = Enum.KeyCode.ButtonX,
+		GrabRange = 8,
+		GrabAngle = 80, -- abertura total do cone, em graus
+		GrabCooldown = 8,
+		MaxVerticalDifference = 6,
+
+		-- CFrame da HumanoidRootPart da vitima no espaco local da HRP do
+		-- monstro. Este e o unico ajuste necessario para casar os dois rigs com
+		-- a posicao usada no Moon Animator.
+		VictimOffset = CFrame.new(0, -0.600012, -3.099976) * CFrame.Angles(0, math.rad(180), 0),
+		AlignDuration = 0.14,
+		AnimationFadeTime = 0.08,
+		AttemptFallbackDuration = 1.1,
+		SafetyTimeout = 15,
+
+		AnimationIds = {
+			GrabAttempt = "",
+			Grab = "rbxassetid://92358246972820",
+			VictimGrab = "", -- opcional; deixe vazio se ainda nao exportou
+		},
+	},
+
 	-- Shadow Rush: F / L1 / botão touch. Segundo toque inicia materialização.
 	ShadowRush = {
 		ShadowRushEnterDuration = 0.16,
@@ -366,6 +392,20 @@ GameConfig.LootCrates = {
 }
 
 --------------------------------------------------------------------------------
+-- DESCOBERTA DE ITENS NO MAPA (server/ItemDiscovery.lua)
+--------------------------------------------------------------------------------
+-- Passar perto de um item do mundo (arma, material, caixa de loot...) marca
+-- ele PARA SEMPRE no mapa (Q do Monstro / M do Sobrevivente-Espião) daquele
+-- jogador -- é por partida, não persiste entre rodadas (o mapa de itens muda
+-- a cada sorteio). Sem exigir linha de visão: só distância.
+
+GameConfig.MapDiscovery = {
+	Enabled = true,
+	Radius = 14, -- studs; ItemSpawner/WeaponSpawner/LootCrateSystem usam raios parecidos pra pickup
+	ScanInterval = 0.5, -- segundos entre varreduras de proximidade
+}
+
+--------------------------------------------------------------------------------
 -- PAPÉIS (usar SEMPRE estas strings, nunca texto solto no código)
 --------------------------------------------------------------------------------
 
@@ -498,10 +538,115 @@ GameConfig.RadioObjective = {
 	-- Minigame de sintonia é só um sorteio por enquanto (sem UI ainda).
 	SuccessChance = 0.6, -- 60% de chance de sucesso por tentativa
 
-	-- Tempo de "aguentar" depois da sintonia bem-sucedida até vencer por
-	-- resgate. A lógica de vitória em si (cancelar se alguém morrer, etc.)
-	-- fica pra um futuro gerenciador de partida; aqui é só a duração base.
-	RescueCountdownDuration = 15,
+	-- Tempo entre o pedido de socorro sair e o helicóptero POUSAR na praia.
+	-- Não é mais "espere X e ganhe": é o tempo que os Sobreviventes têm pra
+	-- atravessar a ilha até a zona de extração (server/ExtractionSystem.lua).
+	-- 120s dá pra cruzar o mapa (diâmetro jogável ~1400-1600) correndo, com
+	-- o Monstro sabendo exatamente pra onde todo mundo está indo.
+	RescueCountdownDuration = 120,
+}
+
+--------------------------------------------------------------------------------
+-- EXTRAÇÃO (helicóptero na praia)
+--------------------------------------------------------------------------------
+-- Fim da linha do objetivo do Rádio. Quando o pedido de socorro é enviado,
+-- server/ExtractionSystem.lua acende uma zona na praia com fumaça vermelha e
+-- começa a contagem. Chegar lá ANTES do pouso não vale nada -- o Monstro
+-- ainda mata. Só depois que o helicóptero pousa é que entrar na zona salva.
+
+GameConfig.Extraction = {
+	-- Raio da zona de pouso (studs). Generoso: é pra caber o helicóptero e
+	-- alguém correndo em pânico, não pra exigir precisão.
+	Raio = 18,
+
+	-- MODELO do helicóptero (Toolbox). Se não carregar, entra a versão em
+	-- Parts primitivas -- o sistema funciona igual nos dois casos.
+	ModeloId = 8915950341,
+
+	-- Comprimento alvo do modelo em studs (o Toolbox não segue escala
+	-- nenhuma, então normalizo pelo maior lado).
+	ComprimentoModelo = 34,
+
+	-- Correção de guinada do modelo, em GRAUS. Todo asset decide sozinho pra
+	-- que lado é "frente"; o voo orienta o modelo com CFrame.lookAt, que
+	-- assume frente = -Z. Se o helicóptero voar de lado ou de ré, ajuste
+	-- aqui (90 / 180 / 270) -- é o único lugar que precisa mudar.
+	GuinadaModelo = 0,
+
+	-- VOO DE CHEGADA (segundos). O tempo é dividido entre aproximação,
+	-- flare (levantar o nariz pra frear) e descida vertical.
+	DuracaoChegada = 11,
+	DuracaoPartida = 9,
+
+	-- De onde ele vem: distância horizontal e altura do ponto de entrada.
+	DistanciaEntrada = 420,
+	AlturaEntrada = 210,
+
+	-- Altura em que ele para de avançar e passa a descer reto (o "flare").
+	AlturaFlare = 34,
+
+	-- Altura do ponto de pouso acima do chão da pista (patins tocando).
+	AlturaPouso = 0.6,
+
+	-- Inclinações do voo, em graus: nariz baixo acelerando, nariz alto
+	-- freando, e o quanto inclina na curva de aproximação.
+	PicoNarizBaixo = 12,
+	PicoNarizAlto = 16,
+	PicoRolagem = 14,
+
+	-- Rotor: voltas por segundo. Alto o bastante pra virar borrão.
+	RotorRPS = 4.5,
+
+	-- Com que frequência o servidor confere quem está dentro da zona.
+	-- (O VOO é atualizado todo frame, à parte -- senão fica travado.)
+	IntervaloChecagem = 0.25,
+}
+
+--------------------------------------------------------------------------------
+-- OBJETIVO: ESTAÇÃO DE RÁDIO (o local físico)
+--------------------------------------------------------------------------------
+-- A corrente de interações do sítio da torre, na ordem em que o jogador faz:
+--   peças -> combustível -> fusível -> ligar gerador -> painel -> socorro.
+-- Quem executa é server/RadioSiteSystem.lua; quem constrói o local é
+-- Tools/RadioTowerGenerator.lua. Ver docs/Radio.md.
+
+GameConfig.RadioSite = {
+	-- Segurar o prompt (segundos). Quanto maior, mais tempo parado = mais
+	-- exposto. É o principal botão de tensão do objetivo.
+	HoldAbastecer = 4,
+	HoldFusivel = 3,
+	HoldPartida = 2.5,
+	HoldPainel = 4,
+
+	-- Chamado de socorro: canalização longa, cancelada se sair de perto,
+	-- morrer, o gerador parar ou alguém sabotar.
+	SinalDuracao = 14,
+	SinalRaio = 9, -- distância máxima do console durante a canalização
+	SinalDecaimento = 6, -- % por segundo que o progresso cai se interromper
+
+	-- Gerador: cada galão rende este tanto de tempo ligado (segundos).
+	-- 3 galões fixos no local = ~4,5 min de energia se ninguém desperdiçar.
+	-- MESMO valor vale pro item "Gasolina" (ItemRegistry) achado pelo mapa e
+	-- carregado como Tool -- RadioSiteSystem.onRefuel aceita as duas fontes,
+	-- preferindo a Gasolina carregada.
+	CombustivelPorGalao = 90,
+	CombustivelMaximo = 270,
+
+	-- Enquanto roda, o gerador faz barulho: dispara WeaponSystem.NoiseMade
+	-- neste intervalo (segundos) pra quem quiser reagir ao ruído, e avisa o
+	-- Monstro por mensagem.
+	IntervaloRuido = 12,
+
+	-- Distância máxima do jogador até o ponto de interação (o prompt já
+	-- limita, isto é a checagem do servidor).
+	AlcanceInteracao = 12,
+
+	-- "Conserto Relâmpago" (SurvivorPowerSystem): empurrão instantâneo, em
+	-- pontos percentuais, no chamado de socorro -- só funciona em quem ESTÁ
+	-- transmitindo agora. É o único passo da corrente com barra contínua;
+	-- os outros (abastecer, fusível, partida, painel) são "segurou o prompt
+	-- ou não", não tem o que acelerar.
+	PowerBoostPercent = 25,
 }
 
 --------------------------------------------------------------------------------
@@ -527,7 +672,10 @@ GameConfig.Confront = {
 	-- Cristal Ancestral: alcance da leitura de suspeito.
 	DetectRange = 12,
 
-	-- Amarrar: ação cooperativa.
+	-- Amarrar: ação cooperativa. Usa X / ButtonB para não disputar E /
+	-- ButtonX com o Grab do Monstro quando ele está perto de outro jogador.
+	TieInputKey = Enum.KeyCode.X,
+	TieGamepadKey = Enum.KeyCode.ButtonB,
 	TieRange = 10, -- alcance do ProximityPrompt "Amarrar"
 	TieHelpersRequired = 2, -- quantos jogadores precisam agir juntos
 	TieHoldDuration = 5, -- segundos de ação simultânea pra completar
@@ -676,7 +824,7 @@ GameConfig.Testing = {
 	-- Troque pra "Monstro" ou "Espiao" se quiser forçar um papel específico.
 	-- Atualmente fica nil para você testar o sorteio real, inclusive podendo
 	-- cair como Jason/Monstro.
-	ForceRole = nil,
+	ForceRole = GameConfig.Roles.Survivor,
 
 	-- Painel dev dentro da sala de espera para escolher o papel da próxima
 	-- partida sem depender da sorte. O servidor valida por UserId.

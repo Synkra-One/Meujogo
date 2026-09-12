@@ -101,6 +101,7 @@ local function onMeleeActivated(player: Player, range: number, weaponName: strin
 	if not humanoid or humanoid.Health <= 0 or player:GetAttribute("Amarrado") == true then return end
 	if character and character:GetAttribute("PowerStunned") == true then return end
 	if character and character:GetAttribute("ShadowRushBusy") == true then return end
+	if character and character:GetAttribute("GrabLocked") == true then return end
 	local root = character and getRootPart(character)
 	if not root then
 		return
@@ -132,6 +133,7 @@ local function onPedraActivated(player: Player)
 	local character = player.Character
 	if character and character:GetAttribute("PowerStunned") == true then return end
 	if character and character:GetAttribute("ShadowRushBusy") == true then return end
+	if character and character:GetAttribute("GrabLocked") == true then return end
 	local root = character and getRootPart(character)
 	if not root then
 		return

@@ -102,7 +102,8 @@ local function onAttackRequest(player: Player)
 	-- Durante o teleporte (server/MonsterTeleport) o Monstro não ataca: está
 	-- abrindo/atravessando/saindo da fenda. TeleportBusy é Attribute do
 	-- character, setado pelo servidor.
-	if character:GetAttribute("TeleportBusy") == true or character:GetAttribute("ShadowRushBusy") == true then
+	if character:GetAttribute("TeleportBusy") == true or character:GetAttribute("ShadowRushBusy") == true
+		or character:GetAttribute("GrabLocked") == true then
 		return
 	end
 
@@ -187,6 +188,8 @@ local function speedStep()
 		end
 
 		local mul = MonsterLightWeakness.IsWeakened(character) and CFG.WeakenedSpeedMultiplier or CFG.SpeedMultiplier
+		local flashlightSlow = character:GetAttribute("FlashlightSlow")
+		if type(flashlightSlow) == "number" then mul *= 1 - math.clamp(flashlightSlow, 0, 1) end
 		if character:GetAttribute("MonsterSpeedMul") ~= mul then
 			character:SetAttribute("MonsterSpeedMul", mul)
 		end

@@ -105,6 +105,9 @@ local function onSabotageAction(player: Player, target: unknown)
 	if player:GetAttribute("Role") ~= GameConfig.Roles.Spy then
 		return
 	end
+	if player.Character and player.Character:GetAttribute("GrabLocked") == true then
+		return
+	end
 
 	-- Amarrado (ConfrontSystem) bloqueia a sabotagem.
 	if player:GetAttribute("Amarrado") == true then

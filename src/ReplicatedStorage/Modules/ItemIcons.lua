@@ -49,7 +49,18 @@ ItemIcons.Map = {
 	Tocha = "",
 	Lanterna = "",
 	Chocolate = "",
+	Bandagem = "",
+	Gasolina = "",
 	LancaAncestral = "",
+	-- Materiais (Jangada) e peças do Rádio: usados hoje pelo marcador de
+	-- item descoberto no mapa (Modules/MapMarkers.lua). Sem PNG, o marcador
+	-- cai no glifo por categoria -- ver MapMarkers.lua.
+	Madeira = "",
+	Corda = "",
+	Lona = "",
+	Antena = "",
+	Bateria = "",
+	Transmissor = "",
 
 	-- Armas de fogo (chave = nome da Tool em WeaponAssets/Tools).
 	-- >>> COLE AQUI O ID DO PNG DA PISTOLA <<< (ver cabeçalho pra como subir)

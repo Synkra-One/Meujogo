@@ -31,6 +31,7 @@ local function alive(player: Player): boolean
 		and character:GetAttribute("Eliminado") ~= true and character:FindFirstChild("Dead") == nil
 		and character:GetAttribute("Amarrado") ~= true and player:GetAttribute("Eliminado") ~= true
 		and player:GetAttribute("Amarrado") ~= true
+		and character:GetAttribute("GrabLocked") ~= true
 		and player:GetAttribute("InWaitingRoom") ~= true
 end
 
@@ -91,7 +92,8 @@ local function onReload(player: Player, candidate: unknown, action: unknown)
 		if state and state.tool == candidate then finishReload(player, false) end
 		return
 	end
-	if player.Character and player.Character:GetAttribute("ShadowRushBusy") == true then return end
+	if player.Character and (player.Character:GetAttribute("ShadowRushBusy") == true
+		or player.Character:GetAttribute("GrabLocked") == true) then return end
 	if action ~= "Start" then return end
 	local tool = equipped(player, candidate)
 	if not tool or reloads[player] then return end
@@ -182,6 +184,7 @@ end
 local function onShoot(player: Player, candidate: unknown, target: unknown, aimed: unknown, sequence: unknown)
 	if player.Character and player.Character:GetAttribute("PowerStunned") == true then return end
 	if player.Character and player.Character:GetAttribute("ShadowRushBusy") == true then return end
+	if player.Character and player.Character:GetAttribute("GrabLocked") == true then return end
 	local tool = equipped(player, candidate)
 	if not tool or typeof(target) ~= "Vector3" or type(aimed) ~= "boolean" then return end
 	local point = target :: Vector3

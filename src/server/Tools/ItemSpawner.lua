@@ -29,10 +29,10 @@
 
 	Madeira/Corda/Lona nascem como Parts com Attribute "MaterialJangada" +
 	"TipoMaterial" (RaftObjective.lua já sabe reconhecer, nada mudou lá).
-	Antena/Bateria/Transmissor nascem com "PecaRadio" + "TipoPeca"
-	(RadioObjective.lua idem). Faca/Lança de Bambu/Pedra Afiada/Tocha
-	nascem como uma Part com ProximityPrompt "Pegar" que entrega a Tool
-	(ToolFactory.lua) no Backpack e se destrói.
+	Antena/Bateria/Transmissor são ignorados aqui porque RadioPieces.lua cria
+	as três cópias únicas nos POIs corretos. Faca/Lança de Bambu/Pedra
+	Afiada/Tocha nascem como uma Part com ProximityPrompt "Pegar" que entrega
+	a Tool (ToolFactory.lua) no Backpack e se destrói.
 
 	Lança Ancestral NÃO é spawnada aqui (Rarity = nil, MaxPerMap = 1) --
 	fica em IslandGenerator.GenerateRuins(), junto da estrutura das Ruínas.
@@ -330,7 +330,8 @@ function ItemSpawner.Generate(seed: number?)
 	local counts: { [string]: number } = {}
 
 	for itemId, def in ItemRegistry.Items do
-		if def.Rarity then
+		-- As três peças únicas do rádio são posicionadas por RadioPieces.lua.
+		if def.Rarity and def.Category ~= "PecaRadio" then
 			local total = ItemRegistry.RarityCount[def.Rarity] or 0
 			local placed = 0
 

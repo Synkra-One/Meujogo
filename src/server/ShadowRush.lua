@@ -95,6 +95,7 @@ local function valid(s: Session): boolean
 		and s.player:GetAttribute("InRound") == true
 		and s.player:GetAttribute("Amarrado") ~= true and s.character:GetAttribute("Amarrado") ~= true
 		and s.character:GetAttribute("TeleportBusy") ~= true
+		and s.character:GetAttribute("GrabLocked") ~= true
 		and not s.character:FindFirstChild("Ragdoll") and not s.humanoid.Sit
 end
 
@@ -155,7 +156,8 @@ local function start(player: Player)
 		or player:GetAttribute("InRound") ~= true or Elimination.IsEliminated(player)
 		or player:GetAttribute("Amarrado") == true or not char or not hum or hum.Health <= 0
 		or not root or not root:IsA("BasePart") then return end
-	if char:GetAttribute("TeleportBusy") or char:GetAttribute("ShadowRushBusy") or char:GetAttribute("Amarrado")
+	if char:GetAttribute("TeleportBusy") or char:GetAttribute("ShadowRushBusy") or char:GetAttribute("GrabLocked")
+		or char:GetAttribute("Amarrado")
 		or root.Anchored or hum.Sit or hum.PlatformStand or char:FindFirstChild("Ragdoll")
 		or root:GetAttribute("IsCrouching") or root:GetAttribute("IsCrawling") or root:GetAttribute("CrawlLock")
 		or Weakness.IsWeakened(char) or os.clock() < (cooldowns[player] or 0) then return end

@@ -31,6 +31,7 @@ local Workspace = game:GetService("Workspace")
 local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local AssetRegistry = require(ReplicatedStorage.Modules.AssetRegistry)
+local DiscoveredItemsStore = require(script.Parent.DiscoveredItemsStore)
 
 local LocalPlayer = Players.LocalPlayer
 local CFG = GameConfig.Monster.Teleport
@@ -325,7 +326,7 @@ end
 --------------------------------------------------------------------------------
 -- MAPA: Q abre o mapa da ilha; clicar nele escolhe o destino
 --------------------------------------------------------------------------------
--- O mapa (Modules/MonsterMapUI) é desenhado a partir da grade que
+-- O mapa (Modules/IslandMapUI, modo "teleport") é desenhado a partir da grade que
 -- server/IslandMap amostrou de IslandLayout -- proporção 1:1 com o mundo.
 -- O clique vira um (x, z) REAL, o servidor valida e teleporta pra lá.
 
@@ -382,7 +383,8 @@ end
 
 local function onMapPick(point: Vector3)
 	local char = character
-	if not char or char:GetAttribute("TeleportBusy") == true or char:GetAttribute("ShadowRushBusy") == true then
+	if not char or char:GetAttribute("TeleportBusy") == true or char:GetAttribute("ShadowRushBusy") == true
+		or char:GetAttribute("GrabLocked") == true then
 		closeMap()
 		return
 	end
@@ -397,12 +399,21 @@ local function ensureMapUI()
 	if mapUI then
 		return
 	end
-	local MonsterMapUI = require(ReplicatedStorage.Modules.MonsterMapUI)
-	mapUI = MonsterMapUI.new(LocalPlayer:WaitForChild("PlayerGui"), onMapPick)
+	local IslandMapUI = require(ReplicatedStorage.Modules.IslandMapUI)
+	mapUI = IslandMapUI.new(LocalPlayer:WaitForChild("PlayerGui"), { mode = "teleport", onPick = onMapPick })
 	task.spawn(function()
 		mapUI:Prepare() -- monta em background pra Q abrir instantâneo
 	end)
 end
+
+-- Item novo descoberto (server/ItemDiscovery.lua) enquanto o mapa já existe:
+-- entra direto, mesmo com o mapa fechado no momento (fica pronto pra próxima
+-- vez que abrir).
+DiscoveredItemsStore.Changed:Connect(function(entry)
+	if mapUI then
+		mapUI:AddDiscoveredItem(entry :: any)
+	end
+end)
 
 -- Reserva: se o mapa não puder ser montado (dados não chegaram), volta pro
 -- teleporte mirando com a câmera, pra a habilidade nunca ficar inutilizável.
@@ -444,7 +455,8 @@ local function toggleMap()
 		return
 	end
 	local char = character
-	if not char or char:GetAttribute("TeleportBusy") == true or char:GetAttribute("ShadowRushBusy") == true then
+	if not char or char:GetAttribute("TeleportBusy") == true or char:GetAttribute("ShadowRushBusy") == true
+		or char:GetAttribute("GrabLocked") == true then
 		return
 	end
 
@@ -461,6 +473,7 @@ local function toggleMap()
 		else "pronto"
 
 	if mapUI:Show(pos, status) then
+		mapUI:SetDiscoveredItems(DiscoveredItemsStore.GetAll())
 		setControls(false) -- não anda enquanto escolhe
 		setMouseFree(true)
 		LocalPlayer:SetAttribute("MapaAberto", true) -- MonsterController não ataca

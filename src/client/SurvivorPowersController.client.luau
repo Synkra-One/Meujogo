@@ -184,7 +184,7 @@ RunService.RenderStepped:Connect(function(dt)
 	local character = player.Character
 	blocked = character == nil or character:GetAttribute("PowerStunned") == true
 		or character:GetAttribute("PowerMoving") == true or character:GetAttribute("FearTripping") == true
-		or player:GetAttribute("Amarrado") == true
+		or character:GetAttribute("GrabLocked") == true or player:GetAttribute("Amarrado") == true
 	local viewport = if camera then camera.ViewportSize else Vector2.new(1280, 720)
 	scale.Scale = math.clamp(math.min(viewport.X / 1050, viewport.Y / 700), 0.68, 1)
 	dock.Position = UDim2.new(1, if UserInputService.TouchEnabled then -140 else -26, 1, -22)

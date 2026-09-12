@@ -53,6 +53,11 @@ end
 
 local Remotes = {}
 
+-- C -> S: "Aim", tool, unitDirection | "Toggle", tool, enabled, unitDirection, sequence.
+-- No hit, target, origin, battery or damage is accepted from a client.
+-- S -> C: "State", tool, enabled, battery, sequence (toggle acknowledgement).
+Remotes.Flashlight = getRemote("Flashlight")
+
 -- C -> S: slot (1 | 2), no target/character/cooldown from client.
 -- S -> C: "Rejected", reason | "Direction", powerId, localUnitDirection, endsAt.
 -- Cooldowns replicate as Player.SurvivorPowerReadyAt1/2 (GetServerTimeNow).
@@ -147,6 +152,15 @@ Remotes.PlayerKilled = getRemote("PlayerKilled")
 --     "pop" do golpe ficar consistente.
 --------------------------------------------------------------------------------
 Remotes.MonsterAttack = getRemote("MonsterAttack")
+
+--------------------------------------------------------------------------------
+-- MonsterGrab
+-- Client -> Server: sem argumentos. O cliente apenas pede a habilidade.
+-- O servidor valida papel/estado/cooldown, encontra a vitima por alcance,
+-- cone e linha de visao e executa toda a sincronizacao.
+-- Server -> Client: ("Rejected", reason) somente para feedback local.
+--------------------------------------------------------------------------------
+Remotes.MonsterGrab = getRemote("MonsterGrab")
 
 -- C -> S: ("Start", nil, direção horizontal), ("Move", token, direção),
 -- ("Stop", token). Nenhuma posição/velocidade é aceita. Estado, token e
@@ -276,7 +290,8 @@ Remotes.RoundEnded = getRemote("RoundEnded")
 --   (ex: RadioObjective, RaftObjective).
 -- Server -> Clients (FireAllClients):
 --   objectiveId: string     -- ex: "RadioPecas", "RadioCompleto",
---                               "JangadaProgresso", "FugaJangada"
+--                               "TodasPecasInstaladas", "JangadaProgresso",
+--                               "FugaJangada"
 --   current: number
 --   max: number
 --   players: { Player }?    -- opcional; presente quando o objetivo precisa
@@ -287,6 +302,26 @@ Remotes.RoundEnded = getRemote("RoundEnded")
 Remotes.ObjectiveProgress = getRemote("ObjectiveProgress")
 
 --------------------------------------------------------------------------------
+-- MapDiscovery
+-- Disparado por: servidor (server/ItemDiscovery.lua), quando um jogador passa
+--   perto o suficiente (GameConfig.MapDiscovery.Radius) de um item ainda não
+--   descoberto POR ELE. Cada jogador tem seu próprio progresso de descoberta.
+-- Server -> Client (FireClient), só para quem descobriu:
+--   entry: {
+--     key: string,          -- id estável da instância (nunca repete pro mesmo jogador)
+--     x: number, z: number, -- posição no mundo
+--     itemId: string?,      -- chave de ItemRegistry.Items, quando existir
+--     category: string,     -- Modules/MapMarkers.Category (Firearm/Melee/...)
+--     label: string?,       -- nome pra mostrar (ex: "Faca Improvisada")
+--   }
+-- Recebido por: client/DiscoveredItemsStore.lua (ModuleScript), consumido
+--   pelos dois mapas (client/MonsterTeleportController e
+--   client/SurvivorMapController) via Modules/IslandMapUI:AddDiscoveredItem.
+--   Não existe direção Client -> Server neste remote.
+--------------------------------------------------------------------------------
+Remotes.MapDiscovery = getRemote("MapDiscovery")
+
+--------------------------------------------------------------------------------
 -- LobbyMessage
 -- Disparado por: servidor (LobbyManager.lua), em resposta a uma interação
 --   com o prompt "IniciarPartida" que não pôde ser atendida.
@@ -295,6 +330,24 @@ Remotes.ObjectiveProgress = getRemote("ObjectiveProgress")
 -- Recebido por: apenas o jogador que interagiu.
 --------------------------------------------------------------------------------
 Remotes.LobbyMessage = getRemote("LobbyMessage")
+
+--------------------------------------------------------------------------------
+-- ExtractionChoice
+-- Embarque no helicóptero do resgate (server/ExtractionSystem.lua <->
+-- client/ExtractionController.client.luau).
+--
+-- Server -> Client (FireClient), só pra quem embarcou:
+--   "Abrir"    -- mostra as duas opções na tela (partir agora / esperar)
+--   "Fechar"   -- esconde a UI (desembarcou, morreu, ou o voo começou)
+--
+-- Client -> Server (FireServer):
+--   "Partir"   -- decolar agora
+--   "Esperar"  -- fica a bordo e some com a UI; sair exige o prompt "Sair"
+--
+-- O servidor valida que quem mandou está REALMENTE a bordo; pedido de quem
+-- não está é ignorado em silêncio.
+--------------------------------------------------------------------------------
+Remotes.ExtractionChoice = getRemote("ExtractionChoice")
 
 --------------------------------------------------------------------------------
 -- DropItem
@@ -310,6 +363,17 @@ Remotes.LobbyMessage = getRemote("LobbyMessage")
 --   silêncio. Este remote não é retransmitido.
 --------------------------------------------------------------------------------
 Remotes.DropItem = getRemote("DropItem")
+
+--------------------------------------------------------------------------------
+-- TransmissionMinigame
+-- Server -> Client:
+--   "OpenFuse", hasFuse: boolean -- abre a caixa; o item so aparece se tiver.
+--   "FuseResult", success: boolean, reason: string? -- resposta da instalacao.
+--   "OpenPanel" -- abre a arte do painel; minigame do painel vira etapa futura.
+-- Client -> Server:
+--   "InstallFuse" -- servidor revalida papel, vida, distancia e posse.
+--------------------------------------------------------------------------------
+Remotes.TransmissionMinigame = getRemote("TransmissionMinigame")
 
 --------------------------------------------------------------------------------
 -- PERSONAGENS JOGÁVEIS

@@ -45,7 +45,8 @@ local function blocked(): boolean
 		or player:GetAttribute("InWaitingRoom") == true or player:GetAttribute("Eliminado") == true
 		or player:GetAttribute("Amarrado") == true
 		or humanoid == nil or (humanoid :: Humanoid).Health <= 0
-		or (character ~= nil and (character :: Model):GetAttribute("Amarrado") == true)
+		or (character ~= nil and ((character :: Model):GetAttribute("Amarrado") == true
+			or (character :: Model):GetAttribute("GrabLocked") == true))
 end
 
 local function applyGrip()

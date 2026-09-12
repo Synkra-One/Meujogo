@@ -1,19 +1,8 @@
 --!strict
 --[[
 	UtilityItemSystem
-	Efeitos de uso da Lanterna e do Chocolate -- os dois únicos itens desta
-	leva com modelo REAL do Toolbox (ToolFactory.lua/AssetLoader.lua), não
-	placeholder.
-
-	LANTERNA: Tool.Activated alterna o SpotLight "LanternaLuz" (visual,
-	criado por ToolFactory) E a fraqueza do Monstro (MonsterLightWeakness.
-	ActivateLightSource/DeactivateLightSource -- mesmo raio/empurrão/
-	combustível de 120s que a Tocha usa, só acionado por escolha do
-	jogador em vez de automático ao equipar). Sem combustível, Activate
-	devolve false e a luz visual nem acende -- os dois efeitos ficam
-	sempre em sincronia (nunca ilumina sem also contar como fraqueza, nem
-	o contrário). Desequipar força as duas coisas a desligar, pra não
-	sobrar luz acesa "esquecida" na Backpack.
+	Efeitos de Chocolate e Bandagem. A lanterna direcional, sua bateria e
+	a exposicao do monstro pertencem ao FlashlightSystem.
 
 	CHOCOLATE: Tool.Activated cura GameConfig.Health.ChocolateHeal na hora e
 	se destrói (consumível, um uso só).
@@ -30,7 +19,7 @@
 	Os dois passam pela porta única de cura (DamageSystem.Heal), que respeita
 	MaxHealth e não ressuscita ninguém.
 
-	Uso (chamar uma vez no boot do servidor, depois de MonsterLightWeakness.Init()):
+	Uso (chamar uma vez no boot do servidor, depois de DamageSystem.Init()):
 		local UtilityItemSystem = require(script.UtilityItemSystem)
 		UtilityItemSystem.Init()
 ]]
@@ -41,7 +30,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local ItemRegistry = require(ReplicatedStorage.Modules.ItemRegistry)
 local SafeAttribute = require(ReplicatedStorage.Modules.SafeAttribute)
-local MonsterLightWeakness = require(script.Parent.MonsterLightWeakness)
 local DamageSystem = require(script.Parent.DamageSystem)
 
 local UtilityItemSystem = {}
@@ -49,48 +37,13 @@ local UtilityItemSystem = {}
 local watchedTools: { [Tool]: true } = {}
 
 --------------------------------------------------------------------------------
--- Lanterna
---------------------------------------------------------------------------------
-
-local function getLanternaLight(tool: Tool): Light?
-	local handle = tool:FindFirstChild("Handle")
-	local light = handle and handle:FindFirstChild("LanternaLuz")
-	if light and light:IsA("Light") then
-		return light
-	end
-	return nil
-end
-
-local function turnLanternaOff(tool: Tool)
-	local light = getLanternaLight(tool)
-	if light then
-		light.Enabled = false
-	end
-	MonsterLightWeakness.DeactivateLightSource(tool)
-end
-
-local function onLanternaActivated(tool: Tool)
-	if tool.Parent and tool.Parent:GetAttribute("ShadowRushBusy") == true then return end
-	local light = getLanternaLight(tool)
-	if not light then
-		return
-	end
-
-	if light.Enabled then
-		turnLanternaOff(tool)
-	else
-		local turnedOn = MonsterLightWeakness.ActivateLightSource(tool)
-		light.Enabled = turnedOn -- sem combustível, nem acende
-	end
-end
-
---------------------------------------------------------------------------------
 -- Chocolate
 --------------------------------------------------------------------------------
 
 local function onChocolateActivated(player: Player, tool: Tool)
 	local character = player.Character
-	if character and character:GetAttribute("ShadowRushBusy") == true then return end
+	if character and (character:GetAttribute("ShadowRushBusy") == true
+		or character:GetAttribute("GrabLocked") == true) then return end
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	if not humanoid then
 		return
@@ -145,7 +98,8 @@ local function playHealAnimation(humanoid: Humanoid): AnimationTrack?
 end
 
 local function onBandagemActivated(player: Player, tool: Tool)
-	if player.Character and player.Character:GetAttribute("ShadowRushBusy") == true then return end
+	if player.Character and (player.Character:GetAttribute("ShadowRushBusy") == true
+		or player.Character:GetAttribute("GrabLocked") == true) then return end
 	if healingNow[player] then
 		return -- já está usando uma
 	end
@@ -229,19 +183,7 @@ local function watchUtilityItem(tool: Instance)
 		return
 	end
 
-	if SafeAttribute.Get(tool, ItemRegistry.Items.Lanterna.AttributeName) == true then
-		watchedTools[tool] = true
-
-		tool.Activated:Connect(function()
-			onLanternaActivated(tool)
-		end)
-		tool.Unequipped:Connect(function()
-			turnLanternaOff(tool)
-		end)
-		tool.Destroying:Connect(function()
-			watchedTools[tool] = nil
-		end)
-	elseif SafeAttribute.Get(tool, ItemRegistry.Items.Chocolate.AttributeName) == true then
+	if SafeAttribute.Get(tool, ItemRegistry.Items.Chocolate.AttributeName) == true then
 		watchedTools[tool] = true
 
 		tool.Activated:Connect(function()
@@ -286,8 +228,8 @@ end
 
 --[[
 	Init()
-	Conecta Lanterna e Chocolate em qualquer Tool existente/futura no jogo.
-	Chame uma vez no boot do servidor, depois de MonsterLightWeakness.Init().
+	Conecta Chocolate e Bandagem em qualquer Tool existente/futura no jogo.
+	Chame uma vez no boot do servidor, depois de DamageSystem.Init().
 ]]
 function UtilityItemSystem.Init()
 	forEachTool(game, watchUtilityItem)

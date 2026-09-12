@@ -108,6 +108,30 @@ AssetRegistry.Sounds = {
 
 	-- AmbientSoundController.client.luau: tensão por ficar fora de zona segura.
 	HeartbeatTension = "rbxassetid://0",
+
+	-- server/RadioSiteSystem.lua: a estação de rádio.
+	RadioSite = {
+		-- Loop do motor enquanto o gerador roda. É o som mais importante do
+		-- objetivo: com RollOffMaxDistance 320, é ele que denuncia a estação
+		-- de longe e transforma "ligar o gerador" numa decisão de risco.
+		-- AINDA PLACEHOLDER -- falta o id.
+		Gerador = "rbxassetid://0",
+
+		-- Rádio energizado: loop no console a partir de "Ativar painel".
+		RadioLigado = "rbxassetid://4860560167",
+
+		-- Pedido de socorro indo ao ar: toca no console durante a
+		-- canalização e para junto se a transmissão for cancelada.
+		PedidoSocorro = "rbxassetid://6985678040",
+	},
+
+	-- server/ExtractionSystem.lua: o helicóptero do resgate.
+	Extracao = {
+		-- Loop do rotor, do momento que ele aparece no céu até sumir no
+		-- horizonte. Alcance grande de propósito: ouvir o helicóptero
+		-- chegando é metade da tensão da corrida final.
+		Helicoptero = "rbxassetid://99103708154004",
+	},
 }
 
 -- Survivor powers: replace each icon/sound/optional animation independently.

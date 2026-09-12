@@ -58,7 +58,7 @@ local function onCraftItem(player: Player, itemId: unknown)
 		return
 	end
 
-	if not player.Character then
+	if not player.Character or player.Character:GetAttribute("GrabLocked") == true then
 		return
 	end
 

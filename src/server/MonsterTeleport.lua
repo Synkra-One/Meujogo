@@ -723,7 +723,8 @@ local function onTeleportRequest(player: Player, rawPoint: unknown)
 	if not character or not humanoid or not root then
 		return
 	end
-	if character:GetAttribute("TeleportBusy") == true or character:GetAttribute("ShadowRushBusy") == true then
+	if character:GetAttribute("TeleportBusy") == true or character:GetAttribute("ShadowRushBusy") == true
+		or character:GetAttribute("GrabLocked") == true then
 		return
 	end
 

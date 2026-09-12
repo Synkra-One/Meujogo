@@ -31,13 +31,11 @@
 	jeito certo:
 	  Category "Tool"            -> ToolFactory.Create -> Backpack
 	  Category "MaterialJangada" -> RaftObjective.AddMaterial (estoque pessoal)
-	  Category "PecaRadio"       -> RadioObjective.CollectPiece (do time)
+	  Category "PecaRadio"       -> excluída do sorteio; há uma cópia fixa de cada
 
-	Isso importa muito pro peso da SORTE: os DOIS únicos itens "Rara" do jogo
-	são Lona (vela da jangada) e Transmissor (peça do rádio) -- os dois são
-	gargalo de objetivo. Tirar um deles de uma caixa muda a partida, e é
-	exatamente aí que Camila (Sorte 96) brilha sobre Kevin (Sorte 12).
-	Peça de rádio repetida (o time já tem) é re-sorteada, não desperdiçada.
+	Isso importa muito pro peso da SORTE: materiais raros e Tools melhores
+	ficam mais prováveis para personagens com Sorte alta. As peças únicas do
+	rádio ficam fora desse sorteio.
 
 	Uso (uma vez no boot, DEPOIS de CharacterStatsApplier pra a Sorte já
 	estar publicada):
@@ -54,7 +52,6 @@ local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local StatScaling = require(ReplicatedStorage.Modules.StatScaling)
 local ToolFactory = require(ReplicatedStorage.Modules.ToolFactory)
 
-local RadioObjective = require(script.Parent.RadioObjective)
 local RaftObjective = require(script.Parent.RaftObjective)
 local IslandLayout = require(script.Parent.Tools.IslandLayout)
 
@@ -75,7 +72,9 @@ local watched: { [BasePart]: true } = {}
 local pool: { [string]: { string } } = {}
 for itemId, def in ItemRegistry.Items do
 	local rarity = (def :: any).Rarity
-	if type(rarity) == "string" and CFG.RarityWeights[rarity] then
+	-- Peças do rádio são únicas e ficam nos três POIs definidos por
+	-- RadioPieces.lua; não podem surgir como cópias extras nas caixas.
+	if (def :: any).Category ~= "PecaRadio" and type(rarity) == "string" and CFG.RarityWeights[rarity] then
 		pool[rarity] = pool[rarity] or {}
 		table.insert(pool[rarity], itemId)
 	end
@@ -146,9 +145,8 @@ end
 
 --[[
 	grantItem(player, backpack, itemId)
-	Entrega UM item. Devolve false quando o item não pôde ser dado (peça de
-	rádio que o time já tem, asset do Toolbox que não carregou) -- aí quem
-	chamou re-sorteia em vez de perder a rolagem.
+	Entrega UM item. Devolve false quando o item não pôde ser dado (por
+	exemplo, asset do Toolbox que não carregou) -- aí quem chamou re-sorteia.
 ]]
 local function grantItem(player: Player, backpack: Backpack, itemId: string): boolean
 	local def = ItemRegistry.Items[itemId]
@@ -162,8 +160,7 @@ local function grantItem(player: Player, backpack: Backpack, itemId: string): bo
 		RaftObjective.AddMaterial(player, itemId, 1)
 		return true
 	elseif category == "PecaRadio" then
-		-- Peça do time. Repetida = false, pra re-sortear.
-		return RadioObjective.CollectPiece(itemId, player)
+		return false -- peças únicas são criadas somente por RadioPieces.lua
 	end
 
 	local tool = ToolFactory.Create(itemId)
@@ -215,8 +212,7 @@ local function onOpenRequest(player: Player, crate: unknown)
 
 	local given: { string } = {}
 	for _ = 1, rollCount(player) do
-		-- Até 3 tentativas por rolagem: peça de rádio que o time já tem é
-		-- re-sorteada em vez de virar rolagem perdida.
+		-- Até 3 tentativas por rolagem se um asset sorteado não puder ser criado.
 		for _ = 1, 3 do
 			local itemId = rollItem(player)
 			if itemId and grantItem(player, backpack, itemId) then

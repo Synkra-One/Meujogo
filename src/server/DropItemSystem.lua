@@ -39,6 +39,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
+local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
 
 local DropItemSystem = {}
@@ -46,6 +47,34 @@ local DropItemSystem = {}
 local DROP_LIFETIME = 180 -- s no chão antes do Debris limpar (se ninguém pegar)
 local DROP_FORWARD = 3.5 -- studs à frente do personagem
 local PICKUP_DISTANCE = 8 -- alcance do ProximityPrompt "Pegar"
+local INVENTORY_SLOT_COUNT = 3 -- mesmo limite exibido pela HotbarController
+
+local function inventoryToolCount(player: Player): number
+	local count = 0
+	local backpack = player:FindFirstChildOfClass("Backpack")
+	local character = player.Character
+
+	if backpack then
+		for _, item in backpack:GetChildren() do
+			if item:IsA("Tool") then
+				count += 1
+			end
+		end
+	end
+	if character then
+		for _, item in character:GetChildren() do
+			if item:IsA("Tool") then
+				count += 1
+			end
+		end
+	end
+
+	return count
+end
+
+function DropItemSystem.HasInventorySpace(player: Player): boolean
+	return inventoryToolCount(player) < INVENTORY_SLOT_COUNT
+end
 
 local function getHandle(tool: Tool): BasePart?
 	local handle = tool:FindFirstChild("Handle")
@@ -125,6 +154,10 @@ local function attachPickupPrompt(tool: Tool)
 			or (root.Position - handle.Position).Magnitude > PICKUP_DISTANCE + 2 then
 			return
 		end
+		if tool:GetAttribute("PecaRadio") == true
+			and (player:GetAttribute("Role") ~= GameConfig.Roles.Survivor or not DropItemSystem.HasInventorySpace(player)) then
+			return
+		end
 		if tool:GetAttribute("LobbyTestWeapon") == true then
 			if player:GetAttribute("InRound") == true or player:GetAttribute("InWaitingRoom") == true then return end
 			local count = 0
@@ -184,6 +217,9 @@ end
 
 local function dropTool(player: Player, tool: Tool)
 	local character = player.Character
+	if character and character:GetAttribute("GrabLocked") == true then
+		return
+	end
 	local backpack = player:FindFirstChildOfClass("Backpack")
 
 	-- Posse: precisa estar na mão ou na mochila do próprio jogador AGORA.

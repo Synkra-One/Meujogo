@@ -12,9 +12,8 @@
 	    no Backpack) porque precisam ser entregues em LocalJangada. Corda
 	    também é gasta por ConfrontSystem (amarrar) -- mesmo estoque, dois
 	    usos possíveis pro jogador escolher.
-	  "PecaRadio" -- Antena/Bateria/Transmissor: creditadas direto pro time
-	    ao tocar (RadioObjective.lua), sem inventário pessoal -- são
-	    objetivo compartilhado, não recurso de craft.
+	  "PecaRadio" -- Antena/Bateria/Transmissor: peças únicas criadas por
+	    RadioPieces.lua. Viram Tools no inventário e caem quando o portador morre.
 	  "Tool" -- FacaImprovisada/LancaDeBambu/PedraAfiada/Tocha/LancaAncestral:
 	    Tools de verdade no Backpack (WeaponSystem.lua / já existentes).
 
@@ -139,8 +138,8 @@ ItemRegistry.Items = {
 		AttributeName = "Lanterna",
 		Rarity = "Media",
 		Zones = { Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta, Zone.Construcoes, Zone.Construcoes },
-		AssetId = 6302063371, -- modelo REAL do Toolbox, não placeholder (ver ToolFactory.lua)
-		Function = "Liga/desliga (Tool.Activated). Enquanto ligada, enfraquece o Monstro igual a Tocha -- mesmo raio, empurrão e combustível (120s) -- só o visual muda.",
+		AssetId = 117648733552528,
+		Function = "Feixe direcional com bateria de 60s. Exposicao continua incomoda e desacelera o Monstro, com dano leve e resistencia temporaria.",
 	},
 	Chocolate = {
 		DisplayName = "Chocolate",
@@ -158,6 +157,15 @@ ItemRegistry.Items = {
 		Rarity = "Media",
 		Zones = { Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta, Zone.Construcoes, Zone.Construcoes },
 		Function = "Cura com canalização (estilo Left 4 Dead): usa por ~3,5s tocando a animação e só então cura GameConfig.Bandagem.Heal. Tomar dano, desequipar ou morrer no meio cancela sem gastar. A passiva da Sofia deixa a cura 40% melhor.",
+	},
+	Gasolina = {
+		DisplayName = "Galão de Gasolina",
+		Category = "Tool",
+		AttributeName = "Gasolina",
+		Rarity = "Media",
+		Zones = { Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta, Zone.Construcoes, Zone.Construcoes },
+		AssetId = 8679995948, -- modelo REAL do Toolbox (ver ToolFactory.lua)
+		Function = "Combustível portátil pro gerador da Estação de Rádio (server/RadioSiteSystem.lua). Levar até o bocal e segurar 'Abastecer': soma GameConfig.RadioSite.CombustivelPorGalao segundos e se destrói -- concorre com os galões fixos já presentes no local, mas vale carregar porque não depende de estar perto da estação pra achar.",
 	},
 	LancaAncestral = {
 		DisplayName = "Lança Ancestral",

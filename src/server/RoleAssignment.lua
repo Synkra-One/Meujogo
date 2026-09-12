@@ -3,7 +3,7 @@
 	RoleAssignment
 	Sorteia e consulta os papéis dos jogadores em "Náufragos".
 
-	Papéis (ver GameConfig.Roles): 1 Monstro, 1 Espiao, o resto Sobrevivente.
+	Papéis: 1 Monstro e pelo menos 1 Sobrevivente. Espiao a partir de 3 jogadores.
 	O papel de cada jogador fica salvo como Attribute "Role" no próprio
 	Instance do Player (player:GetAttribute("Role")), então qualquer script
 	(server ou client) pode ler sem precisar deste módulo.
@@ -75,7 +75,7 @@ end
 
 --[[
 	AssignRoles(players)
-	Distribui: 1 Monstro, 1 Espiao, resto Sobrevivente.
+	Distribui: 1 Monstro, 1 Espiao (com 3+ jogadores), resto Sobrevivente.
 
 	MODO DE TESTE:
 	  - GameConfig.Testing.ForceRole força todo mundo no mesmo papel;
@@ -101,7 +101,7 @@ function RoleAssignment.AssignRoles(players: { Player })
 		return
 	end
 
-	assert(#players >= 2, "AssignRoles precisa de pelo menos 2 jogadores (1 Monstro + 1 Espiao)")
+	assert(#players >= 2, "AssignRoles precisa de pelo menos 2 jogadores (1 Monstro + 1 Sobrevivente)")
 
 	local shuffled = shuffle(players)
 	local taken: { [Player]: boolean } = {}
@@ -109,7 +109,12 @@ function RoleAssignment.AssignRoles(players: { Player })
 	if monster then
 		taken[monster] = true
 	end
-	local spy = pickRequested(shuffled, GameConfig.Roles.Spy, taken) or pickAny(shuffled, taken)
+	-- Com dois jogadores, reservar Espiao deixaria zero Sobreviventes e
+	-- dispararia a vitoria do Monstro imediatamente.
+	local spy: Player? = nil
+	if #players >= 3 then
+		spy = pickRequested(shuffled, GameConfig.Roles.Spy, taken) or pickAny(shuffled, taken)
+	end
 	if spy then
 		taken[spy] = true
 	end

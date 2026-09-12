@@ -54,6 +54,7 @@ end
 local SHALLOW_BAND = 30 -- studs mar adentro
 local MID_BAND = 120
 local FADE_BAND = 260 -- em quantos studs o tom do mar termina de escurecer
+local COAST_DARKEN = 0.12 -- quanto a terra colada na água escurece (linha de costa)
 
 local function terrainAt(x: number, z: number, height: number, waterLevel: number): number
 	-- Água primeiro: distância da costa decide o tom.
@@ -89,6 +90,25 @@ end
 --------------------------------------------------------------------------------
 -- Amostragem + hillshading
 --------------------------------------------------------------------------------
+
+-- true se alguma das 4 células vizinhas for água -- usado pra desenhar uma
+-- linha de costa fina em vez de deixar o limite cru entre um retângulo de
+-- praia e um de mar (que lê como "pixelado").
+local function isCoastCell(types: { { number } }, i: number, j: number, resolution: number): boolean
+	if i > 1 and IslandMapData.WaterTerrain[types[j][i - 1]] then
+		return true
+	end
+	if i < resolution and IslandMapData.WaterTerrain[types[j][i + 1]] then
+		return true
+	end
+	if j > 1 and IslandMapData.WaterTerrain[types[j - 1][i]] then
+		return true
+	end
+	if j < resolution and IslandMapData.WaterTerrain[types[j + 1][i]] then
+		return true
+	end
+	return false
+end
 
 local function buildGrid(resolution: number, half: number): { { number } }
 	local cell = (half * 2) / resolution
@@ -146,8 +166,17 @@ local function buildGrid(resolution: number, half: number): { { number } }
 				local len = math.sqrt(dx * dx + dz * dz + 1)
 				local nx, ny, nz = dx / len, 1 / len, dz / len
 				local dot = nx * lightX + ny * lightY + nz * lightZ
-				-- realce forte: uma ilha achatada precisa de contraste pra ler
-				shade = math.clamp(0.5 + dot * 1.55, 0, 1)
+				-- realce mais suave que antes (1.55 -> 1.25): junto com os 16
+				-- níveis de sombra (era 7), o relevo vira gradiente contínuo
+				-- em vez de degraus grandes.
+				shade = math.clamp(0.5 + dot * 1.25, 0, 1)
+
+				-- Linha de costa: terra colada na água escurece um pouco mais,
+				-- dá uma borda fina e contínua em vez do limite cru entre um
+				-- retângulo de praia e um de mar.
+				if isCoastCell(types, i, j, resolution) then
+					shade = math.clamp(shade - COAST_DARKEN, 0, 1)
+				end
 			end
 
 			local level = math.clamp(math.floor(shade * levels) + 1, 1, levels)
@@ -177,6 +206,7 @@ local POI_LABELS: { [string]: string } = {
 	Farol = "Farol",
 	VilaNativa = "Vila Nativa",
 	Ruinas = "Ruínas",
+	Radio = "Estação de Rádio",
 }
 
 local function collectPois(): { { [string]: any } }

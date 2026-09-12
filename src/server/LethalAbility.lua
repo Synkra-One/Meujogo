@@ -77,6 +77,7 @@ end
 
 local function onLethalAbilityUsed(caster: Player, target: unknown)
 	if caster.Character and caster.Character:GetAttribute("PowerStunned") == true then return end
+	if caster.Character and caster.Character:GetAttribute("GrabLocked") == true then return end
 	if caster:GetAttribute("Role") ~= GameConfig.Roles.Spy then
 		return
 	end

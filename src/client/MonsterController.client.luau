@@ -134,7 +134,7 @@ local function playHitSound()
 end
 
 local function applyLunge()
-	if character and character:GetAttribute("ShadowRushBusy") == true then return end
+	if character and (character:GetAttribute("ShadowRushBusy") == true or character:GetAttribute("GrabLocked") == true) then return end
 	local hrp = rootPart
 	local hum = humanoid
 	if not hrp or not hum or hum.Health <= 0 or ATK.LungeForce <= 0 then
@@ -176,7 +176,8 @@ local function tryAttack()
 		return
 	end
 	-- Durante o teleporte o servidor já recusa, mas nem toca a animação aqui.
-	if character and (character:GetAttribute("TeleportBusy") == true or character:GetAttribute("ShadowRushBusy") == true) then
+	if character and (character:GetAttribute("TeleportBusy") == true or character:GetAttribute("ShadowRushBusy") == true
+		or character:GetAttribute("GrabLocked") == true) then
 		return
 	end
 	local hum = humanoid
@@ -230,7 +231,7 @@ end
 
 Remotes.MonsterAttack.OnClientEvent:Connect(function(kind: string, a: any)
 	if kind == "confirm" then
-		if character and character:GetAttribute("ShadowRushBusy") == true then return end
+		if character and (character:GetAttribute("ShadowRushBusy") == true or character:GetAttribute("GrabLocked") == true) then return end
 		applyLunge()
 		local hitCount = tonumber(a) or 0
 		if hitCount > 0 then

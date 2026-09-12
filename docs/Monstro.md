@@ -22,6 +22,11 @@ Já era assim: `LobbyManager.teleportToIsland` põe o Monstro no marcador
 `Workspace/Ilha/Caverna`, criado por `IslandGenerator.GenerateCave()`. Todo o
 resto desembarca num ponto de praia achado por raycast.
 
+O marcador agora fica **no ninho, no nível de cima do covil** (laje do fundo,
+33 studs acima do chão do salão), embaixo do feixe de luz que desce pela fenda
+do teto: ele acorda lá em cima e desce pela escadaria, pela galeria e pela
+rampa. A planta toda está em [Caverna.md](Caverna.md).
+
 **Se o Monstro nascer na praia junto com os outros:** a caverna não foi
 gerada. Rode no Command Bar (modo de edição) e salve:
 ```lua

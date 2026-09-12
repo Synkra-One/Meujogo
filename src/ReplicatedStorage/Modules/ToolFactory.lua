@@ -11,22 +11,22 @@
 	precisam exatamente da mesma Tool -- duplicar a forma em 3 lugares
 	significaria 3 lugares pra corrigir quando trocar por um modelo real.
 
-	Cristal Ancestral e Corda/Madeira/Lona/Antena/Bateria/Transmissor NÃO
-	têm construtor aqui: os três materiais/peças nascem como Parts (não
-	Tools, ver ItemSpawner.lua) e o Cristal continua Studio-placed, fora do
-	escopo desta leva de itens.
+	Cristal Ancestral, Corda/Madeira/Lona e as peças do rádio NÃO têm
+	construtor aqui. RadioPieces.lua transforma a própria Part do rádio no
+	Handle da Tool; o Cristal continua Studio-placed.
 
-	LANTERNA e CHOCOLATE são diferentes dos outros: usam um modelo REAL do
-	Toolbox (AssetLoader.lua), não a forma placeholder das demais. O Model
-	carregado é desmontado em Parts soltas -- a maior vira "Handle" (nome
-	exigido por Tool.RequiresHandle), as outras são soldadas nela -- porque
-	não dá pra saber de antemão como o asset organiza suas próprias Parts
-	por dentro (pode vir com 1 Part só ou várias).
+	LANTERNA, CHOCOLATE e GASOLINA são diferentes dos outros: usam um modelo
+	REAL do Toolbox (AssetLoader.lua), não a forma placeholder das demais. O
+	Model carregado é desmontado em Parts soltas -- a maior vira "Handle"
+	(nome exigido por Tool.RequiresHandle), as outras são soldadas nela --
+	porque não dá pra saber de antemão como o asset organiza suas próprias
+	Parts por dentro (pode vir com 1 Part só ou várias).
 ]]
 
 local ItemRegistry = require(script.Parent.ItemRegistry)
 local AssetLoader = require(script.Parent.AssetLoader)
 local ItemIcons = require(script.Parent.ItemIcons)
+local FlashlightRig = require(script.Parent.FlashlightRig)
 
 local ToolFactory = {}
 
@@ -175,26 +175,7 @@ local CONSTRUCTORS: { [string]: () -> Tool? } = {
 
 		local model = template:Clone()
 		scaleModelToLength(model, 1.8)
-		local tool = buildToolFromAssetModel(model, "Lanterna")
-		if not tool then
-			return nil
-		end
-
-		-- Luz visível pro jogador: desligada por padrão, ligada/desligada
-		-- por UtilityItemSystem.lua (Tool.Activated). A fraqueza do Monstro
-		-- (raio/empurrão/combustível) é outra luz, interna, criada por
-		-- MonsterLightWeakness.ActivateLightSource -- essa aqui é só visual.
-		local handle = tool:FindFirstChild("Handle") :: BasePart
-		local light = Instance.new("SpotLight")
-		light.Name = "LanternaLuz"
-		light.Brightness = 3
-		light.Range = 30
-		light.Angle = 45
-		light.Face = Enum.NormalId.Front
-		light.Enabled = false
-		light.Parent = handle
-
-		return tool
+		return FlashlightRig.Build(model)
 	end,
 
 	Chocolate = function()
@@ -206,6 +187,17 @@ local CONSTRUCTORS: { [string]: () -> Tool? } = {
 		local model = template:Clone()
 		scaleModelToLength(model, 1)
 		return buildToolFromAssetModel(model, "Chocolate")
+	end,
+
+	Gasolina = function()
+		local template = AssetLoader.Load(ItemRegistry.Items.Gasolina.AssetId)
+		if not template then
+			return nil
+		end
+
+		local model = template:Clone()
+		scaleModelToLength(model, 1.8) -- galão portátil; menor que os fixos da Estação de Rádio (2,4)
+		return buildToolFromAssetModel(model, "Gasolina")
 	end,
 
 	LancaAncestral = function()

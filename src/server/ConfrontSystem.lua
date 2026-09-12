@@ -151,6 +151,9 @@ end
 --------------------------------------------------------------------------------
 
 local function onDetectSuspect(caller: Player, target: unknown)
+	if caller.Character and caller.Character:GetAttribute("GrabLocked") == true then
+		return
+	end
 	local targetPlayer = toTargetPlayer(caller, target)
 	if not targetPlayer then
 		return
@@ -321,6 +324,8 @@ local function setupAmarrarPrompt(target: Player, character: Model)
 	prompt.Name = "Amarrar"
 	prompt.ActionText = "Amarrar"
 	prompt.ObjectText = target.Name
+	prompt.KeyboardKeyCode = GameConfig.Confront.TieInputKey
+	prompt.GamepadKeyCode = GameConfig.Confront.TieGamepadKey
 	prompt.MaxActivationDistance = GameConfig.Confront.TieRange
 	prompt.RequiresLineOfSight = false
 	prompt.Parent = root
@@ -336,6 +341,7 @@ end
 
 local function onConfrontKill(killer: Player, target: unknown)
 	if killer.Character and killer.Character:GetAttribute("PowerStunned") == true then return end
+	if killer.Character and killer.Character:GetAttribute("GrabLocked") == true then return end
 	local targetPlayer = toTargetPlayer(killer, target)
 	if not targetPlayer then
 		return

@@ -10,8 +10,8 @@
 	  fase é interrompida assim que a partida termina por vitória.
 
 	CONDIÇÕES DE VITÓRIA (checadas a cada GameConfig.Round.WinCheckInterval)
-	  Sobreviventes: rádio concluído (fim da contagem de resgate) OU jangada
-	                 empurrada ao mar com alguém a bordo.
+	  Sobreviventes: helicóptero do resgate decolou com alguém a bordo OU
+	                 jangada empurrada ao mar com alguém a bordo.
 	  Monstro:       nº de Sobreviventes VIVOS <= MonsterWinsAtSurvivorsAlive
 	                 antes do tempo acabar. Espião não conta como Sobrevivente.
 	  Espião:        tempo acabou, nenhuma fuga deu certo, e ele não foi
@@ -21,11 +21,13 @@
 	                 inventar um vencedor. Fácil de trocar em resolveTimeout().
 
 	SOBRE O RÁDIO: RadioObjective não declara vitória, ele dispara
-	RescueCountdownStarted(duration). Aqui a contagem é executada e, se a
-	partida ainda estiver rodando quando ela terminar, os Sobreviventes
-	vencem. Ou seja: o Monstro ainda tem essa janela pra virar o jogo. Se
-	você quiser vitória instantânea no RadioCompleto, é só declarar direto
-	em onRescueCountdownStarted, sem esperar.
+	RescueCountdownStarted(duration) -- que aqui só CHAMA o resgate
+	(ExtractionSystem.Begin). Concluir o rádio não ganha nada sozinho: nasce
+	uma zona de pouso na praia, a contagem corre e os Sobreviventes têm que
+	atravessar a ilha até lá. Quem entrega a vitória é
+	ExtractionSystem.SurvivorsExtracted, quando o helicóptero decola com
+	alguém a bordo -- até esse instante o Monstro ainda pode virar o jogo.
+	Ver docs/Extracao.md.
 
 	RESET: no começo de cada partida os objetivos são zerados, os Attributes
 	de estado limpos, todo mundo recebe um character novo (LoadCharacter) e
@@ -38,8 +40,7 @@
 	HOOKS PRA QUEM PRECISA SABER DO INÍCIO/FIM (ex: LobbyManager,
 	SoundManager) -- de novo, porque FireAllClients não volta pro servidor:
 		RoundManager.RoundPrepared.Event -- (players) depois do LoadCharacter
-			de todo mundo, ANTES das fases começarem. É o momento certo pra
-			teleportar todo mundo pra onde a partida deve acontecer.
+			e desembarque de todo mundo, ANTES das fases começarem.
 		RoundManager.RoundEnded.Event -- (winner, reason) quando a partida
 			termina de vez (já com o resultado impresso no console).
 
@@ -56,6 +57,8 @@ local Remotes = require(ReplicatedStorage.Modules.Remotes)
 
 local Elimination = require(script.Parent.Elimination)
 local RadioObjective = require(script.Parent.RadioObjective)
+local RadioSiteSystem = require(script.Parent.RadioSiteSystem)
+local ExtractionSystem = require(script.Parent.ExtractionSystem)
 local RaftObjective = require(script.Parent.RaftObjective)
 local RoleAssignment = require(script.Parent.RoleAssignment)
 
@@ -66,8 +69,7 @@ local RoundManager = {}
 -- em vez de RoundStateChanged.
 RoundManager.PhaseChanged = Instance.new("BindableEvent")
 
--- Fica logo depois do reset/respawn de todo mundo, antes das fases
--- começarem -- o momento certo de teleportar os jogadores pro mapa da rodada.
+-- Notifica os sistemas depois do reset/respawn e desembarque de todo mundo.
 RoundManager.RoundPrepared = Instance.new("BindableEvent")
 
 -- Dispara quando a partida termina de vez (já com outcome resolvido).
@@ -83,6 +85,10 @@ type Outcome = {
 
 local roundActive = false
 local roundBusy = false
+local roundGeneration = 0
+local initialSurvivors = 0
+local initialMonsters = 0
+local spawnHandler: (({ Player }) -> ())? = nil
 local participants: { Player } = {}
 local escapeSucceeded = false
 local outcome: Outcome? = nil
@@ -92,7 +98,7 @@ local outcome: Outcome? = nil
 --------------------------------------------------------------------------------
 
 local function isAlive(player: Player): boolean
-	return player.Parent ~= nil and not Elimination.IsEliminated(player)
+	return player.Parent == Players and not Elimination.IsEliminated(player)
 end
 
 local function countAlive(roleName: string): number
@@ -135,21 +141,57 @@ end
 -- Hooks dos objetivos
 --------------------------------------------------------------------------------
 
+--[[
+	onRescueCountdownStarted(duration)
+	O rádio CHAMA o resgate; não ganha a partida sozinho. Quem entrega a
+	vitória é ExtractionSystem, quando o helicóptero decola com alguém a
+	bordo (ExtractionSystem.SurvivorsExtracted -> onExtracted).
+
+	Só existe uma exceção: se a zona de extração não puder ser montada (mapa
+	sem praia/ilha gerada), volta pro comportamento antigo de vitória por
+	tempo -- caso contrário concluir o rádio deixaria a partida sem desfecho
+	nenhum, que é pior do que um desfecho simplificado.
+]]
 local function onRescueCountdownStarted(duration: number)
 	if not roundActive then
 		return
 	end
 
-	print(string.format("[RoundManager] Rádio concluído -- resgate chega em %ds.", duration))
+	if ExtractionSystem.Begin(duration) then
+		print(string.format("[RoundManager] Rádio concluído -- helicóptero pousa em %ds na praia.", duration))
+		return
+	end
 
+	warn("[RoundManager] Sem zona de extração: caindo na vitória por tempo do resgate.")
+	local token = roundGeneration
 	task.delay(duration, function()
-		if not roundActive then
+		if not roundActive or roundGeneration ~= token then
 			return -- partida já acabou durante a contagem
 		end
 
 		escapeSucceeded = true
 		finishRound(WINNER_SURVIVORS, "Resgate pelo rádio concluído")
 	end)
+end
+
+local function onExtracted(rescued: { Player })
+	if not roundActive then
+		return
+	end
+
+	if #rescued == 0 then
+		print("[RoundManager] Helicóptero decolou vazio -- ninguém foi resgatado.")
+		return
+	end
+
+	escapeSucceeded = true
+
+	local names = {}
+	for _, player in rescued do
+		table.insert(names, player.Name)
+	end
+
+	finishRound(WINNER_SURVIVORS, string.format("Resgate de helicóptero: %s", table.concat(names, ", ")))
 end
 
 local function onRaftEscaped(escapedPlayers: { Player })
@@ -177,11 +219,27 @@ end
 --------------------------------------------------------------------------------
 
 local function startWinCheckLoop()
+	local token = roundGeneration
 	task.spawn(function()
-		while roundActive do
+		while roundActive and roundGeneration == token do
 			local survivorsAlive = countAlive(GameConfig.Roles.Survivor)
 
-			if #participants >= 2 and survivorsAlive <= GameConfig.Round.MonsterWinsAtSurvivorsAlive then
+			local connected = 0
+			for _, player in participants do
+				if player.Parent == Players then connected += 1 end
+			end
+			if connected == 0 then
+				finishRound(WINNER_NOBODY, "Todos os participantes sairam da partida")
+				return
+			end
+
+			if initialMonsters > 0 and initialSurvivors > 0 and countAlive(GameConfig.Roles.Monster) == 0 then
+				finishRound(WINNER_SURVIVORS, "O Monstro foi eliminado ou saiu da partida")
+				return
+			end
+
+			if initialMonsters > 0 and initialSurvivors > 0
+				and survivorsAlive <= math.min(GameConfig.Round.MonsterWinsAtSurvivorsAlive, initialSurvivors - 1) then
 				finishRound(
 					GameConfig.Roles.Monster,
 					string.format("Sobreviventes vivos: %d", survivorsAlive)
@@ -233,6 +291,23 @@ end
 
 local function prepareRound(players: { Player })
 	RadioObjective.Reset()
+	-- Zera a estacao: sem combustivel, sem fusivel, galoes cheios de novo.
+	RadioSiteSystem.Reset()
+	-- Some com a zona de extração e o helicóptero da rodada anterior.
+	ExtractionSystem.Reset()
+	local radioPiecesOk, RadioPieces = pcall(require, script.Parent.RadioPieces)
+	if radioPiecesOk then
+		local pieces = RadioPieces :: { Init: () -> (), Reset: () -> () }
+		local resetOk, resetErr = pcall(function()
+			pieces.Init()
+			pieces.Reset()
+		end)
+		if not resetOk then
+			warn("[RoundManager] RadioPieces.Reset falhou; a partida vai continuar sem resetar as pecas do radio: " .. tostring(resetErr))
+		end
+	else
+		warn("[RoundManager] RadioPieces falhou ao carregar; a partida vai continuar sem as pecas do radio: " .. tostring(RadioPieces))
+	end
 	RaftObjective.Reset()
 
 	escapeSucceeded = false
@@ -255,9 +330,15 @@ local function prepareRound(players: { Player })
 		-- limpa aqui -- senão quem morreu na partida passada nasce eliminado.
 		Elimination.Reset(player)
 		player:LoadCharacter()
+		local character = player.Character or player.CharacterAdded:Wait()
+		assert(character, "Personagem nao foi criado durante a preparacao.")
+		assert(character:WaitForChild("HumanoidRootPart", 10), "Personagem sem HumanoidRootPart durante a preparacao.")
+		assert(character:FindFirstChildOfClass("Humanoid") or character:WaitForChild("Humanoid", 10), "Personagem sem Humanoid durante a preparacao.")
 	end
 
 	participants = connected
+	initialSurvivors = countAlive(GameConfig.Roles.Survivor)
+	initialMonsters = countAlive(GameConfig.Roles.Monster)
 end
 
 local function printResult(result: Outcome)
@@ -287,25 +368,33 @@ end
 function RoundManager.StartRound(players: { Player })
 	assert(not roundBusy, "Já existe uma partida em preparação ou andamento.")
 	roundBusy = true
+	roundGeneration += 1
 	participants = table.clone(players)
 	local ok, err = pcall(function()
 		assert(#participants > 0, "A sala está vazia.")
 		prepareRound(participants)
+		local handler = spawnHandler
+		assert(handler, "O transporte para a ilha nao foi inicializado.")
+		handler(participants)
+		for _, player in participants do
+			assert(player.Parent == Players, "Um participante saiu durante a preparacao.")
+		end
 	end)
 	if not ok then
 		roundBusy = false
 		participants = {}
 		error(err)
 	end
-	RoundManager.RoundPrepared:Fire(participants)
-
 	roundActive = true
-	startWinCheckLoop()
-	runPhases()
-
-	-- Chegou aqui com a partida ainda ativa = as fases acabaram sem vitória.
-	if roundActive then
-		resolveTimeout()
+	local played, playError = pcall(function()
+		RoundManager.RoundPrepared:Fire(participants)
+		startWinCheckLoop()
+		runPhases()
+		if roundActive then resolveTimeout() end
+	end)
+	if not played then
+		warn("[RoundManager] Erro durante a partida: " .. tostring(playError))
+		finishRound(WINNER_NOBODY, "Partida interrompida por erro do servidor")
 	end
 
 	local result = outcome or { winner = WINNER_NOBODY, reason = "Partida encerrada sem resultado definido" }
@@ -320,6 +409,13 @@ function RoundManager.StartRound(players: { Player })
 	end
 	RoundManager.RoundEnded:Fire(result.winner, result.reason)
 	roundBusy = false
+end
+
+-- O transporte pode ceder execucao para streaming; um BindableEvent nao
+-- espera seus listeners e permitiria comecar a rodada antes do desembarque.
+function RoundManager.SetSpawnHandler(handler: ({ Player }) -> ())
+	assert(not roundBusy, "Nao e possivel trocar o transporte durante uma partida.")
+	spawnHandler = handler
 end
 
 --[[
@@ -337,6 +433,7 @@ end
 ]]
 function RoundManager.Init()
 	RadioObjective.RescueCountdownStarted.Event:Connect(onRescueCountdownStarted)
+	ExtractionSystem.SurvivorsExtracted.Event:Connect(onExtracted)
 	RaftObjective.RaftEscaped.Event:Connect(onRaftEscaped)
 end
 

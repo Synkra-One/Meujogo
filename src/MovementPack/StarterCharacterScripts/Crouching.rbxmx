@@ -13,6 +13,7 @@
             <bool name="DefinesCapabilities">false</bool>
             <string name="ScriptGuid">{C17D53B0-7E38-4A78-85F3-2DD4C12DCB8E}</string>
             <string name="Source">local Players      = game:GetService("Players")
+local CAS          = game:GetService("ContextActionService")
 local RunService   = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UIS          = game:GetService("UserInputService")
@@ -30,12 +31,19 @@ local Camera    = workspace.CurrentCamera
 -- VIGNETTE
 -- =============================================
 local PlayerGui   = plr:WaitForChild("PlayerGui")
-local VignetteGui = PlayerGui:WaitForChild("Vignette")
+local VignetteGui = PlayerGui:WaitForChild("Vignette", 5)
 
-VignetteGui.IgnoreGuiInset = true
+if VignetteGui then
+	VignetteGui.IgnoreGuiInset = true
+else
+	warn("[Crouch] Vignette ScreenGui not found; crouch will continue without vignette")
+end
 
-local VignetteElement = VignetteGui:FindFirstChildWhichIsA("ImageLabel")
-	or VignetteGui:FindFirstChildWhichIsA("Frame")
+local VignetteElement = nil
+if VignetteGui then
+	VignetteElement = VignetteGui:FindFirstChildWhichIsA("ImageLabel")
+		or VignetteGui:FindFirstChildWhichIsA("Frame")
+end
 
 if not VignetteElement then
 	warn("[Crouch] No ImageLabel or Frame found inside 'Vignette' ScreenGui")
@@ -69,6 +77,7 @@ local CONFIG = {
 	RunAnimSpeed         = 1.4,
 	CrouchIdleAnimSpeed  = 1.0,
 	CrouchWalkAnimSpeed  = 1.0,
+	CrouchAnimFadeTime   = 0.3,
 	CrawlIdleAnimSpeed   = 1.0,
 	CrawlWalkAnimSpeed   = 1.0,
 
@@ -100,6 +109,26 @@ local CONFIG = {
 		Enum.KeyCode.LeftShift,
 		Enum.KeyCode.RightShift,
 	},
+
+	ActionPriority = 2500,
+}
+
+local ANIMATION_IDS = {
+	Crouching = "rbxassetid://125164434023167",
+	CrouchWalk = "rbxassetid://80429715000556",
+	CrouchToCrawl = "",
+	CrawlIdle = "",
+	CrawlWalk = "",
+	CrawlToCrouch = "",
+}
+
+local ANIMATION_ALIASES = {
+	Crouching = { "Crouching", "CrouchIdle", "Crouch Idle", "Crouch", "Agachar", "Agachado", "AgacharIdle" },
+	CrouchWalk = { "CrouchWalk", "Crouch Walk", "CrouchingWalk", "AgacharWalk", "AgachadoWalk", "AndarAgachado" },
+	CrouchToCrawl = { "CrouchToCrawl", "Crouch To Crawl", "AgacharParaRastejar", "ToCrawl" },
+	CrawlIdle = { "CrawlIdle", "Crawl Idle", "Crawl", "RastejarIdle", "Rastejando", "Deitado" },
+	CrawlWalk = { "CrawlWalk", "Crawl Walk", "RastejarWalk", "RastejandoWalk", "AndarRastejando" },
+	CrawlToCrouch = { "CrawlToCrouch", "Crawl To Crouch", "RastejarParaAgachar", "ToCrouch" },
 }
 
 -- =============================================
@@ -125,8 +154,88 @@ local currentCrawlAnim  = nil
 local Animator = Humanoid:FindFirstChildOfClass("Animator")
 	or Instance.new("Animator", Humanoid)
 
-local function safeLoadAnim(animName)
+local function normalizeAnimName(name)
+	return string.lower((name:gsub("[^%w]", "")))
+end
+
+local function hasAnimationId(animObj)
+	return animObj and animObj:IsA("Animation") and animObj.AnimationId ~= ""
+end
+
+local function findAnimationAsset(animName, ignoredAnim)
+	local aliases = ANIMATION_ALIASES[animName] or { animName }
+	local wanted = {}
+	for _, alias in ipairs(aliases) do
+		wanted[normalizeAnimName(alias)] = true
+	end
+
+	local roots = { script, Character }
+	local replicatedStorage = game:GetService("ReplicatedStorage")
+	table.insert(roots, replicatedStorage)
+
+	local workspaceAnimations = workspace:FindFirstChild("Animations")
+		or workspace:FindFirstChild("AnimationPack")
+		or workspace:FindFirstChild("MovementAnimations")
+	if workspaceAnimations then
+		table.insert(roots, workspaceAnimations)
+	end
+
+	for _, root in ipairs(roots) do
+		for _, child in ipairs(root:GetDescendants()) do
+			if child ~= ignoredAnim and child:IsA("Animation") and wanted[normalizeAnimName(child.Name)] and child.AnimationId ~= "" then
+				return child
+			end
+		end
+	end
+
+	return nil
+end
+
+local function ensureAnimation(animName)
 	local animObj = script:FindFirstChild(animName)
+	local configuredId = ANIMATION_IDS[animName]
+	local discovered = nil
+
+	-- IDs definidos neste script sao autoritativos. A busca por aliases serve
+	-- apenas para animacoes opcionais sem ID configurado.
+	if not configuredId or configuredId == "" then
+		discovered = findAnimationAsset(animName, animObj)
+	end
+
+	if not animObj or not animObj:IsA("Animation") then
+		if discovered then
+			animObj = discovered:Clone()
+		else
+			animObj = Instance.new("Animation")
+		end
+		animObj.Name = animName
+		animObj.Parent = script
+	end
+	if animObj:IsA("Animation") then
+		local id = if configuredId and configuredId ~= "" then configuredId
+			elseif hasAnimationId(discovered) then discovered.AnimationId
+			elseif hasAnimationId(animObj) then animObj.AnimationId
+			else ""
+		if id and id ~= "" then
+			animObj.AnimationId = id
+			return animObj
+		end
+	end
+	return nil
+end
+
+local function safeLoadAnim(animName)
+	local configuredId = ANIMATION_IDS[animName]
+	local animObj
+	if configuredId and configuredId ~= "" then
+		-- Mesmo caminho simples usado pelo teste da tecla N, que carregou
+		-- corretamente no jogo: cria o objeto com o ID final e carrega direto.
+		animObj = Instance.new("Animation")
+		animObj.Name = animName
+		animObj.AnimationId = configuredId
+	else
+		animObj = ensureAnimation(animName)
+	end
 	if not animObj then
 		warn("[Crouch] Missing Animation child: " .. animName)
 		return nil
@@ -134,7 +243,15 @@ local function safeLoadAnim(animName)
 	local ok, track = pcall(function()
 		return Animator:LoadAnimation(animObj)
 	end)
-	if ok then return track end
+	if ok then
+		task.delay(2, function()
+			if track.IsPlaying and track.Length == 0 then
+				warn("[Crouch] Animation did not load: " .. animName .. " (" .. animObj.AnimationId .. "). Check ownership and rig type.")
+			end
+		end)
+		return track
+	end
+	warn("[Crouch] Could not load " .. animName .. " (" .. animObj.AnimationId .. "): " .. tostring(track))
 	return nil
 end
 
@@ -144,6 +261,20 @@ local CrouchToCrawl = safeLoadAnim("CrouchToCrawl")
 local CrawlIdle     = safeLoadAnim("CrawlIdle")
 local CrawlWalk     = safeLoadAnim("CrawlWalk")
 local CrawlToCrouch = safeLoadAnim("CrawlToCrouch")
+
+local function configureMovementTrack(track)
+	if track then
+		track.Priority = Enum.AnimationPriority.Action
+		track.Looped = true
+	end
+end
+
+configureMovementTrack(CrouchIdle)
+configureMovementTrack(CrouchWalk)
+configureMovementTrack(CrouchToCrawl)
+configureMovementTrack(CrawlIdle)
+configureMovementTrack(CrawlWalk)
+configureMovementTrack(CrawlToCrouch)
 
 if CrawlIdle then CrawlIdle.Looped = true end
 if CrawlWalk then CrawlWalk.Looped = true end
@@ -348,8 +479,8 @@ end
 -- CROUCH ANIMATIONS
 -- =============================================
 local function stopCrouchAnims()
-	if CrouchIdle and CrouchIdle.IsPlaying then CrouchIdle:Stop(0.2) end
-	if CrouchWalk and CrouchWalk.IsPlaying then CrouchWalk:Stop(0.2) end
+	if CrouchIdle and CrouchIdle.IsPlaying then CrouchIdle:Stop(CONFIG.CrouchAnimFadeTime) end
+	if CrouchWalk and CrouchWalk.IsPlaying then CrouchWalk:Stop(CONFIG.CrouchAnimFadeTime) end
 	currentCrouchAnim = nil
 end
 
@@ -357,21 +488,27 @@ local function updateCrouchAnims()
 	if not isCrouching or isCrawling or isTransitioning then return end
 
 	if notMoving then
-		if currentCrouchAnim ~= "idle" then
-			if CrouchWalk and CrouchWalk.IsPlaying then CrouchWalk:Stop(0.2) end
-			if CrouchIdle and not CrouchIdle.IsPlaying then
-				CrouchIdle:Play(0.2)
-				CrouchIdle:AdjustSpeed(CONFIG.CrouchIdleAnimSpeed)
+		if currentCrouchAnim ~= "idle" or not CrouchIdle or not CrouchIdle.IsPlaying then
+			if not CrouchIdle then
+				CrouchIdle = safeLoadAnim("Crouching")
+				configureMovementTrack(CrouchIdle)
 			end
+			if not CrouchIdle then return end
+			CrouchIdle:Play(CONFIG.CrouchAnimFadeTime)
+			CrouchIdle:AdjustSpeed(CONFIG.CrouchIdleAnimSpeed)
+			if CrouchWalk and CrouchWalk.IsPlaying then CrouchWalk:Stop(CONFIG.CrouchAnimFadeTime) end
 			currentCrouchAnim = "idle"
 		end
 	else
-		if currentCrouchAnim ~= "walk" then
-			if CrouchIdle and CrouchIdle.IsPlaying then CrouchIdle:Stop(0.2) end
-			if CrouchWalk and not CrouchWalk.IsPlaying then
-				CrouchWalk:Play(0.2)
-				CrouchWalk:AdjustSpeed(CONFIG.CrouchWalkAnimSpeed)
+		if currentCrouchAnim ~= "walk" or not CrouchWalk or not CrouchWalk.IsPlaying then
+			if not CrouchWalk then
+				CrouchWalk = safeLoadAnim("CrouchWalk")
+				configureMovementTrack(CrouchWalk)
 			end
+			if not CrouchWalk then return end
+			CrouchWalk:Play(CONFIG.CrouchAnimFadeTime)
+			CrouchWalk:AdjustSpeed(CONFIG.CrouchWalkAnimSpeed)
+			if CrouchIdle and CrouchIdle.IsPlaying then CrouchIdle:Stop(CONFIG.CrouchAnimFadeTime) end
 			currentCrouchAnim = "walk"
 		end
 	end
@@ -419,6 +556,7 @@ local function startSprint()
 	if not canSprintNow() then return end
 
 	isSprinting = true
+	RootPart:SetAttribute("IsSprinting", true)
 	applySpeed()
 	tweenFOV(CONFIG.SprintFOV, CONFIG.SprintFOVTime)
 end
@@ -426,6 +564,7 @@ end
 local function stopSprint()
 	if not isSprinting then return end
 	isSprinting = false
+	RootPart:SetAttribute("IsSprinting", false)
 	applySpeed()
 	if not isCrouching and not isCrawling then
 		tweenFOV(CONFIG.DefaultFOV, CONFIG.DefaultFOVTime)
@@ -540,6 +679,7 @@ local function doCrouch()
 
 	crouchDebounce = false
 	isSprinting    = false
+	RootPart:SetAttribute("IsSprinting", false)
 	isCrouching    = true
 
 	RootPart:SetAttribute("IsCrouching", true)
@@ -593,28 +733,57 @@ end
 -- =============================================
 -- INPUT
 -- =============================================
+local function inputIsBlocked()
+	return UIS:GetFocusedTextBox() ~= nil
+		or plr:GetAttribute("CursorLivre") == true
+		or Character:GetAttribute("ShadowRushBusy") == true
+end
+
+local function handleCrouchAction(_, state)
+	if state ~= Enum.UserInputState.Begin then
+		return Enum.ContextActionResult.Sink
+	end
+	if inputIsBlocked() then
+		return Enum.ContextActionResult.Pass
+	end
+
+	if isCrawling then
+		doStopCrawl()
+	elseif isCrouching then
+		doStandUp()
+	else
+		doCrouch()
+	end
+
+	return Enum.ContextActionResult.Sink
+end
+
+local function handleCrawlAction(_, state)
+	if state ~= Enum.UserInputState.Begin then
+		return Enum.ContextActionResult.Sink
+	end
+	if inputIsBlocked() then
+		return Enum.ContextActionResult.Pass
+	end
+
+	if isCrawling then
+		doStopCrawl()
+	elseif isCrouching then
+		doCrawl()
+	end
+
+	return Enum.ContextActionResult.Sink
+end
+
+CAS:BindActionAtPriority("MeujogoCrouch", handleCrouchAction, true, CONFIG.ActionPriority, CONFIG.CrouchKey, Enum.KeyCode.ButtonB)
+CAS:SetTitle("MeujogoCrouch", "Agachar")
+CAS:SetPosition("MeujogoCrouch", UDim2.fromScale(0.82, 0.56))
+CAS:BindActionAtPriority("MeujogoCrawl", handleCrawlAction, true, CONFIG.ActionPriority, CONFIG.CrawlKey, Enum.KeyCode.ButtonL3)
+CAS:SetTitle("MeujogoCrawl", "Rastejar")
+CAS:SetPosition("MeujogoCrawl", UDim2.fromScale(0.82, 0.44))
+
 UIS.InputBegan:Connect(function(input, typing)
-	if typing or Character:GetAttribute("ShadowRushBusy") == true then return end
-
-	if input.KeyCode == CONFIG.CrouchKey then
-		if isCrawling then
-			doStopCrawl()
-		elseif isCrouching then
-			doStandUp()
-		else
-			doCrouch()
-		end
-		return
-	end
-
-	if input.KeyCode == CONFIG.CrawlKey then
-		if isCrawling then
-			doStopCrawl()
-		elseif isCrouching then
-			doCrawl()
-		end
-		return
-	end
+	if typing or UIS:GetFocusedTextBox() or Character:GetAttribute("ShadowRushBusy") == true then return end
 
 	for _, key in ipairs(CONFIG.SprintKeys) do
 		if input.KeyCode == key then
@@ -828,6 +997,13 @@ plr.CharacterAdded:Connect(function(newChar)
 	CrawlWalk     = safeLoadAnim("CrawlWalk")
 	CrawlToCrouch = safeLoadAnim("CrawlToCrouch")
 
+	configureMovementTrack(CrouchIdle)
+	configureMovementTrack(CrouchWalk)
+	configureMovementTrack(CrouchToCrawl)
+	configureMovementTrack(CrawlIdle)
+	configureMovementTrack(CrawlWalk)
+	configureMovementTrack(CrawlToCrouch)
+
 	if CrawlIdle then CrawlIdle.Looped = true end
 	if CrawlWalk then CrawlWalk.Looped = true end
 	if CrouchIdle then CrouchIdle.Looped = true end -- [Meujogo] forca loop
@@ -850,6 +1026,7 @@ plr.CharacterAdded:Connect(function(newChar)
 	RootPart:SetAttribute("IsCrouching",     false)
 	RootPart:SetAttribute("IsCrawling",      false)
 	RootPart:SetAttribute("CrawlLock",       false)
+	RootPart:SetAttribute("IsSprinting",    false)
 	RootPart:SetAttribute("CanSprint",       true)
 	RootPart:SetAttribute("ForceStopSprint", false)
 
@@ -890,6 +1067,7 @@ end)
 RootPart:SetAttribute("IsCrouching",     false)
 RootPart:SetAttribute("IsCrawling",      false)
 RootPart:SetAttribute("CrawlLock",       false)
+RootPart:SetAttribute("IsSprinting",    false)
 RootPart:SetAttribute("CanSprint",       true)
 RootPart:SetAttribute("ForceStopSprint", false)</string>
             <int64 name="SourceAssetId">-1</int64>
@@ -953,7 +1131,7 @@ RootPart:SetAttribute("ForceStopSprint", false)</string>
             <Properties>
               <string name="Name">Crouching</string>
               <Content name="AnimationContent">
-                <uri></uri>
+                <uri>rbxassetid://125164434023167</uri>
               </Content>
               <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -966,7 +1144,7 @@ RootPart:SetAttribute("ForceStopSprint", false)</string>
             <Properties>
               <string name="Name">CrouchWalk</string>
               <Content name="AnimationContent">
-                <uri></uri>
+                <uri>rbxassetid://80429715000556</uri>
               </Content>
               <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>

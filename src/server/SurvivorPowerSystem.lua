@@ -12,7 +12,7 @@ local Round = require(script.Parent.RoundManager)
 local Elimination = require(script.Parent.Elimination)
 local Damage = require(script.Parent.DamageSystem)
 local Status = require(script.Parent.SurvivorPowerStatus)
-local Radio = require(script.Parent.RadioObjective)
+local RadioSite = require(script.Parent.RadioSiteSystem)
 local Raft = require(script.Parent.RaftObjective)
 local System = {}
 local initialized = false
@@ -184,7 +184,7 @@ local function activate(player: Player, character: Model, humanoid: Humanoid, ro
 	elseif id == "PassoFantasma" then
 		if not teleport(character, humanoid, root) then return false, "Não há um destino seguro à frente." end
 	elseif id == "ConsertoRelampago" then
-		local target = Radio.ApplyPowerRepair(player) or Raft.ApplyPowerRepair(player)
+		local target = RadioSite.ApplyPowerRepair(player) or Raft.ApplyPowerRepair(player)
 		if not target then return false, "Interaja com o rádio após coletar as 3 peças, ou entre na área da jangada." end
 		Status.Emit(id, nil, target.Position, 1)
 	elseif id == "ArmadilhaImprovisada" then
@@ -252,7 +252,8 @@ local function onRequest(player: Player, slot: unknown)
 	if player:GetAttribute("Amarrado") == true or character:GetAttribute("Amarrado") == true
 		or character:GetAttribute("PowerStunned") == true or character:GetAttribute("PowerMoving") == true
 		or character:GetAttribute("FearTripping") == true or character:GetAttribute("TeleportBusy") == true
-		or character:GetAttribute("ShadowRushBusy") == true or humanoid.Sit or humanoid.PlatformStand
+		or character:GetAttribute("ShadowRushBusy") == true or character:GetAttribute("GrabLocked") == true
+		or humanoid.Sit or humanoid.PlatformStand
 		or root.Anchored or character:FindFirstChild("Ragdoll") then
 		Remotes.UseSurvivorPower:FireClient(player, "Rejected", "Você não pode usar poderes neste estado.")
 		return

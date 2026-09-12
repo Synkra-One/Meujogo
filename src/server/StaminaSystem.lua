@@ -134,13 +134,15 @@ local function step(dt: number)
 		local walkBase = StatScaling.WalkSpeed(player)
 		local moving = horizontalSpeed(root) > walkBase * SPRINT_SPEED_RATIO
 		local shadowBusy = character:GetAttribute("ShadowRushBusy") == true
+		local grabLocked = character:GetAttribute("GrabLocked") == true
 		if character:GetAttribute("PowerInfiniteStamina") == true then
 			state.value, state.exhausted, state.idleFor = MAX, false, 0
-			setSprintGate(character, not shadowBusy and character:GetAttribute("PowerStunned") ~= true, shadowBusy)
+			setSprintGate(character, not shadowBusy and not grabLocked
+				and character:GetAttribute("PowerStunned") ~= true, shadowBusy or grabLocked)
 			publish(player, state)
 			continue
 		end
-		local sprinting = state.intent and moving and not state.exhausted and not shadowBusy
+		local sprinting = state.intent and moving and not state.exhausted and not shadowBusy and not grabLocked
 
 		if sprinting then
 			state.idleFor = 0
@@ -160,7 +162,8 @@ local function step(dt: number)
 		end
 
 		-- Portão do sprint (contrato que o Crouching do pacote já lê).
-		setSprintGate(character, not state.exhausted and not shadowBusy, state.exhausted or shadowBusy)
+		setSprintGate(character, not state.exhausted and not shadowBusy and not grabLocked,
+			state.exhausted or shadowBusy or grabLocked)
 		publish(player, state)
 	end
 end

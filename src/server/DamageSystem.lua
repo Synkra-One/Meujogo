@@ -53,6 +53,7 @@ export type DamageInfo = {
 	Source: Player?, -- quem causou (pra PlayerKilled e futuras regras de time)
 	Cause: string?, -- texto da causa ("Tiro", "Monstro", "Ambiente"...)
 	Empowered: boolean?, -- server-only token consumed when a validated attack begins
+	MaxDamage: number?, -- server-only ceiling after stat multipliers (utility effects)
 }
 
 -- character -> os.clock() do último dano tomado (gate da regeneração).
@@ -190,6 +191,10 @@ function DamageSystem.Apply(target: unknown, amount: number, info: DamageInfo?):
 	if victimPlayer then
 		amount *= StatScaling.DamageTakenMultiplier(victimPlayer)
 	end
+	local cap = info and info.MaxDamage
+	if type(cap) == "number" and cap == cap and cap >= 0 and cap < math.huge then
+		amount = math.min(amount, cap)
+	end
 	if amount <= 0 then
 		return 0, false
 	end
@@ -209,6 +214,22 @@ function DamageSystem.Apply(target: unknown, amount: number, info: DamageInfo?):
 	end
 
 	return applied, false
+end
+
+-- Server-authoritative finisher for executions that have already completed
+-- their own validation (for example, the Kill marker of Monster Grab).
+-- Unlike Apply, this is not reduced by character stats and therefore cannot
+-- leave the victim with a fraction of health after the execution animation.
+function DamageSystem.Execute(target: unknown, info: DamageInfo?): boolean
+	local humanoid, model = resolveHumanoid(target)
+	if not humanoid or not model or not DamageSystem.IsDamageable(model)
+		or model:FindFirstChildOfClass("ForceField") or model:GetAttribute("Imune") == true then
+		return false
+	end
+
+	humanoid.Health = 0
+	handleDeath(model, info)
+	return true
 end
 
 --[[

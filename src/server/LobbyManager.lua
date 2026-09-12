@@ -25,15 +25,15 @@
 
 	FLUXO
 	  1) Jogador interage com o Part "IniciarPartida" (ProximityPrompt).
-	  2) WaitingRoomManager valida a abertura pelo host, a fase e as vagas;
+	  2) WaitingRoomManager valida a fase e as vagas para qualquer jogador;
 	     teleporta apenas quem interagiu para a sala de espera.
 	  3) Na sala, cada participante escolhe skin/perk e marca Pronto. Com o
 	     mínimo e todos prontos, inicia a contagem. Só os membros da sala são
 	     enviados a RoundManager.StartRound(participants). O personagem humano
 	     é escolhido depois do sorteio do papel; Monstro recebe Jason.
-	  4) RoundManager.RoundPrepared dispara logo depois do LoadCharacter de
-	     todo mundo (ainda no Lobby, já que LoadCharacter manda pra
-	     LobbySpawn) -- aí sim teleportamos: Monstro pro marcador
+	  4) RoundManager aguarda o spawn handler depois do LoadCharacter de
+	     todo mundo, antes de emitir RoundPrepared e iniciar as fases.
+	     Teleportamos: Monstro pro marcador
 	     MonstroSpawn dentro da Caverna, todo o resto pra um ponto de praia
 	     achado NA HORA por raycast (material Sand do Terrain -- não
 	     depende de nenhuma Part fixa, então funciona não importa onde a
@@ -43,13 +43,6 @@
 	  5) RoundManager.RoundEnded dispara com o resultado; depois de
 	     GameConfig.Round.IntermissionDuration segundos, os participantes recebem
 	     LoadCharacter() de novo, o que já os manda de volta pro Lobby.
-
-	MODO DE TESTE (TEMPORÁRIO): só quem estiver em ALLOWED_STARTER_USER_IDS
-	pode abrir a sala. Depois de aberta, qualquer jogador pode entrar nela.
-	Lista vazia = NINGUÉM abre (mais seguro
-	como padrão do que liberar geral por acidente). Preencha com seu
-	Roblox UserId antes de testar sozinho, e esvazie a lista (ou remova a
-	checagem) quando quiser liberar pra qualquer jogador.
 
 	Uso (chamar uma vez no boot do servidor, depois de RoundManager.Init()):
 		local LobbyManager = require(script.LobbyManager)
@@ -66,14 +59,6 @@ local WaitingRoomManager = require(script.Parent.WaitingRoomManager)
 local IslandLayout = require(script.Parent.Tools.IslandLayout)
 
 local LobbyManager = {}
-
--- TEMPORÁRIO: só mathm1311 (UserId 11555748600) pode iniciar a partida.
--- Esvazie esta lista (ou remova a checagem) quando quiser liberar geral.
-local ALLOWED_STARTER_USER_IDS: { number } = { 11555748600 }
-
-local function isAuthorizedToStart(player: Player): boolean
-	return table.find(ALLOWED_STARTER_USER_IDS, player.UserId) ~= nil
-end
 
 --------------------------------------------------------------------------------
 -- Lobby (posição sempre FORÇADA aqui -- ver nota no cabeçalho)
@@ -142,6 +127,9 @@ local function ensureLobbyExists()
 	local prompt = startPart:FindFirstChildOfClass("ProximityPrompt") :: ProximityPrompt
 	prompt.ActionText = "Entrar na sala"
 	prompt.ObjectText = "Preparação da partida"
+	prompt.Enabled = true
+	prompt.MaxActivationDistance = 10
+	prompt.HoldDuration = 0
 	prompt.RequiresLineOfSight = false
 
 	print(string.format("[LobbyManager] Lobby confirmado em (%.0f, %.0f, %.0f).", LOBBY_ORIGIN.X, LOBBY_ORIGIN.Y, LOBBY_ORIGIN.Z))
@@ -167,6 +155,23 @@ local function getIslandSpawns(): { BasePart }
 	end
 
 	return spawns
+end
+
+local function getEmergencyIslandSpawn(): BasePart
+	local spawn = Workspace:FindFirstChild("IlhaSpawnEmergencia")
+	if spawn and spawn:IsA("BasePart") then
+		return spawn
+	end
+	local part = Instance.new("Part")
+	part.Name = "IlhaSpawnEmergencia"
+	part.Anchored = true
+	part.CanCollide = true
+	part.Size = Vector3.new(24, 1, 24)
+	part.Position = Vector3.new(60, 2, 0)
+	part.Color = Color3.fromRGB(88, 92, 78)
+	part.Material = Enum.Material.WoodPlanks
+	part.Parent = Workspace
+	return part
 end
 
 -- Altura real do chão em (x, z), via raycast contra Terrain + Parts. As
@@ -255,6 +260,24 @@ local function prepareStream(player: Player, position: Vector3)
 	end)
 end
 
+local function moveToIsland(player: Player, character: Model, target: Vector3)
+	local root = character:WaitForChild("HumanoidRootPart", 10)
+	assert(root and root:IsA("BasePart"), "Personagem sem HumanoidRootPart durante o desembarque.")
+	local wasAnchored = root.Anchored
+	root.Anchored = true
+	local ok, err = pcall(function()
+		prepareStream(player, target)
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		assert(player.Parent == Players and player.Character == character
+			and humanoid and humanoid.Health > 0, "Participante indisponivel durante o desembarque.")
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+		character:PivotTo(CFrame.new(target))
+	end)
+	if root.Parent then root.Anchored = wasAnchored end
+	if not ok then error(err) end
+end
+
 local function teleportToIsland(players: { Player })
 	local monsterSpawn = findMonsterSpawn()
 	if not monsterSpawn then
@@ -270,8 +293,8 @@ local function teleportToIsland(players: { Player })
 		if not beachAnchor then
 			fallbackSpawns = getIslandSpawns()
 			if #fallbackSpawns == 0 then
-				warn("[LobbyManager] Não achei POIs, praia (Terrain Sand) nem IlhaSpawns -- gere a ilha primeiro (IslandGenerator.Generate()).")
-				return
+				warn("[LobbyManager] Não achei POIs, praia nem IlhaSpawns -- usando spawn provisório de emergência.")
+				fallbackSpawns = { getEmergencyIslandSpawn() }
 			end
 			warn("[LobbyManager] Não achei POIs nem praia por raycast -- usando IlhaSpawns como fallback.")
 		end
@@ -281,34 +304,32 @@ local function teleportToIsland(players: { Player })
 	local fallbackIndex = 0
 	for _, player in players do
 		local character = player.Character
+		assert(character, "Participante sem personagem durante o desembarque.")
 		if character then
 			if monsterSpawn and player:GetAttribute("Role") == GameConfig.Roles.Monster then
 				-- Dentro da caverna o raycast de cima bateria no topo da
 				-- montanha, então usa a posição do marcador direto.
 				local target = monsterSpawn.Position + Vector3.new(0, 3, 0)
-				prepareStream(player, target)
-				character:PivotTo(CFrame.new(target))
+				moveToIsland(player, character, target)
 			elseif #poiSpawns > 0 then
 				poiIndex += 1
 				local p = poiSpawns[((poiIndex - 1) % #poiSpawns) + 1]
 				local groundY = findGroundY(p.X, p.Z, p.Y)
 				local target = Vector3.new(p.X, groundY + 4, p.Z)
-				prepareStream(player, target)
-				character:PivotTo(CFrame.new(target))
+				moveToIsland(player, character, target)
 			elseif beachAnchor then
 				local x = beachAnchor.X + math.random(-12, 12)
 				local z = beachAnchor.Z + math.random(-12, 12)
 				local groundY = findGroundY(x, z, beachAnchor.Y)
 				local target = Vector3.new(x, groundY + 4, z)
-				prepareStream(player, target)
-				character:PivotTo(CFrame.new(target))
+				moveToIsland(player, character, target)
 			else
 				-- Distribui em sequência; com mais jogadores que pontos, repete
 				-- os pontos (não deveria acontecer dentro de Players.Max).
 				fallbackIndex += 1
 				local spawnPart = fallbackSpawns[((fallbackIndex - 1) % #fallbackSpawns) + 1]
 				local groundY = findGroundY(spawnPart.Position.X, spawnPart.Position.Z, spawnPart.Position.Y)
-				character:PivotTo(CFrame.new(spawnPart.Position.X, groundY + 4, spawnPart.Position.Z))
+				moveToIsland(player, character, Vector3.new(spawnPart.Position.X, groundY + 4, spawnPart.Position.Z))
 			end
 		end
 	end
@@ -352,7 +373,7 @@ end
 --------------------------------------------------------------------------------
 
 local function onIniciarPartidaTriggered(player: Player)
-	WaitingRoomManager.Join(player, isAuthorizedToStart(player))
+	WaitingRoomManager.Join(player)
 end
 
 local function setupIniciarPartidaPrompt()
@@ -384,7 +405,7 @@ function LobbyManager.Init()
 	ensureLobbyExists()
 	setupIniciarPartidaPrompt()
 
-	RoundManager.RoundPrepared.Event:Connect(teleportToIsland)
+	RoundManager.SetSpawnHandler(teleportToIsland)
 
 	RoundManager.RoundEnded.Event:Connect(function(_winner: string, _reason: string)
 		task.delay(GameConfig.Round.IntermissionDuration, returnEveryoneToLobby)

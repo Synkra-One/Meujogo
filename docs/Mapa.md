@@ -11,6 +11,8 @@ atravessar; na prática mais, por causa do relevo e do mato.
 |---|---|
 | `Tools/IslandLayout.lua` | O plano: costa, relevo, biomas, **onde cai cada POI**, trilhas. Só matemática, fixo por seed. Exporta `Height/Material/WaterLevel` por coluna e `CoastRadiusMax()/AreaHalf()` pros sistemas de runtime. |
 | `Tools/IslandGenerator.lua` | Escreve o terreno por chunks a partir do layout; rochas, caverna, floresta, vegetação rasteira, ruínas; chama `PoiGenerator`. |
+| `Tools/RadioTowerGenerator.lua` | Estação de Rádio: torre, abrigo, gerador, combustível, cerca e estrada (ver [Radio.md](Radio.md)). |
+| `Tools/CaveInterior.lua` | O covil do Monstro dentro da montanha: escava o terreno e monta os três níveis, o sangue e a luz (ver [Caverna.md](Caverna.md)). |
 | `Tools/Structures.lua` | Peças em `Part` primitiva: cabana, lodge, celeiro, casa de barcos, píer, barco, torre de vigia, farol, fogueira, mesa, lampião, alvo, fardo, secador, canoa, cabana nativa, totem, arbusto, tronco caído. |
 | `Tools/PoiGenerator.lua` | Monta cada POI no site do layout com as peças de `Structures`. |
 | `Tools/PlaneCrashGenerator.lua` | Queda do avião (escalada pro mapa novo, desvia dos POIs). |
@@ -30,7 +32,8 @@ atravessar; na prática mais, por causa do relevo e do mato.
 | **Farol** | Ponta rochosa elevada na costa, farol de 6 segmentos com lâmpada acesa (range 120), barraco do faroleiro | SpawnPOI/PontoLoot |
 | **VilaNativa** | 6 cabanas nativas maiores em anel largo (r 32), totem, fogueira apagada, secador, canoas, potes | PontoLoot em cada cabana |
 | **Ruinas** | Círculo de pedras + Lança Ancestral | SpawnPOI |
-| **Caverna** | Na base da montanha (Peak 95, Radius 150) — spawn do Monstro | — |
+| **Caverna** | Covil dentro da montanha (Peak 95, Radius 150): túnel em S descendo 9, salão de raio 40 com 56 de pé-direito, poço de sangue, galeria no meio, ponte de tábuas, laje de cima com o ninho, ossuário e despensa. Spawn do Monstro no ninho. Ver [Caverna.md](Caverna.md) | — |
+| **Radio** | Estação repetidora cercada (48x42): torre de 95 studs com baliza, abrigo técnico, gerador, tanque e galões, caixa de fusíveis, holofotes, portão e estrada de manutenção. É o objetivo de socorro — ver [Radio.md](Radio.md) | 2 PontoLoot no abrigo |
 | **Trilhas** | Loop pelos POIs habitados (ordem angular) + ramais pra Torre, Farol, Ruínas e boca da Caverna; `Ground` rebaixado, `Mud` perto do lago; lampiões a cada ~60 studs (acesos só a ≤40 studs de um POI) | — |
 | **Jangada** | Praia mais perto do Acampamento | — |
 
@@ -47,7 +50,7 @@ com 40 de torre.
 - **Lago** — bacia de 9 de profundidade, água no nível do rim −1,4, areia na
   margem, Ground em volta. Água = Swimming (o pacote de movimento corta a
   velocidade), então é pequeno (r 60).
-- **Montanha** — Rock/Ground, com a caverna.
+- **Montanha** — Rock/Ground, escavada por dentro pela caverna.
 - **Ponta do farol** — Rock, +4 de altura.
 - `Terrain.Decoration = true` liga a grama animada.
 
@@ -55,7 +58,7 @@ com 40 de torre.
 
 - **Spawn dos sobreviventes**: `LobbyManager` embaralha os marcadores
   `SpawnPOI` e põe um jogador em cada (porta de cabana, lodge, celeiro,
-  torre, farol, vila, ruínas). Monstro na caverna. Antes de teleportar chama
+  torre, farol, vila, ruínas). Monstro no ninho, no nível de cima da caverna. Antes de teleportar chama
   `RequestStreamAroundAsync` (StreamingEnabled está ligado).
 - **Loot**: `LootCrateSystem` põe caixas nos `PontoLoot`; `ItemSpawner` tem a
   zona `Construcoes`; `WeaponSpawner` já usava `SpawnArma`.

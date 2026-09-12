@@ -72,7 +72,7 @@ end
 local readyButton = actionButton("ReadyButton", "Pronto", 0.3, Color3.fromRGB(43, 116, 77))
 local leaveButton = actionButton("LeaveButton", "Sair da sala", 0.65, Color3.fromRGB(112, 51, 48))
 
--- Botão separado para reabrir também no celular, sem depender da tecla C.
+-- Botão separado para reabrir também no celular, sem depender da tecla M.
 local reopenGui = Instance.new("ScreenGui")
 reopenGui.Name = "WaitingRoomShortcut"
 reopenGui.ResetOnSpawn = false
@@ -515,7 +515,7 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 	if gameProcessed or (not inRoom and not selectingCharacter) then
 		return
 	end
-	if input.KeyCode == Enum.KeyCode.C then
+	if input.KeyCode == Enum.KeyCode.M then
 		setVisible(not gui.Enabled)
 	end
 end)

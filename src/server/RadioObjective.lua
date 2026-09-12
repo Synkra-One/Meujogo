@@ -1,35 +1,21 @@
 --!strict
 --[[
 	RadioObjective
-	Objetivo do Rádio de Resgate: coletar 3 peças e sintonizar na
-	TorreDeRadio.
+	Estado compartilhado do objetivo do Rádio de Resgate.
 
-	Peças: Parts com Attribute "PecaRadio" == true e Attribute "TipoPeca"
-	== "Antena" | "Bateria" | "Transmissor". Ao serem tocadas por um
-	Sobrevivente, são coletadas.
+	As três peças físicas principais são gerenciadas por RadioPieces.lua:
+	viram Tools no inventário e caem na morte. Este módulo considera as peças
+	que os Sobreviventes carregam ao liberar a sintonia da torre. O método
+	CollectPiece continua disponível como compatibilidade para entregas
+	server-side sem uma Part física.
 
-	ABORDAGEM ESCOLHIDA (a mais simples pra Roblox): as peças NÃO viram um
-	item no inventário de ninguém. Tocar nelas já credita a peça pro time
-	inteiro (tabela compartilhada `collectedPieces`) e a Part é destruída.
-	Isso evita ter que lidar com Tools, drop-on-death, quem tá carregando o
-	quê, etc. -- qualquer Sobrevivente vivo pode terminar o que os outros
-	começaram.
+	RadioInstallSystem.lua controla o prompt da TorreDeRadio, consome as
+	peças e encerra esta etapa em "TodasPecasInstaladas". A implementação
+	legada de sintonia abaixo permanece desconectada até ser substituída pelo
+	minigame definitivo.
 
-	TorreDeRadio: uma Part única no Workspace (por nome). Ganha um
-	ProximityPrompt criado por este script. Interagir com as 3 peças já
-	coletadas dispara o minigame de sintonia -- por enquanto (sem UI ainda)
-	é só um sorteio (GameConfig.RadioObjective.SuccessChance):
-	  sucesso -> ObjectiveProgress("RadioCompleto", 1, 1) + começa a
-	             contagem de vitória por resgate (RadioObjective.RescueCountdownStarted)
-	  falha   -> RadioObjective.TuningFailed (hook pronto pra lógica do
-	             Monstro escutar um "barulho" depois; nada o consome ainda)
-
-	Interagir de novo após falhar tenta de novo (as peças continuam
-	creditadas); interagir após o sucesso não faz mais nada.
-
-	IMPORTANTE (setup no Studio, fora do escopo deste script):
-	  - As 3 Parts de peça precisam de Attribute "PecaRadio" = true e
-	    "TipoPeca" = "Antena"/"Bateria"/"Transmissor".
+	IMPORTANTE (setup no Studio):
+	  - RadioPieces.lua cria e posiciona as 3 Parts automaticamente.
 	  - Precisa existir uma Part chamada "TorreDeRadio" em algum lugar do
 	    Workspace.
 
@@ -61,8 +47,7 @@ local REQUIRED_PIECES = { "Antena", "Bateria", "Transmissor" }
 
 local rng = Random.new()
 
--- TipoPeca -> true, uma vez coletada. Compartilhado entre todos os
--- Sobreviventes (ver nota de design acima).
+-- Compatibilidade com fontes server-side que creditam uma peça direto ao time.
 local collectedPieces: { [string]: boolean } = {}
 local radioCompleted = false
 local tuningProgress = 0
@@ -77,21 +62,52 @@ local function completeRadio()
 	RadioObjective.RescueCountdownStarted:Fire(GameConfig.RadioObjective.RescueCountdownDuration)
 end
 
-local function hasAllPieces(): boolean
-	for _, tipo in REQUIRED_PIECES do
-		if not collectedPieces[tipo] then
-			return false
+local function availablePieceTypes(): { [string]: boolean }
+	local available = table.clone(collectedPieces)
+	local ilha = Workspace:FindFirstChild("Ilha")
+	local tower = ilha and ilha:FindFirstChild("TorreDeRadio")
+	if tower then
+		for _, tipo in REQUIRED_PIECES do
+			if tower:GetAttribute(tipo .. "Instalada") == true then
+				available[tipo] = true
+			end
 		end
+	end
+	for _, player in Players:GetPlayers() do
+		if player:GetAttribute("Role") ~= GameConfig.Roles.Survivor then continue end
+		local containers: { Instance? } = { player.Character, player:FindFirstChildOfClass("Backpack") }
+		for _, container in containers do
+			if container then
+				for _, item in container:GetChildren() do
+					if item:IsA("Tool") and item:GetAttribute("PecaRadio") == true then
+						local tipo = item:GetAttribute("TipoPeca")
+						if type(tipo) == "string" and table.find(REQUIRED_PIECES, tipo) then
+							available[tipo] = true
+						end
+					end
+				end
+			end
+		end
+	end
+	return available
+end
+
+local function hasAllPieces(): boolean
+	local available = availablePieceTypes()
+	for _, tipo in REQUIRED_PIECES do
+		if not available[tipo] then return false end
 	end
 	return true
 end
 
 local function countCollected(): number
 	local count = 0
-	for _ in collectedPieces do
-		count += 1
-	end
+	for _ in availablePieceTypes() do count += 1 end
 	return count
+end
+
+function RadioObjective.RefreshPieceProgress()
+	Remotes.ObjectiveProgress:FireAllClients("RadioPecas", countCollected(), #REQUIRED_PIECES)
 end
 
 --------------------------------------------------------------------------------
@@ -99,6 +115,12 @@ end
 --------------------------------------------------------------------------------
 
 local function onPieceTouched(piece: BasePart, hit: BasePart)
+	-- RadioPieces gerencia essas Parts como itens de inventário. Sem esta
+	-- guarda, os dois listeners de Touched disputariam a mesma peça.
+	if piece:GetAttribute("_RadioPiecesManaged") == true then
+		return
+	end
+
 	local character = hit:FindFirstAncestorOfClass("Model")
 	local player = character and Players:GetPlayerFromCharacter(character)
 	if not player or player:GetAttribute("Role") ~= GameConfig.Roles.Survivor then
@@ -114,7 +136,7 @@ local function onPieceTouched(piece: BasePart, hit: BasePart)
 	piece:Destroy()
 
 	local collected = countCollected()
-	Remotes.ObjectiveProgress:FireAllClients("RadioPecas", collected, #REQUIRED_PIECES)
+	RadioObjective.RefreshPieceProgress()
 	print(string.format("[RadioObjective] %s coletou a peça '%s' (%d/%d)", player.Name, tipoPeca, collected, #REQUIRED_PIECES))
 end
 
@@ -136,7 +158,7 @@ function RadioObjective.CollectPiece(tipoPeca: unknown, player: Player?): boolea
 
 	collectedPieces[tipoPeca] = true
 	local collected = countCollected()
-	Remotes.ObjectiveProgress:FireAllClients("RadioPecas", collected, #REQUIRED_PIECES)
+	RadioObjective.RefreshPieceProgress()
 	print(
 		string.format(
 			"[RadioObjective] %s conseguiu a peça '%s' (%d/%d)",
@@ -147,6 +169,33 @@ function RadioObjective.CollectPiece(tipoPeca: unknown, player: Player?): boolea
 		)
 	)
 	return true
+end
+
+--[[
+	CompleteRescueCall(player?)
+	Fim de linha do objetivo do Rádio: RadioSiteSystem chama quando o pedido
+	de socorro termina de ser transmitido na estação. É o MESMO desfecho da
+	sintonia legada -- marca o rádio como concluído, publica o progresso e
+	dispara RescueCountdownStarted (que o RoundManager escuta).
+
+	Devolve false se o rádio já tinha sido concluído nesta rodada.
+]]
+function RadioObjective.CompleteRescueCall(player: Player?): boolean
+	if radioCompleted then
+		return false
+	end
+	completeRadio()
+	print(string.format(
+		"[RadioObjective] Pedido de socorro enviado por %s -- contagem de resgate iniciada (%ds).",
+		player and player.Name or "alguém",
+		GameConfig.RadioObjective.RescueCountdownDuration
+	))
+	return true
+end
+
+-- true depois que o socorro foi pedido nesta rodada.
+function RadioObjective.IsCompleted(): boolean
+	return radioCompleted
 end
 
 local function watchPiece(piece: Instance)
@@ -160,7 +209,7 @@ local function watchPiece(piece: Instance)
 end
 
 --------------------------------------------------------------------------------
--- Torre de Rádio: minigame de sintonia (placeholder por sorteio)
+-- Sintonia legada, mantida somente como API compatível e desativada no Init
 --------------------------------------------------------------------------------
 
 local function attemptTuning(player: Player, tower: BasePart)
@@ -201,7 +250,8 @@ local function canInteract(player: Player, tower: BasePart): boolean
 	if player:GetAttribute("InRound") ~= true or player:GetAttribute("Role") ~= GameConfig.Roles.Survivor
 		or player:GetAttribute("Eliminado") == true or player:GetAttribute("Amarrado") == true
 		or not humanoid or humanoid.Health <= 0 or not root or not root:IsA("BasePart")
-		or character:GetAttribute("PowerStunned") == true or not tower:IsDescendantOf(Workspace)
+		or character:GetAttribute("PowerStunned") == true or character:GetAttribute("GrabLocked") == true
+		or not tower:IsDescendantOf(Workspace)
 		or (root.Position - tower.Position).Magnitude > 12 then return false end
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
@@ -279,6 +329,14 @@ function RadioObjective.Reset()
 	radioCompleted = false
 	tuningProgress = 0
 	table.clear(interacting)
+	local ilha = Workspace:FindFirstChild("Ilha")
+	local tower = ilha and ilha:FindFirstChild("TorreDeRadio")
+	if tower then
+		for _, tipo in REQUIRED_PIECES do
+			tower:SetAttribute(tipo .. "Instalada", nil)
+		end
+	end
+	RadioObjective.RefreshPieceProgress()
 end
 
 --[[
@@ -289,7 +347,9 @@ end
 function RadioObjective.Init()
 	Players.PlayerRemoving:Connect(function(player) interacting[player] = nil end)
 	forEachTagged(Workspace, "PecaRadio", watchPiece)
-	setupTowerPrompt()
+	-- A sintonia fica bloqueada até o sistema futuro de minigame. Por ora,
+	-- RadioInstallSystem controla exclusivamente o prompt da torre e emite
+	-- "TodasPecasInstaladas" quando as três instalações terminarem.
 end
 
 return RadioObjective

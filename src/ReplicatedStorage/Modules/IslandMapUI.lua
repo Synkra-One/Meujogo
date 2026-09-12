@@ -1,32 +1,39 @@
 --!strict
 --[[
-	MonsterMapUI
-	O mapa da ilha em visão de cima que o Monstro abre com Q pra escolher o
-	destino do teleporte. Roda no CLIENTE.
+	IslandMapUI (era MonsterMapUI)
+	O mapa da ilha em visão de cima. Roda no CLIENTE, em dois modos:
+
+	  "teleport" -- o Monstro abre com Q pra escolher o destino do teleporte
+	               (fenda). Clicar chama onPick(worldPos). Mostra o próprio
+	               Monstro (UpdateMonster) e a boca da Caverna.
+	  "view"     -- Sobreviventes/Espião abrem com M só pra se orientar
+	               (client/SurvivorMapController). Não aceita clique, mostra
+	               um marcador verde de "você" (UpdateSelf) e ESCONDE a
+	               Caverna (é o spawn do Monstro -- não revela pro time humano).
+
+	Os dois modos compartilham a mesma camada de ITENS DESCOBERTOS
+	(AddDiscoveredItem/SetDiscoveredItems): quando um jogador passa perto de
+	um item do mundo (server/ItemDiscovery.lua), o ícone dele fica marcado no
+	mapa daquele jogador para o resto da partida.
 
 	NÃO É ESTÉTICO: cada retângulo desenhado vem da grade que server/IslandMap
 	amostrou de IslandLayout (a mesma matemática que escreveu o terreno), então
 	a proporção é 1:1 com o mundo. Clicar em (u, v) devolve o (x, z) real por
-	IslandMapData.MapToWorld -- e é esse ponto que vai pro servidor validar.
-
-	O QUE O MAPA MOSTRA
-	  - relevo com hillshading (praia / floresta / campo / rocha / pico / lago /
-	    mar raso / mar fundo), fundido em retângulos pra ficar barato
-	  - trilhas por cima (na grade elas sumiriam: ~8 studs num mapa de ~1800)
-	  - POIs com losango + nome
-	  - a caverna do Monstro
-	  - onde o Monstro está agora (marcador pulsando)
-	  - mira que segue o mouse, com as coordenadas e um aviso quando o ponto
-	    é água (o servidor rejeitaria)
-	  - barra de escala e rosa dos ventos (norte = -Z = topo)
+	IslandMapData.MapToWorld -- e é esse ponto que vai pro servidor validar
+	(modo "teleport"; o modo "view" não usa isso).
 
 	API:
-		local ui = MonsterMapUI.new(playerGui, function(worldPos) ... end)
-		ui:Prepare()                 -- monta em background (chame cedo)
-		ui:Show(monsterPos, readyAt)
+		local ui = IslandMapUI.new(playerGui, { mode = "teleport", onPick = fn })
+		local ui = IslandMapUI.new(playerGui, { mode = "view" })
+		ui:Prepare()                  -- monta em background (chame cedo)
+		ui:Show(anchorPos, statusText) -- anchorPos = posição do Monstro (teleport) ou sua própria (view)
 		ui:Hide()
 		ui:IsOpen()
 		ui:SetStatus(texto)
+		ui:UpdateMonster(pos)          -- modo teleport
+		ui:UpdateSelf(pos)             -- modo view
+		ui:AddDiscoveredItem(entry)    -- entry = {key, x, z, itemId, category, label}
+		ui:SetDiscoveredItems(list)
 		ui:Destroy()
 ]]
 
@@ -38,9 +45,10 @@ local UserInputService = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
 
 local IslandMapData = require(ReplicatedStorage.Modules.IslandMapData)
+local MapMarkers = require(ReplicatedStorage.Modules.MapMarkers)
 
-local MonsterMapUI = {}
-MonsterMapUI.__index = MonsterMapUI
+local IslandMapUI = {}
+IslandMapUI.__index = IslandMapUI
 
 --------------------------------------------------------------------------------
 -- Estilo (mexa aqui pra mudar a cara do mapa)
@@ -61,15 +69,18 @@ local Style = {
 	Poi = Color3.fromRGB(226, 214, 186),
 	PoiCave = Color3.fromRGB(196, 76, 68),
 	Monster = Color3.fromRGB(228, 92, 84),
+	Self = Color3.fromRGB(120, 224, 150),
 	CursorOk = Color3.fromRGB(150, 226, 158),
 	CursorBad = Color3.fromRGB(226, 96, 88),
 
 	PanelScale = 0.82, -- fração da menor dimensão da tela
 	TrailThickness = 2,
 	GridLines = 8,
-	RectBleed = 0.06, -- células de sobreposição, mata as costuras entre Frames
+	-- Sobreposição entre retângulos vizinhos: mata as costuras finas que
+	-- apareciam como grade fixa entre blocos de mesma cor (0.06 -> 0.22).
+	RectBleed = 0.22,
 }
-MonsterMapUI.Style = Style
+IslandMapUI.Style = Style
 
 --------------------------------------------------------------------------------
 -- Helpers
@@ -112,21 +123,49 @@ export type Payload = {
 	cave: { number },
 }
 
-function MonsterMapUI.new(playerGui: Instance, onPick: (Vector3) -> ())
-	local self = setmetatable({}, MonsterMapUI)
+export type Mode = "teleport" | "view"
+
+export type DiscoveredEntry = {
+	key: string,
+	x: number,
+	z: number,
+	itemId: string?,
+	category: string,
+	label: string?,
+}
+
+export type Options = {
+	mode: Mode?,
+	onPick: ((Vector3) -> ())?,
+}
+
+function IslandMapUI.new(playerGui: Instance, opts: any?)
+	-- Compatibilidade: aceitar `onPick` solto (assinatura antiga de MonsterMapUI)
+	-- além do options table novo.
+	local resolved: Options
+	if type(opts) == "function" then
+		resolved = { mode = "teleport", onPick = opts :: (Vector3) -> () }
+	else
+		resolved = (opts :: Options?) or {}
+	end
+
+	local self = setmetatable({}, IslandMapUI)
 	self.playerGui = playerGui
-	self.onPick = onPick
+	self.mode = resolved.mode or "teleport"
+	self.onPick = resolved.onPick
 	self.open = false
 	self.built = false
 	self.building = false
 	self.payload = nil :: Payload?
 	self.cells = nil :: { { number } }?
 	self.conns = {} :: { RBXScriptConnection }
-	self.pulseConn = nil :: RBXScriptConnection?
+	self.haloTweens = nil :: { Tween }?
+	self.discovered = {} :: { [string]: Frame }
+	self.pendingItems = nil :: { DiscoveredEntry }?
 	return self
 end
 
-function MonsterMapUI:_readPayload(): Payload?
+function IslandMapUI:_readPayload(): Payload?
 	local value = ReplicatedStorage:FindFirstChild(IslandMapData.ValueName)
 	if not value then
 		value = ReplicatedStorage:WaitForChild(IslandMapData.ValueName, 20) :: StringValue?
@@ -160,9 +199,9 @@ local function rebuildCells(rects: { IslandMapData.Rect }, resolution: number): 
 	return cells
 end
 
-function MonsterMapUI:_buildGui()
+function IslandMapUI:_buildGui()
 	local gui = Instance.new("ScreenGui")
-	gui.Name = "MonsterMap"
+	gui.Name = if self.mode == "view" then "SurvivorMap" else "MonsterMap"
 	gui.ResetOnSpawn = false
 	gui.IgnoreGuiInset = true
 	gui.DisplayOrder = 40
@@ -200,7 +239,8 @@ function MonsterMapUI:_buildGui()
 	pad.Parent = panel
 
 	-- Cabeçalho (fora do padding: ancorado no topo do panel)
-	local title = newText(panel, "Title", "FENDA — ESCOLHA O DESTINO", 17, Style.Text)
+	local titleText = if self.mode == "view" then "MAPA DA ILHA" else "FENDA — ESCOLHA O DESTINO"
+	local title = newText(panel, "Title", titleText, 17, Style.Text)
 	title.Font = Enum.Font.GothamBold
 	title.Position = UDim2.new(0, 0, 0, -32)
 	title.Size = UDim2.new(1, 0, 0, 22)
@@ -213,7 +253,10 @@ function MonsterMapUI:_buildGui()
 	status.ZIndex = 3
 	self.status = status
 
-	local hint = newText(panel, "Hint", "clique no mapa para abrir a fenda   ·   Q ou botão direito para fechar", 13, Style.TextDim)
+	local hintText = if self.mode == "view"
+		then "M ou botão direito para fechar"
+		else "clique no mapa para abrir a fenda   ·   Q ou botão direito para fechar"
+	local hint = newText(panel, "Hint", hintText, 13, Style.TextDim)
 	hint.TextXAlignment = Enum.TextXAlignment.Center
 	hint.Position = UDim2.new(0, 0, 1, 6)
 	hint.Size = UDim2.new(1, 0, 0, 20)
@@ -244,6 +287,11 @@ function MonsterMapUI:_buildGui()
 	markers.ZIndex = 7
 	self.markers = markers
 
+	local items = newFrame(area, "Items")
+	items.Size = UDim2.fromScale(1, 1)
+	items.ZIndex = 7
+	self.itemsLayer = items
+
 	local cursor = newFrame(area, "Cursor")
 	cursor.Size = UDim2.fromScale(1, 1)
 	cursor.ZIndex = 9
@@ -252,7 +300,7 @@ function MonsterMapUI:_buildGui()
 	return gui
 end
 
-function MonsterMapUI:_drawTerrain(payload: Payload, rects: { IslandMapData.Rect })
+function IslandMapUI:_drawTerrain(payload: Payload, rects: { IslandMapData.Rect })
 	local palette = IslandMapData.BuildPalette()
 	local res = payload.resolution
 	local bleed = Style.RectBleed
@@ -273,7 +321,7 @@ function MonsterMapUI:_drawTerrain(payload: Payload, rects: { IslandMapData.Rect
 	end
 end
 
-function MonsterMapUI:_drawGrid()
+function IslandMapUI:_drawGrid()
 	local n = Style.GridLines
 	for i = 1, n - 1 do
 		local v = newFrame(self.overlay, "gv", Style.Grid)
@@ -289,7 +337,7 @@ function MonsterMapUI:_drawGrid()
 	end
 end
 
-function MonsterMapUI:_drawTrails(payload: Payload)
+function IslandMapUI:_drawTrails(payload: Payload)
 	local half = payload.mapHalf
 	for _, seg in payload.trails do
 		local u1, v1 = IslandMapData.WorldToMap(seg[1], seg[2], half)
@@ -357,19 +405,21 @@ local function poiIcon(parent: Instance, u: number, v: number, label: string, co
 	return holder
 end
 
-function MonsterMapUI:_drawPois(payload: Payload)
+function IslandMapUI:_drawPois(payload: Payload)
 	local half = payload.mapHalf
 	for _, poi in payload.pois do
 		local u, v = IslandMapData.WorldToMap(poi.x, poi.z, half)
 		poiIcon(self.markers, u, v, poi.n, Style.Poi, 7)
 	end
-	if payload.cave and #payload.cave >= 2 then
+	-- A boca da Caverna é o spawn do Monstro -- não revela no mapa do
+	-- Sobrevivente/Espião (modo "view").
+	if self.mode ~= "view" and payload.cave and #payload.cave >= 2 then
 		local u, v = IslandMapData.WorldToMap(payload.cave[1], payload.cave[2], half)
 		poiIcon(self.markers, u, v, "Caverna", Style.PoiCave, 7)
 	end
 end
 
-function MonsterMapUI:_drawChrome(payload: Payload)
+function IslandMapUI:_drawChrome(payload: Payload)
 	-- Rosa dos ventos (norte = -Z = topo)
 	local north = newText(self.overlay, "N", "N", 15, Style.TextDim)
 	north.Font = Enum.Font.GothamBold
@@ -416,7 +466,7 @@ function MonsterMapUI:_drawChrome(payload: Payload)
 	end
 end
 
-function MonsterMapUI:_drawCursor()
+function IslandMapUI:_drawCursor()
 	local layer = self.cursorLayer
 
 	local h = newFrame(layer, "ch", Style.CursorOk)
@@ -458,7 +508,7 @@ function MonsterMapUI:_drawCursor()
 	self:_setCursorVisible(false)
 end
 
-function MonsterMapUI:_setCursorVisible(visible: boolean)
+function IslandMapUI:_setCursorVisible(visible: boolean)
 	local c = self.cursor
 	if not c then
 		return
@@ -469,21 +519,24 @@ function MonsterMapUI:_setCursorVisible(visible: boolean)
 	c.readout.Visible = visible
 end
 
-function MonsterMapUI:_drawMonsterMarker()
-	local m = newFrame(self.markers, "monster", Style.Monster)
-	m.AnchorPoint = Vector2.new(0.5, 0.5)
-	m.Size = UDim2.fromOffset(9, 9)
-	m.ZIndex = 8
+-- Um "ponto de posição" pulsante (bolinha + halo animável). Usado tanto pro
+-- Monstro (modo teleport) quanto pra "você" (modo view) -- mesmo desenho,
+-- cor diferente.
+function IslandMapUI:_drawPositionDot(name: string, color: Color3): (Frame, Frame, UIStroke)
+	local dot = newFrame(self.markers, name, color)
+	dot.AnchorPoint = Vector2.new(0.5, 0.5)
+	dot.Size = UDim2.fromOffset(9, 9)
+	dot.ZIndex = 8
 	local c = Instance.new("UICorner")
 	c.CornerRadius = UDim.new(1, 0)
-	c.Parent = m
+	c.Parent = dot
 	local s = Instance.new("UIStroke")
 	s.Color = Color3.new(0, 0, 0)
 	s.Thickness = 1.5
 	s.Transparency = 0.3
-	s.Parent = m
+	s.Parent = dot
 
-	local halo = newFrame(self.markers, "monsterHalo")
+	local halo = newFrame(self.markers, name .. "Halo")
 	halo.AnchorPoint = Vector2.new(0.5, 0.5)
 	halo.Size = UDim2.fromOffset(9, 9)
 	halo.BackgroundTransparency = 1
@@ -492,23 +545,143 @@ function MonsterMapUI:_drawMonsterMarker()
 	hc.CornerRadius = UDim.new(1, 0)
 	hc.Parent = halo
 	local hs = Instance.new("UIStroke")
-	hs.Color = Style.Monster
+	hs.Color = color
 	hs.Thickness = 1.5
 	hs.Transparency = 0.4
 	hs.Parent = halo
 
-	self.monsterMarker = m
-	self.monsterHalo = halo
-	self.monsterHaloStroke = hs
-	m.Visible = false
+	dot.Visible = false
 	halo.Visible = false
+	return dot, halo, hs
+end
+
+function IslandMapUI:_drawMarkers()
+	self.monsterMarker, self.monsterHalo, self.monsterHaloStroke = self:_drawPositionDot("monster", Style.Monster)
+	self.selfMarker, self.selfHalo, self.selfHaloStroke = self:_drawPositionDot("self", Style.Self)
 end
 
 --------------------------------------------------------------------------------
--- Montagem (em background: ~1000 Frames, não pode travar o frame)
+-- Itens descobertos (client/DiscoveredItemsStore.lua alimenta isto)
 --------------------------------------------------------------------------------
 
-function MonsterMapUI:Prepare(): boolean
+function IslandMapUI:_itemMarker(entry: DiscoveredEntry): Frame
+	local half = (self.payload :: Payload).mapHalf
+	local u, v = IslandMapData.WorldToMap(entry.x, entry.z, half)
+
+	local holder = Instance.new("Frame")
+	holder.Name = "item"
+	holder.BackgroundTransparency = 1
+	holder.AnchorPoint = Vector2.new(0.5, 0.5)
+	holder.Position = UDim2.fromScale(u, v)
+	holder.Size = UDim2.fromOffset(15, 15)
+	holder.ZIndex = 7
+	holder.Parent = self.itemsLayer
+
+	local image = MapMarkers.ImageFor(entry.itemId)
+	if image ~= "" then
+		local icon = Instance.new("ImageLabel")
+		icon.BackgroundTransparency = 1
+		icon.Image = image
+		icon.Size = UDim2.fromScale(1, 1)
+		icon.ZIndex = 7
+		icon.Parent = holder
+		local iconStroke = Instance.new("UIStroke")
+		iconStroke.Color = Color3.new(0, 0, 0)
+		iconStroke.Thickness = 1
+		iconStroke.Transparency = 0.4
+		iconStroke.Parent = icon
+	else
+		-- Sem PNG próprio ainda (ItemIcons.Map vazio): glifo desenhado, cor +
+		-- letra/símbolo por categoria (Modules/MapMarkers.lua). Assim que um
+		-- rbxassetid real for colado lá, o ícone passa a usar a imagem sozinho.
+		local style = MapMarkers.Style(entry.category)
+		local badge = Instance.new("Frame")
+		badge.Name = "badge"
+		badge.BackgroundColor3 = style.Color
+		badge.Size = UDim2.fromScale(1, 1)
+		badge.ZIndex = 7
+		badge.Parent = holder
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0.3, 0)
+		corner.Parent = badge
+		local stroke = Instance.new("UIStroke")
+		stroke.Color = Color3.new(0, 0, 0)
+		stroke.Thickness = 1
+		stroke.Transparency = 0.25
+		stroke.Parent = badge
+
+		local glyph = Instance.new("TextLabel")
+		glyph.Name = "glyph"
+		glyph.BackgroundTransparency = 1
+		glyph.Text = style.Glyph
+		glyph.TextColor3 = Color3.new(1, 1, 1)
+		glyph.Font = Enum.Font.GothamBold
+		glyph.TextSize = 10
+		glyph.Size = UDim2.fromScale(1, 1)
+		glyph.ZIndex = 8
+		glyph.Parent = badge
+		local glyphStroke = Instance.new("UIStroke")
+		glyphStroke.Color = Color3.new(0, 0, 0)
+		glyphStroke.Thickness = 1
+		glyphStroke.Transparency = 0.55
+		glyphStroke.Parent = glyph
+	end
+
+	if entry.label and entry.label ~= "" then
+		local nameLabel = Instance.new("TextLabel")
+		nameLabel.Name = "name"
+		nameLabel.BackgroundTransparency = 1
+		nameLabel.Text = entry.label
+		nameLabel.TextSize = 10
+		nameLabel.Font = Enum.Font.GothamMedium
+		nameLabel.TextColor3 = Style.TextDim
+		nameLabel.TextXAlignment = Enum.TextXAlignment.Center
+		nameLabel.AnchorPoint = Vector2.new(0.5, 0)
+		nameLabel.Position = UDim2.new(0.5, 0, 1, 1)
+		nameLabel.Size = UDim2.fromOffset(90, 12)
+		nameLabel.Visible = false -- só aparece com a lupa (mapa grande o suficiente); evita poluir
+		nameLabel.ZIndex = 7
+		nameLabel.Parent = holder
+	end
+
+	return holder
+end
+
+--[[
+	AddDiscoveredItem(entry)
+	entry = { key, x, z, itemId, category, label }. Ignora repique (mesma
+	`key` já desenhada). Se o mapa ainda não foi montado, fica pendente e
+	entra assim que Prepare() rodar.
+]]
+function IslandMapUI:AddDiscoveredItem(entry: DiscoveredEntry?)
+	if not entry or not entry.key or self.discovered[entry.key] then
+		return
+	end
+	if not self.built or not self.payload then
+		local pending = self.pendingItems or {}
+		table.insert(pending, entry)
+		self.pendingItems = pending
+		return
+	end
+	self.discovered[entry.key] = self:_itemMarker(entry)
+end
+
+--[[
+	SetDiscoveredItems(list)
+	Aplica uma lista inteira (usado ao abrir o mapa com o acumulado do
+	DiscoveredItemsStore). Idempotente por `key`.
+]]
+function IslandMapUI:SetDiscoveredItems(list: { DiscoveredEntry })
+	for _, entry in list do
+		self:AddDiscoveredItem(entry)
+	end
+end
+
+--------------------------------------------------------------------------------
+-- Montagem (em background: ~1000+ Frames, não pode travar o frame)
+--------------------------------------------------------------------------------
+
+function IslandMapUI:Prepare(): boolean
 	if self.built or self.building then
 		return self.built
 	end
@@ -517,7 +690,7 @@ function MonsterMapUI:Prepare(): boolean
 	local payload = self:_readPayload()
 	if not payload then
 		self.building = false
-		warn("[MonsterMapUI] ReplicatedStorage." .. IslandMapData.ValueName .. " não chegou -- o mapa não pode ser montado.")
+		warn("[IslandMapUI] ReplicatedStorage." .. IslandMapData.ValueName .. " não chegou -- o mapa não pode ser montado.")
 		return false
 	end
 	self.payload = payload
@@ -531,23 +704,34 @@ function MonsterMapUI:Prepare(): boolean
 	self:_drawTrails(payload)
 	self:_drawPois(payload)
 	self:_drawChrome(payload)
-	self:_drawMonsterMarker()
+	self:_drawMarkers()
 	self:_drawCursor()
-	self:_wireInput()
+	if self.mode ~= "view" then
+		self:_wireInput()
+	end
 
 	self.built = true
 	self.building = false
+
+	if self.pendingItems then
+		local pending = self.pendingItems
+		self.pendingItems = nil
+		for _, entry in pending do
+			self:AddDiscoveredItem(entry)
+		end
+	end
+
 	return true
 end
 
 --------------------------------------------------------------------------------
--- Input: mover a mira, clicar pra escolher
+-- Input: mover a mira, clicar pra escolher (só modo "teleport")
 --------------------------------------------------------------------------------
 
 -- Pixel de tela cheia -> (u, v) dentro da área do mapa (0..1), ou nil fora dela.
 -- A ScreenGui usa IgnoreGuiInset, então TODA entrada de mouse precisa somar o
 -- inset (GetMouseLocation e InputObject.Position vêm sem ele).
-function MonsterMapUI:_uvFromPixel(px: number, py: number): (number?, number?)
+function IslandMapUI:_uvFromPixel(px: number, py: number): (number?, number?)
 	local area = self.area :: Frame
 	local abs, size = area.AbsolutePosition, area.AbsoluteSize
 	if size.X < 1 or size.Y < 1 then
@@ -561,12 +745,12 @@ function MonsterMapUI:_uvFromPixel(px: number, py: number): (number?, number?)
 	return u, v
 end
 
-function MonsterMapUI:_uvFromInput(input: InputObject): (number?, number?)
+function IslandMapUI:_uvFromInput(input: InputObject): (number?, number?)
 	local inset = GuiService:GetGuiInset()
 	return self:_uvFromPixel(input.Position.X + inset.X, input.Position.Y + inset.Y)
 end
 
-function MonsterMapUI:_isWaterAt(u: number, v: number): boolean
+function IslandMapUI:_isWaterAt(u: number, v: number): boolean
 	local payload = self.payload
 	local cells = self.cells
 	if not payload or not cells then
@@ -579,7 +763,7 @@ function MonsterMapUI:_isWaterAt(u: number, v: number): boolean
 	return IslandMapData.WaterTerrain[IslandMapData.TerrainOf(paletteIndex)] == true
 end
 
-function MonsterMapUI:_updateCursor(u: number, v: number)
+function IslandMapUI:_updateCursor(u: number, v: number)
 	local c = self.cursor
 	local payload = self.payload
 	if not c or not payload then
@@ -609,13 +793,13 @@ function MonsterMapUI:_updateCursor(u: number, v: number)
 end
 
 -- Mira do mouse (mouse absoluto), em (u, v) dentro da área do mapa.
-function MonsterMapUI:_pointerUV(): (number?, number?)
+function IslandMapUI:_pointerUV(): (number?, number?)
 	local loc = UserInputService:GetMouseLocation()
 	local inset = GuiService:GetGuiInset()
 	return self:_uvFromPixel(loc.X + inset.X, loc.Y + inset.Y)
 end
 
-function MonsterMapUI:_wireInput()
+function IslandMapUI:_wireInput()
 	local area = self.area :: Frame
 
 	-- FONTE ÚNICA da mira: poll do mouse absoluto todo frame enquanto aberto.
@@ -639,6 +823,9 @@ function MonsterMapUI:_wireInput()
 			return
 		end
 		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+			return
+		end
+		if not self.onPick then
 			return
 		end
 		-- Mouse: usa a MESMA fonte da mira (poll), pra o clique cair exatamente
@@ -668,13 +855,13 @@ end
 -- Abrir / fechar
 --------------------------------------------------------------------------------
 
-function MonsterMapUI:SetStatus(text: string)
+function IslandMapUI:SetStatus(text: string)
 	if self.status then
 		self.status.Text = text
 	end
 end
 
-function MonsterMapUI:UpdateMonster(position: Vector3?)
+function IslandMapUI:UpdateMonster(position: Vector3?)
 	local payload = self.payload
 	if not payload or not self.monsterMarker then
 		return
@@ -692,24 +879,52 @@ function MonsterMapUI:UpdateMonster(position: Vector3?)
 	self.monsterHalo.Visible = true
 end
 
-function MonsterMapUI:IsOpen(): boolean
+function IslandMapUI:UpdateSelf(position: Vector3?)
+	local payload = self.payload
+	if not payload or not self.selfMarker then
+		return
+	end
+	if not position then
+		self.selfMarker.Visible = false
+		self.selfHalo.Visible = false
+		return
+	end
+	local u, v = IslandMapData.WorldToMap(position.X, position.Z, payload.mapHalf)
+	local pos = UDim2.fromScale(math.clamp(u, 0, 1), math.clamp(v, 0, 1))
+	self.selfMarker.Position = pos
+	self.selfHalo.Position = pos
+	self.selfMarker.Visible = true
+	self.selfHalo.Visible = true
+end
+
+function IslandMapUI:IsOpen(): boolean
 	return self.open == true
 end
 
-function MonsterMapUI:Show(monsterPos: Vector3?, statusText: string?)
+--[[
+	Show(anchorPos, statusText)
+	anchorPos é a posição do Monstro no modo "teleport", ou a sua própria
+	posição no modo "view" -- o próprio módulo decide qual marcador atualizar
+	e pulsar, então quem chama só passa "onde estou agora".
+]]
+function IslandMapUI:Show(anchorPos: Vector3?, statusText: string?): boolean
 	if not self.built and not self:Prepare() then
 		return false
 	end
 	self.open = true
-	self:UpdateMonster(monsterPos)
+	if self.mode == "view" then
+		self:UpdateSelf(anchorPos)
+	else
+		self:UpdateMonster(anchorPos)
+	end
 	self:SetStatus(statusText or "")
 	self:_setCursorVisible(false)
 	self.gui.Enabled = true
 
-	-- pulso do marcador do Monstro
-	if self.monsterHalo then
-		local halo = self.monsterHalo
-		local stroke = self.monsterHaloStroke
+	-- pulso do marcador de posição (o do modo ativo só)
+	local halo = if self.mode == "view" then self.selfHalo else self.monsterHalo
+	local stroke = if self.mode == "view" then self.selfHaloStroke else self.monsterHaloStroke
+	if halo and stroke then
 		halo.Size = UDim2.fromOffset(9, 9)
 		stroke.Transparency = 0.35
 		local t = TweenService:Create(
@@ -736,7 +951,7 @@ function MonsterMapUI:Show(monsterPos: Vector3?, statusText: string?)
 	return true
 end
 
-function MonsterMapUI:Hide()
+function IslandMapUI:Hide()
 	self.open = false
 	if self.gui then
 		self.gui.Enabled = false
@@ -750,7 +965,7 @@ function MonsterMapUI:Hide()
 	end
 end
 
-function MonsterMapUI:Destroy()
+function IslandMapUI:Destroy()
 	self:Hide()
 	for _, c in self.conns do
 		c:Disconnect()
@@ -763,6 +978,8 @@ function MonsterMapUI:Destroy()
 	self.built = false
 	self.cells = nil
 	self.payload = nil
+	table.clear(self.discovered)
+	self.pendingItems = nil
 end
 
-return MonsterMapUI
+return IslandMapUI

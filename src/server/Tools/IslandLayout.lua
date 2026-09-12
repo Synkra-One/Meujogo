@@ -131,6 +131,10 @@ local CONFIG = {
 		{ name = "Ruinas", r = 24, inlandMin = 110, inlandMax = 260, flatten = true, blend = 14 },
 		{ name = "Torre", r = 14, inlandMin = 130, inlandMax = 320, flatten = true, blend = 12, highest = true },
 		{ name = "Farol", r = 18, inlandMin = 8, inlandMax = 14, flatten = true, blend = 16, coastal = true },
+		-- Estação de rádio: clareira grande e nivelada pro pátio cercado da
+		-- torre. Fica por último de propósito -- acrescentar um site no fim
+		-- não muda onde os outros caem na mesma seed.
+		{ name = "Radio", r = 34, inlandMin = 150, inlandMax = 340, flatten = true, blend = 22 },
 	},
 	SiteSpacing = 70, -- folga extra entre bordas de dois sites
 	MountainMargin = 40,
@@ -299,6 +303,14 @@ function IslandLayout.Height(x: number, z: number): number
 				local depth = CONFIG.Lake.Depth * smoothstep(1 - d / (R + 2)) ^ 0.85
 				h -= depth
 			end
+		end
+	end
+
+	local radio = sites.Radio
+	if radio then
+		local d = math.sqrt((x - radio.x) ^ 2 + (z - radio.z) ^ 2)
+		if d < radio.r * 0.85 then
+			return Enum.Material.Ground -- pátio terraplenado da estação
 		end
 	end
 
@@ -581,7 +593,7 @@ local function planTrails(rng: Random)
 		return best
 	end
 
-	for _, name in { "Torre", "Farol", "Ruinas" } do
+	for _, name in { "Torre", "Farol", "Ruinas", "Radio" } do
 		local site = sites[name]
 		if site then
 			local near = nearestLoopSite(site.x, site.z)

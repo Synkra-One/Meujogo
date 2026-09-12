@@ -136,11 +136,12 @@ local function updateCountdown()
 		broadcast()
 		local ok, err = pcall(RoundManager.StartRound, participants)
 		if not ok then
-			warn("[WaitingRoom] Não foi possível iniciar a partida: " .. tostring(err))
+			local reason = tostring(err)
+			warn("[WaitingRoom] Não foi possível iniciar a partida: " .. reason)
 			WaitingRoomManager.Reset()
 			for _, player in participants do
 				if player.Parent == Players then
-					Remotes.LobbyMessage:FireClient(player, "Não foi possível preparar a partida. Entre na sala novamente.")
+					Remotes.LobbyMessage:FireClient(player, "Não foi possível preparar a partida: " .. string.sub(reason, 1, 160))
 					pcall(function() player:LoadCharacter() end)
 				end
 			end
@@ -149,14 +150,11 @@ local function updateCountdown()
 	end)
 end
 
-function WaitingRoomManager.Join(player: Player, canOpen: boolean)
+function WaitingRoomManager.Join(player: Player)
+	if player.Parent ~= Players or player:GetAttribute("InRound") == true then return end
 	if table.find(members, player) then broadcast(player); return end
 	if state ~= "Lobby" and state ~= "Waiting" then
 		Remotes.LobbyMessage:FireClient(player, "Partida em andamento. Aguarde a próxima sala.")
-		return
-	end
-	if state == "Lobby" and not canOpen then
-		Remotes.LobbyMessage:FireClient(player, "Aguarde o host abrir a sala (modo de teste).")
 		return
 	end
 	if #members >= capacity then

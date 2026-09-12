@@ -38,6 +38,10 @@
       "DeathRespawnHandler": { "$path": "src/MovementPack/ServerScriptService/DeathRespawnHandler.rbxmx" }
     },
 
+    "ServerStorage": {
+      "$path": "src/ServerStorage"
+    },
+
     "StarterPlayer": {
       "$properties": {
         "CameraMinZoomDistance": 6,

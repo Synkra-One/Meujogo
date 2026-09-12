@@ -22,11 +22,15 @@ clicar em `(u, v)` devolve o `(x, z)` real (round-trip com erro 0 stud).
 - O mar escurece conforme se afasta da costa (banda por **distância da costa**,
   não por profundidade — a batimetria da ilha muda em ~1 stud, menos de uma
   célula do mapa).
-- `Modules/MonsterMapUI.lua` desenha: relevo, **trilhas** por cima (na grade
-  elas sumiriam), POIs com losango + nome, a caverna, onde o Monstro está
-  (marcador pulsando), mira que segue o mouse mostrando as coordenadas e
-  ficando vermelha sobre água, grade de referência, rosa dos ventos (norte =
-  −Z = topo) e **barra de escala de 200 studs**.
+- `Modules/IslandMapUI.lua` (renomeado de `MonsterMapUI.lua` -- ver
+  [MapaSobrevivente.md](MapaSobrevivente.md)) desenha: relevo, **trilhas** por
+  cima (na grade elas sumiriam), POIs com losango + nome, a caverna, onde o
+  Monstro está (marcador pulsando), mira que segue o mouse mostrando as
+  coordenadas e ficando vermelha sobre água, grade de referência, rosa dos
+  ventos (norte = −Z = topo) e **barra de escala de 200 studs**. O mesmo
+  módulo agora também roda em modo `"view"` pro mapa do Sobrevivente/Espião
+  (tecla M) e desenha a camada de itens descobertos -- só o modo `"teleport"`
+  (Monstro/Q) usa a mira e o clique deste arquivo.
 - Enquanto o mapa está aberto: o movimento é travado, o mouse é solto do
   centro (via atributo `CursorLivre` no LocalPlayer — o mesmo gancho da tela
   de escolha de personagem, que o `CustomShiftLock` respeita; render step é só
@@ -70,7 +74,7 @@ Estados no **character** (Attributes, replicam sozinhos): `TeleportState`
 |---|---|
 | `src/ReplicatedStorage/Modules/IslandMapData.lua` | Formato + matemática do mapa: paleta, fusão em retângulos, encode/decode e as conversões mundo↔mapa. Compartilhado server/cliente. |
 | `src/server/IslandMap.lua` | Amostra a ilha de `IslandLayout`, aplica hillshading, funde em retângulos e publica em `ReplicatedStorage.IslandMapData`. |
-| `src/ReplicatedStorage/Modules/MonsterMapUI.lua` | Desenha e opera o mapa (relevo, trilhas, POIs, mira, escala, marcador do Monstro). Roda no cliente. |
+| `src/ReplicatedStorage/Modules/IslandMapUI.lua` (era `MonsterMapUI.lua`) | Desenha e opera o mapa (relevo, trilhas, POIs, mira, escala, marcador do Monstro/você, itens descobertos). Roda no cliente, em modo `"teleport"` (Monstro) ou `"view"` (Sobrevivente/Espião -- ver [MapaSobrevivente.md](MapaSobrevivente.md)). |
 | `src/server/MonsterTeleport.lua` | Autoridade: valida ativação/destino/cooldown, roda a máquina de estados, faz o teleporte real, limpa tudo. Carrega o asset da fenda (InsertService, só server) e publica em `ReplicatedStorage.RiftAssets.Template`. |
 | `src/ReplicatedStorage/Modules/RiftVFX.lua` | Monta/anima/limpa **uma** fenda (asset + partículas + luz + distorção). Roda no cliente, tudo com TweenService. Fenda de reserva (só `Part`) se o asset não carregar. |
 | `src/client/RiftVFXController.client.luau` | Recebe os "beats" de `Remotes.RiftVFX` (só pra quem está perto), chama `RiftVFX`, toca os sons 3D. |

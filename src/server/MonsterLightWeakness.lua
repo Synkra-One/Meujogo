@@ -160,10 +160,8 @@ end
 
 --------------------------------------------------------------------------------
 -- Fonte de luz genérica (Tool + PointLight interno + verificação de
--- proximidade throttled) -- hoje usada pela Tocha (liga sozinha ao
--- equipar, ver watchTorch) e pela Lanterna (liga por escolha do jogador,
--- ver UtilityItemSystem.lua -- por isso ActivateLightSource/
--- DeactivateLightSource são expostas, não só uso interno).
+-- proximidade throttled), usada pela Tocha ao equipar. A lanterna
+-- direcional usa FlashlightSystem e nao participa deste efeito de area.
 --------------------------------------------------------------------------------
 
 -- Combustível persiste no Attribute do próprio Tool (sobrevive a
@@ -180,9 +178,7 @@ end
 --[[
 	ActivateLightSource(tool)
 	Liga a fraqueza do Monstro pra esse Tool (precisa ter um Handle e
-	combustível > 0). Devolve se conseguiu ligar -- quem chama (ex: a
-	Lanterna) usa isso pra saber se deve acender o próprio efeito visual
-	também, ou recusar por falta de bateria.
+	combustível > 0). Devolve se conseguiu ligar a fonte de area.
 ]]
 local function activateLightSource(tool: Tool): boolean
 	local handle = tool:FindFirstChild("Handle")

@@ -36,15 +36,25 @@ local function onCharacterAdded(player, character)
 	local humanoid = character:WaitForChild("Humanoid")
 
 	humanoid.Died:Connect(function()
+		if player.Parent ~= Players or player.Character ~= character then return end
+		if player:GetAttribute("InRound") == true then
+			player:SetAttribute("Eliminado", true)
+		end
 		local deaths = (player:GetAttribute("Deaths") or 0) + 1
 		player:SetAttribute("Deaths", deaths)
 
 		deathEvent:FireClient(player, DEATH_SCREEN_TIME, deaths)
 
 		task.wait(DEATH_SCREEN_TIME)
+		if player.Parent ~= Players or player.Character ~= character then return end
 
 		whiteFadeIn:FireClient(player)
 		task.wait(FADE_TIME)
+		if player.Parent ~= Players then return end
+		if player.Character ~= character then
+			whiteFadeOut:FireClient(player)
+			return
+		end
 
 		player:LoadCharacter()
 

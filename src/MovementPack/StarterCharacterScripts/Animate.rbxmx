@@ -74,6 +74,8 @@ local currentAnimTrack = nil
 local currentAnimKeyframeHandler = nil
 local currentAnimSpeed = 1.0
 local isAirborne = false
+local hurtUntil = 0
+local lastHealth = Humanoid.Health
 
 local TRANSITIONS = {
 	idle_to_walk = 0.25,
@@ -90,13 +92,19 @@ local animTable = {}
 -- (No longer reads Animation objects parented under this script.)
 local animNames = {
 	idle = {
-		{ id = "rbxassetid://17333854280", weight = 10 }, -- [Meujogo] idle em pe definido pelo usuario
+		{ id = "rbxassetid://109143561038911", weight = 10 }, -- [Meujogo] idle em pe definido pelo usuario
 	},
 	walk = {
-		{ id = "rbxassetid://118726962444881", weight = 10 }, -- [Meujogo] animacao do usuario
+		{ id = "rbxassetid://84329977047483", weight = 10 }, -- [Meujogo] walk do usuario
+	},
+	hurt_idle = {
+		{ id = "rbxassetid://96462680767143", weight = 10 }, -- [Meujogo] dano parado
+	},
+	hurt_walk = {
+		{ id = "rbxassetid://123093322235597", weight = 10 }, -- [Meujogo] dano andando
 	},
 	run = {
-		{ id = "rbxassetid://87202665361349", weight = 10 }, -- [Meujogo] animacao do usuario
+		{ id = "rbxassetid://109418716176884", weight = 10 }, -- [Meujogo] corrida Shift do usuario
 	},
 	climb = {
 		{ id = "rbxassetid://180436334", weight = 10 },
@@ -183,6 +191,10 @@ end
 local function playAnimation(animName, forcedTransition)
 	local hrp = Figure:FindFirstChild("HumanoidRootPart")
 
+	if os.clock() &lt; hurtUntil and (animName == "idle" or animName == "walk" or animName == "run") then
+		return
+	end
+
 	-- While a landing-effects script is playing its own animation, don't let
 	-- ANYTHING from this script play over it (fall/jump included) — not just
 	-- idle/walk. Without this, a physics micro-bounce right after touching
@@ -251,6 +263,65 @@ local function playAnimation(animName, forcedTransition)
 	)
 end
 
+local function horizontalSpeed()
+	local hrp = Figure:FindFirstChild("HumanoidRootPart")
+	if not hrp then return 0 end
+	local v = hrp.Velocity
+	return Vector3.new(v.X, 0, v.Z).Magnitude
+end
+
+local function resumeMovementAnimation()
+	if Humanoid.Health &lt;= 0 or Figure.Parent == nil then return end
+	if isAirborne then return end
+	onRunning(horizontalSpeed())
+end
+
+local function playHurtAnimation()
+	local hrp = Figure:FindFirstChild("HumanoidRootPart")
+	if hrp and (hrp:GetAttribute("IsLanding") or hrp:GetAttribute("IsCrouching")) then
+		return
+	end
+
+	local speed = horizontalSpeed()
+	local animName = if speed &gt; 0.5 then "hurt_walk" else "hurt_idle"
+	local anim = pickAnim(animName)
+	if not anim then return end
+
+	hurtUntil = os.clock() + 0.55
+
+	if currentAnimTrack then
+		currentAnimTrack:Stop(0.08)
+		currentAnimTrack:Destroy()
+	end
+	if currentAnimKeyframeHandler then
+		currentAnimKeyframeHandler:Disconnect()
+		currentAnimKeyframeHandler = nil
+	end
+
+	currentAnimSpeed = 1.0
+	local _animator = Humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", Humanoid)
+	currentAnimTrack = _animator:LoadAnimation(anim)
+	currentAnimTrack.Priority = Enum.AnimationPriority.Action
+	currentAnimTrack.Looped = false
+	currentAnimTrack:Play(0.08)
+	currentAnim = animName
+	currentAnimInstance = anim
+
+	currentAnimKeyframeHandler = currentAnimTrack.Stopped:Connect(function()
+		if os.clock() &lt; hurtUntil then
+			task.delay(hurtUntil - os.clock(), resumeMovementAnimation)
+			return
+		end
+		resumeMovementAnimation()
+	end)
+
+	task.delay(0.6, function()
+		if currentAnim == animName then
+			resumeMovementAnimation()
+		end
+	end)
+end
+
 local function isMovingBackwards()
 	local hrp = Figure:FindFirstChild("HumanoidRootPart")
 	if not hrp then return false end
@@ -259,8 +330,8 @@ local function isMovingBackwards()
 	return v.Unit:Dot(hrp.CFrame.LookVector) &lt; -0.2
 end
 
--- Use WalkSpeed threshold to detect sprint for animation only
--- This matches CONFIG.SprintSpeed in the crouch script
+-- Use the movement script's Shift state for sprint animation. WalkSpeed alone
+-- can be raised by monster/passive/power multipliers and should still walk.
 local SPRINT_SPEED_THRESHOLD = 20
 
 function onRunning(speed)
@@ -273,7 +344,8 @@ function onRunning(speed)
 		if isMovingBackwards() then
 			playAnimation("walk")
 			setAnimationSpeed(-speed / 14.5)
-		elseif Humanoid.WalkSpeed &gt;= SPRINT_SPEED_THRESHOLD then
+		elseif hrp and hrp:GetAttribute("IsSprinting") == true
+			and Humanoid.WalkSpeed &gt;= SPRINT_SPEED_THRESHOLD then
 			playAnimation("run")
 			setAnimationSpeed(1.3)
 
@@ -373,6 +445,13 @@ Humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
 	end
 end)
 
+Humanoid.HealthChanged:Connect(function(health)
+	if health &lt; lastHealth and health &gt; 0 then
+		playHurtAnimation()
+	end
+	lastHealth = health
+end)
+
 Humanoid.StateChanged:Connect(function(_, newState)
 	if newState == Enum.HumanoidStateType.Landed
 		or newState == Enum.HumanoidStateType.Running
@@ -404,6 +483,18 @@ end)
 -- instead of staying stuck (Running only fires on a speed CHANGE).
 HumanoidRootPart:GetAttributeChangedSignal("IsLanding"):Connect(function()
 	if HumanoidRootPart:GetAttribute("IsLanding") then
+		stopAllAnimations()
+		return
+	end
+	task.defer(function()
+		local v = HumanoidRootPart.Velocity
+		local horizSpeed = Vector3.new(v.X, 0, v.Z).Magnitude
+		onRunning(horizSpeed)
+	end)
+end)
+
+HumanoidRootPart:GetAttributeChangedSignal("IsCrouching"):Connect(function()
+	if HumanoidRootPart:GetAttribute("IsCrouching") then
 		stopAllAnimations()
 		return
 	end

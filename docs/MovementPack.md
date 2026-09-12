@@ -143,19 +143,22 @@ trocar essas duas linhas em `Animate.rbxmx`.
 
 | Arquivo | Anim | ID | Origem |
 |---|---|---|---|
-| `Animate.rbxmx` (tabela `animNames` no código) | idle | `17333854280` | Idle em pé indicado pelo usuário |
-| | walk | `118726962444881` | **animação do usuário** |
+| `Animate.rbxmx` (tabela `animNames` no código) | idle | `109143561038911` | **animação do usuário** |
+| | walk | `84329977047483` | **animação do usuário** |
 | | run | `87202665361349` | **animação do usuário** |
 | | jump | `125750702` | Roblox R6 |
 | | fall | `180436148` | Roblox R6 |
 | | climb | `180436334` | Roblox R6 |
 | | sit | `178130996` | Roblox R6 |
-| `Crouching.rbxmx` (6 objetos `Animation`) | crouch + crawl | **vazio** | sem pose — agachar/rastejar só mudam velocidade/câmera |
+| `Crouching.rbxmx` (6 objetos `Animation`) | Crouching | `125164434023167` | crouch idle indicado pelo usuário |
+| | CrouchWalk | `80429715000556` | crouch andando indicado pelo usuário |
+| | CrouchToCrawl / CrawlIdle / CrawlWalk / CrawlToCrouch | vazio | opcional; o script procura aliases como `CrouchIdle`, `Agachar`, `AndarAgachado`, `RastejarIdle` |
 | `src/client/FallEffects.client.luau` | FALL_ANIM_LONG / SHORT | `180436148` | Roblox R6 (mesma do fall) |
 | | FALL_ANIM_LAND | vazio | pouso normal só volta pro idle |
 
-`Animate` lê do **código** (tabela `animNames`). `Crouching` lê dos **objetos
-`Animation`** filhos do script (`AnimationContent` no `.rbxmx`), não do código.
+`Animate` lê do **código** (tabela `animNames`). `Crouching` prefere objetos
+`Animation` preenchidos no Explorer e cai nos IDs de fallback só quando não
+encontra uma animação customizada.
 
 ### Publicar uma animação da AnimSaves
 

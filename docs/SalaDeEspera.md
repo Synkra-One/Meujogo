@@ -4,7 +4,7 @@ Ao dar Play, o jogador nasce no lobby sem a tela de seleção. O pilar **Entrar 
 
 Cada participante escolhe um personagem, uma skin e um perk e marca **Pronto**. O personagem fica reservado no servidor imediatamente; trocar ou sair libera o anterior. Com o mínimo de participantes e todos prontos, começa uma contagem de 10 segundos. Mudar uma escolha cancela o pronto; entrar, sair ou cancelar pronto reavalia a contagem. Só os participantes da sala vão à ilha.
 
-**Ver sala** fecha a interface para andar pela área. O botão **Preparar personagem** ou a tecla **C** reabre a seleção. **Sair da sala** volta ao lobby e libera a vaga. Após a partida e o intervalo, as reservas são limpas antes da próxima sala. Quem entra no servidor durante a rodada aguarda no lobby.
+**Ver sala** fecha a interface para andar pela área. O botão **Preparar personagem** ou a tecla **M** reabre a seleção. **Sair da sala** volta ao lobby e libera a vaga. Após a partida e o intervalo, as reservas são limpas antes da próxima sala. Quem entra no servidor durante a rodada aguarda no lobby.
 
 ## Configuração
 

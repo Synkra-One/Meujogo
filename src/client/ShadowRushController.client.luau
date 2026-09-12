@@ -66,7 +66,8 @@ local function action(_, state)
 	if state ~= Enum.UserInputState.Begin then return Enum.ContextActionResult.Sink end
 	local char = player.Character
 	if not char or UserInputService:GetFocusedTextBox() or player:GetAttribute("MapaAberto")
-		or player:GetAttribute("CursorLivre") or char:GetAttribute("TeleportBusy") then return Enum.ContextActionResult.Pass end
+		or player:GetAttribute("CursorLivre") or char:GetAttribute("TeleportBusy")
+		or char:GetAttribute("GrabLocked") then return Enum.ContextActionResult.Pass end
 	if char:GetAttribute("ShadowRushBusy") then
 		Remotes.ShadowRush:FireServer("Stop", char:GetAttribute("ShadowRushToken"))
 	elseif Workspace:GetServerTimeNow() >= (player:GetAttribute("ShadowRushReadyAt") or 0) then
