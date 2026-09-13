@@ -58,6 +58,7 @@ if not Workspace:FindFirstChild("Ilha") then
 			.. "Em MODO DE EDIÇÃO (sem Play), rode na Command Bar, um bloco por vez:\n"
 			.. "  local Gen = require(game.ServerScriptService.Server.Tools.IslandGenerator) Gen.Generate()\n"
 			.. "  local Crash = require(game.ServerScriptService.Server.Tools.PlaneCrashGenerator) Crash.Generate()\n"
+			.. "  local Abismo = require(game.ServerScriptService.Server.Tools.AbyssStationGenerator) Abismo.Build()\n"
 			.. "  local Spawner = require(game.ServerScriptService.Server.Tools.ItemSpawner) Spawner.Generate()\n"
 			.. "e então SALVE o lugar (Ctrl+S). Depois disso, é só dar Play -- não precisa gerar de novo.\n"
 			.. "(A Jangada do objetivo de fuga é montada sozinha por RaftObjective no boot, ou na\n"

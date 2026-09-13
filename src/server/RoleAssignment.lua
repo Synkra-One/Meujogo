@@ -78,19 +78,27 @@ end
 	Distribui: 1 Monstro, 1 Espiao (com 3+ jogadores), resto Sobrevivente.
 
 	MODO DE TESTE:
-	  - GameConfig.Testing.ForceRole força todo mundo no mesmo papel;
+	  - GameConfig.Testing.ForceRole força o papel apenas em teste solo;
 	  - Player.DevForceRole, definido pela sala dev, força o papel daquele
 	    jogador específico quando possível;
 	  - em teste solo, DevForceRole vence a sorte.
 ]]
 function RoleAssignment.AssignRoles(players: { Player })
 	local forcedRole = GameConfig.Testing.ForceRole
-	if forcedRole then
+	if not isValidRole(forcedRole) then
+		forcedRole = nil
+	end
+
+	if #players == 1 and GameConfig.Testing.SoloStart and forcedRole then
 		for _, player in players do
 			player:SetAttribute("Role", forcedRole)
 		end
 		print(string.format("[RoleAssignment] MODO DE TESTE: %d jogador(es) forçado(s) em '%s'.", #players, forcedRole))
 		return
+	end
+
+	if forcedRole and #players >= 2 then
+		warn("[RoleAssignment] ForceRole ignorado em partida multiplayer: 2+ jogadores sempre precisam de exatamente 1 Monstro.")
 	end
 
 	if #players == 1 and GameConfig.Testing.SoloStart then

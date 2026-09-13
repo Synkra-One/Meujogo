@@ -9,8 +9,11 @@
 	não existe: quando ela for escrita, é UM lugar só pra trocar, em vez de
 	duas cópias divergindo.
 
-	Efeito atual: marca o character como "Eliminado", ancora todas as partes,
-	zera os controles do Humanoid e move o character pra workspace.Eliminados.
+	Efeito atual: marca o character como "Eliminado", trava somente a raiz,
+	zera os controles do Humanoid e mantém o corpo no Workspace até o respawn.
+	Manter o Model como character ativo é importante: mover o character para
+	uma subpasta fazia Player.Character ser invalidado cedo demais em alguns
+	clientes, interrompendo animação, câmera e tela de morte.
 
 	POR QUE O ATTRIBUTE VAI TAMBÉM NO PLAYER, não só no character:
 	o "Ultimate R6 Movement System" traz um DeathRespawnHandler que, ao
@@ -22,30 +25,7 @@
 	Quem limpa isso é o começo de uma partida nova (Reset).
 ]]
 
-local Workspace = game:GetService("Workspace")
-
 local Elimination = {}
-
-local eliminatedFolder: Folder? = nil
-
--- Cria (ou reaproveita) a pasta "Eliminados" em workspace, sob demanda.
-local function getEliminatedFolder(): Folder
-	if eliminatedFolder and eliminatedFolder.Parent then
-		return eliminatedFolder
-	end
-
-	local existing = Workspace:FindFirstChild("Eliminados")
-	if existing and existing:IsA("Folder") then
-		eliminatedFolder = existing
-		return existing
-	end
-
-	local folder = Instance.new("Folder")
-	folder.Name = "Eliminados"
-	folder.Parent = Workspace
-	eliminatedFolder = folder
-	return folder
-end
 
 --[[
 	IsEliminated(player)
@@ -86,20 +66,32 @@ function Elimination.Eliminate(player: Player)
 	character:SetAttribute("Eliminado", true)
 	player:SetAttribute("Eliminado", true) -- sobrevive ao respawn (ver cabeçalho)
 
-	for _, descendant in character:GetDescendants() do
-		if descendant:IsA("BasePart") then
-			descendant.Anchored = true
-		end
-	end
-
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if humanoid then
 		humanoid.WalkSpeed = 0
 		humanoid.JumpPower = 0
 		humanoid.JumpHeight = 0
+		humanoid.AutoRotate = false
 	end
 
-	character.Parent = getEliminatedFolder()
+	-- Ancorar cada braço/perna impede os Motor6D da animação de morte de
+	-- moverem o rig. A raiz basta para o cadáver não deslizar nem cair.
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if root and root:IsA("BasePart") then
+		root.Anchored = true
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+	end
+
+	-- O cadáver continua visível, mas não bloqueia jogadores, ataques,
+	-- raycasts de habilidade nem a câmera.
+	for _, descendant in character:GetDescendants() do
+		if descendant:IsA("BasePart") then
+			descendant.CanCollide = false
+			descendant.CanTouch = false
+			descendant.CanQuery = false
+		end
+	end
 end
 
 return Elimination

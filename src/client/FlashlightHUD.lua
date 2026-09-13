@@ -15,9 +15,11 @@ function HUD.new(parent: PlayerGui)
 	gui.Name, gui.ResetOnSpawn, gui.DisplayOrder, gui.Enabled = "FlashlightHUD", false, 9, false
 	gui.IgnoreGuiInset = true
 	gui.Parent = parent
-	-- Above the hotbar: avoids the stamina widget, weapon HUD and touch jump.
+	-- O painel antigo da esquerda foi absorvido pelo novo HUD circular. A mira
+	-- central continua sendo controlada por este modulo.
 	local panel = frame(gui, UDim2.new(0, 14, 1, -96), UDim2.fromOffset(160, 46), Color3.fromRGB(17, 20, 23))
 	panel.AnchorPoint, panel.BackgroundTransparency = Vector2.new(0, 1), 0.2
+	panel.Visible = false
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius, corner.Parent = UDim.new(0, 5), panel
 	local body = frame(panel, UDim2.fromOffset(12, 15), UDim2.fromOffset(25, 14), Color3.fromRGB(216, 225, 219))

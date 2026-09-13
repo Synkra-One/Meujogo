@@ -306,14 +306,6 @@ function IslandLayout.Height(x: number, z: number): number
 		end
 	end
 
-	local radio = sites.Radio
-	if radio then
-		local d = math.sqrt((x - radio.x) ^ 2 + (z - radio.z) ^ 2)
-		if d < radio.r * 0.85 then
-			return Enum.Material.Ground -- pátio terraplenado da estação
-		end
-	end
-
 	local td = distToTrail(x, z)
 	if td < CONFIG.Trail.HalfWidth then
 		h -= CONFIG.Trail.Depth * smoothstep((CONFIG.Trail.HalfWidth - td) / CONFIG.Trail.HalfWidth)
@@ -349,6 +341,14 @@ function IslandLayout.Material(x: number, z: number): Enum.Material
 			return Enum.Material.Sand
 		elseif d < CONFIG.Lake.Radius + CONFIG.Lake.ShoreBand + 6 then
 			return Enum.Material.Ground
+		end
+	end
+
+	local radio = sites.Radio
+	if radio then
+		local d = math.sqrt((x - radio.x) ^ 2 + (z - radio.z) ^ 2)
+		if d < radio.r * 0.85 then
+			return Enum.Material.Ground -- pátio terraplenado da estação
 		end
 	end
 

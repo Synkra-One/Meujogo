@@ -8,7 +8,7 @@
 	-> se o jogador for Espiao, não estiver amarrado, o alvo estiver a até
 	8 studs, não estiver já eliminado e o cooldown
 	(GameConfig.Spy.LethalCooldown = 180s) já tiver passado, o servidor:
-	    1) elimina o alvo (Elimination.Eliminate -- placeholder compartilhado),
+	    1) executa o alvo pelo DamageSystem (vida, animação e eliminação),
 	    2) dispara PlayerKilled(vítima, autor, causa) para todos os clientes,
 	    3) reinicia o cooldown do Espião.
 
@@ -26,6 +26,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local Elimination = require(script.Parent.Elimination)
+local DamageSystem = require(script.Parent.DamageSystem)
 local SoundManager = require(script.Parent.SoundManager)
 local PowerStatus = require(script.Parent.SurvivorPowerStatus)
 
@@ -103,9 +104,10 @@ local function onLethalAbilityUsed(caster: Player, target: unknown)
 		Remotes.CooldownUpdate:FireClient(caster, "HabilidadeLetal", os.time() + GameConfig.Spy.LethalCooldown)
 		return
 	end
-	Elimination.Eliminate(targetPlayer)
-
-	Remotes.PlayerKilled:FireAllClients(targetPlayer.UserId, caster.UserId, GameConfig.Roles.Spy)
+	local executed = DamageSystem.Execute(targetPlayer, { Source = caster, Cause = GameConfig.Roles.Spy })
+	if not executed then
+		return
+	end
 	Remotes.CooldownUpdate:FireClient(caster, "HabilidadeLetal", os.time() + GameConfig.Spy.LethalCooldown)
 
 	if targetRoot and targetRoot:IsA("BasePart") then

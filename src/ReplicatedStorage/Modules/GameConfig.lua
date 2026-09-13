@@ -53,6 +53,13 @@ GameConfig.Movement = {
 GameConfig.Health = {
 	Max = 100, -- MaxHealth aplicado ao Humanoid no spawn
 
+	-- Reações de combate são tocadas pelo SERVIDOR. Assim vítima, Monstro e
+	-- espectadores veem a mesma animação, sem depender do HealthChanged local.
+	HurtIdleAnimationId = "rbxassetid://96462680767143",
+	HurtWalkAnimationId = "rbxassetid://123093322235597",
+	DeathAnimationId = "rbxassetid://136002279138060",
+	HurtAnimationDuration = 0.55,
+
 	-- Regeneração passiva controlada pelo DamageSystem (a do Roblox é
 	-- desligada -- ver DisableRobloxDefaultRegen). 0 = sem regeneração.
 	RegenPerSecond = 2,
@@ -816,15 +823,16 @@ GameConfig.Testing = {
 	-- deixando começar com 1 jogador só. O máximo continua valendo.
 	SoloStart = true,
 
-	-- Força TODO MUNDO nesse papel, em vez do sorteio normal
-	-- (RoleAssignment.lua). nil = sorteio normal.
+	-- Força o papel apenas em teste solo. Em partida com 2+ jogadores,
+	-- RoleAssignment sempre sorteia exatamente 1 Monstro.
+	-- nil = sorteio normal.
 	--
 	-- Em teste solo, nil sorteia entre Sobrevivente/Monstro/Espião para
 	-- facilitar testar todos os fluxos sem abrir múltiplos clients.
 	-- Troque pra "Monstro" ou "Espiao" se quiser forçar um papel específico.
 	-- Atualmente fica nil para você testar o sorteio real, inclusive podendo
 	-- cair como Jason/Monstro.
-	ForceRole = GameConfig.Roles.Survivor,
+	ForceRole = nil,
 
 	-- Painel dev dentro da sala de espera para escolher o papel da próxima
 	-- partida sem depender da sorte. O servidor valida por UserId.

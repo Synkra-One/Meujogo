@@ -74,8 +74,6 @@ local currentAnimTrack = nil
 local currentAnimKeyframeHandler = nil
 local currentAnimSpeed = 1.0
 local isAirborne = false
-local hurtUntil = 0
-local lastHealth = Humanoid.Health
 
 local TRANSITIONS = {
 	idle_to_walk = 0.25,
@@ -106,6 +104,9 @@ local animNames = {
 	run = {
 		{ id = "rbxassetid://109418716176884", weight = 10 }, -- [Meujogo] corrida Shift do usuario
 	},
+	swim = {
+		{ id = "rbxassetid://131167550146543", weight = 10 }, -- [Meujogo] nado ao mover dentro da agua
+	},
 	climb = {
 		{ id = "rbxassetid://180436334", weight = 10 },
 	},
@@ -117,6 +118,9 @@ local animNames = {
 	},
 	jump = {
 		{ id = "rbxassetid://125750702", weight = 10 },
+	},
+	death = {
+		{ id = "rbxassetid://136002279138060", weight = 10 }, -- [Meujogo] morte do player
 	},
 }
 
@@ -191,10 +195,6 @@ end
 local function playAnimation(animName, forcedTransition)
 	local hrp = Figure:FindFirstChild("HumanoidRootPart")
 
-	if os.clock() &lt; hurtUntil and (animName == "idle" or animName == "walk" or animName == "run") then
-		return
-	end
-
 	-- While a landing-effects script is playing its own animation, don't let
 	-- ANYTHING from this script play over it (fall/jump included) — not just
 	-- idle/walk. Without this, a physics micro-bounce right after touching
@@ -235,7 +235,7 @@ local function playAnimation(animName, forcedTransition)
 	currentAnimTrack.Priority = Enum.AnimationPriority.Movement
 	-- [Meujogo] forca loop nas continuas: se a anim do usuario foi publicada
 	-- como nao-loopavel, sem isso ela toca uma vez e congela.
-	if animName == "idle" or animName == "walk" or animName == "run" then
+	if animName == "idle" or animName == "walk" or animName == "run" or animName == "swim" then
 		currentAnimTrack.Looped = true
 	end
 	currentAnimTrack:Play(transition)
@@ -270,58 +270,6 @@ local function horizontalSpeed()
 	return Vector3.new(v.X, 0, v.Z).Magnitude
 end
 
-local function resumeMovementAnimation()
-	if Humanoid.Health &lt;= 0 or Figure.Parent == nil then return end
-	if isAirborne then return end
-	onRunning(horizontalSpeed())
-end
-
-local function playHurtAnimation()
-	local hrp = Figure:FindFirstChild("HumanoidRootPart")
-	if hrp and (hrp:GetAttribute("IsLanding") or hrp:GetAttribute("IsCrouching")) then
-		return
-	end
-
-	local speed = horizontalSpeed()
-	local animName = if speed &gt; 0.5 then "hurt_walk" else "hurt_idle"
-	local anim = pickAnim(animName)
-	if not anim then return end
-
-	hurtUntil = os.clock() + 0.55
-
-	if currentAnimTrack then
-		currentAnimTrack:Stop(0.08)
-		currentAnimTrack:Destroy()
-	end
-	if currentAnimKeyframeHandler then
-		currentAnimKeyframeHandler:Disconnect()
-		currentAnimKeyframeHandler = nil
-	end
-
-	currentAnimSpeed = 1.0
-	local _animator = Humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", Humanoid)
-	currentAnimTrack = _animator:LoadAnimation(anim)
-	currentAnimTrack.Priority = Enum.AnimationPriority.Action
-	currentAnimTrack.Looped = false
-	currentAnimTrack:Play(0.08)
-	currentAnim = animName
-	currentAnimInstance = anim
-
-	currentAnimKeyframeHandler = currentAnimTrack.Stopped:Connect(function()
-		if os.clock() &lt; hurtUntil then
-			task.delay(hurtUntil - os.clock(), resumeMovementAnimation)
-			return
-		end
-		resumeMovementAnimation()
-	end)
-
-	task.delay(0.6, function()
-		if currentAnim == animName then
-			resumeMovementAnimation()
-		end
-	end)
-end
-
 local function isMovingBackwards()
 	local hrp = Figure:FindFirstChild("HumanoidRootPart")
 	if not hrp then return false end
@@ -338,6 +286,10 @@ function onRunning(speed)
 	local hrp = Figure:FindFirstChild("HumanoidRootPart")
 	if hrp and hrp:GetAttribute("IsCrouching") then return end
 	if hrp and hrp:GetAttribute("IsLanding") then return end
+	if Humanoid:GetState() == Enum.HumanoidStateType.Swimming then
+		onSwimming(speed)
+		return
+	end
 	if isAirborne then return end
 
 	if speed &gt; 0.5 then
@@ -368,15 +320,25 @@ function onRunning(speed)
 	end
 end
 
-function onDied()             pose = "Dead"               end
+function onDied()
+	-- DamageSystem toca a morte no servidor para todos verem a mesma pose.
+	-- Aqui só congelamos a máquina local de locomoção para ela não sobrescrever.
+	pose = "Dead"
+end
 function onGettingUp()        pose = "GettingUp"          end
 function onFallingDown()      pose = "FallingDown"        end
 function onSeated()           pose = "Seated"             end
 function onPlatformStanding() pose = "PlatformStanding"   end
 
 function onSwimming(speed)
-	-- [Meujogo] flutuar com pose de idle > animacao de andar dentro da agua
-	pose = "Standing"
+	if speed &gt; 0.5 then
+		playAnimation("swim", 0.2)
+		setAnimationSpeed(math.max(0.7, speed / 14.5))
+		pose = "Swimming"
+	else
+		playAnimation("idle", 0.25)
+		pose = "Standing"
+	end
 end
 
 function onClimbing(speed)
@@ -408,8 +370,9 @@ end
 function move()
 	if pose == "Seated" then
 		playAnimation("sit", 0.5)
-	elseif pose == "Dead"
-		or pose == "GettingUp"
+	elseif pose == "Dead" then
+		return
+	elseif pose == "GettingUp"
 		or pose == "FallingDown"
 		or pose == "PlatformStanding" then
 		stopAllAnimations()
@@ -445,15 +408,13 @@ Humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
 	end
 end)
 
-Humanoid.HealthChanged:Connect(function(health)
-	if health &lt; lastHealth and health &gt; 0 then
-		playHurtAnimation()
-	end
-	lastHealth = health
-end)
-
 Humanoid.StateChanged:Connect(function(_, newState)
-	if newState == Enum.HumanoidStateType.Landed
+	if newState == Enum.HumanoidStateType.Swimming then
+		isAirborne = false
+		task.defer(function()
+			onSwimming(horizontalSpeed())
+		end)
+	elseif newState == Enum.HumanoidStateType.Landed
 		or newState == Enum.HumanoidStateType.Running
 		or newState == Enum.HumanoidStateType.RunningNoPhysics then
 		isAirborne = false

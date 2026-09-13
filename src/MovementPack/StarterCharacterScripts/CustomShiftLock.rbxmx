@@ -65,6 +65,9 @@ local Config = {
 	CAMERA_TRANSITION_IN_SPEED  = 10,                         --// How quickly locked camera moves to offset position
 	CAMERA_TRANSITION_OUT_SPEED = 14,                         --// How quickly locked camera moves back from offset position
 	LOCKED_CAMERA_OFFSET        = Vector3.new(2.25, 0.35, 0), --// [Meujogo] ombro mais marcado (era 1.75, 0.25, 0)
+	CAMERA_COLLISION_PADDING    = 0.12,                       --// Folga entre o volume da camera e paredes
+	CAMERA_COLLISION_MARGIN     = 0.10,                       --// Protege tambem as bordas do near plane
+	CAMERA_COLLISION_RELEASE    = 12,                         --// Retorno suave do ombro ao sair de uma parede
 	LOCKED_MOUSE_ICON           =                             --// Locked mouse icon
 		"rbxasset://textures/MouseLockedCursor.png",
 	SHIFT_LOCK_KEYBINDS         =                             --// Shift lock keybinds
@@ -80,6 +83,11 @@ function SmoothShiftLock.new()
 	self._shiftlockMaid = Maid.new();
 	self._cameraOffsetSpring = Spring.new(Vector3.new(0, 0, 0));
 	self._cameraOffsetSpring.Damper = Config.TRANSITION_SPRING_DAMPER;
+	self._cameraCollisionFraction = 1;
+	self._cameraRaycastParams = RaycastParams.new();
+	self._cameraRaycastParams.FilterType = Enum.RaycastFilterType.Exclude;
+	self._cameraRaycastParams.IgnoreWater = true;
+	self._cameraRaycastParams.RespectCanCollide = true;
 
 	--// Variables
 	self.Enabled = false;
@@ -125,7 +133,9 @@ function SmoothShiftLock:Enable()
 	end, Config.MOBILE_SUPPORT, Enum.ContextActionPriority.Medium.Value, unpack(Config.SHIFT_LOCK_KEYBINDS));
 
 	--// Camera Offset
-	self._runtimeMaid:GiveTask(RunService.RenderStepped:Connect(function()
+	self._runtimeMaid:GiveTask(RunService.RenderStepped:Connect(function(Delta: number)
+		Camera = Workspace.CurrentCamera or Camera;
+		if not Camera then return; end;
 		if self.Head.LocalTransparencyModifier &gt; 0.6 then return; end;
 
 		local CameraCFrame = Camera.CoordinateFrame;
@@ -133,7 +143,14 @@ function SmoothShiftLock:Enable()
 
 		--// Camera offset
 		if Distance &gt; 1 then
-			Camera.CFrame = (Camera.CFrame * CFrame.new(self._cameraOffsetSpring.Position)); 
+			--// O PlayerModule ja resolveu a colisao da camera central neste frame.
+			--// O antigo deslocamento de ombro era aplicado depois disso e podia atravessar
+			--// uma parede lateral. Varremos o volume real do near plane antes de mover:
+			--// a camera entra imediatamente quando bloqueada e volta suavemente ao ombro.
+			local BaseCameraCFrame = Camera.CFrame;
+			local WantedOffset = self._cameraOffsetSpring.Position;
+			local SafeOffset = self:_getCollisionSafeOffset(BaseCameraCFrame, WantedOffset, Delta);
+			Camera.CFrame = (BaseCameraCFrame * CFrame.new(SafeOffset));
 			local wantLocked = self:_wantsLockedCursor();
 			if wantLocked and UserInputService.MouseBehavior ~= Enum.MouseBehavior.LockCenter then
 				self:_updateMouseState();
@@ -158,6 +175,69 @@ function SmoothShiftLock:_refreshCharacterVariables()
 	self.RootPart = self.Character:WaitForChild("HumanoidRootPart");
 	self.Humanoid = self.Character:WaitForChild("Humanoid");
 	self.Head = self.Character:WaitForChild("Head");
+	self._cameraRaycastParams.FilterDescendantsInstances = {self.Character};
+end;
+
+--// Impede que o offset de ombro seja aplicado atraves de paredes.
+--// Um raycast protege o ponto da camera e um blockcast protege todo o retangulo
+--// que realmente sera renderizado no near plane (inclusive quinas da tela).
+function SmoothShiftLock:_getCollisionSafeOffset(BaseCFrame: CFrame, WantedOffset: Vector3, Delta: number): Vector3
+	local WantedDistance = WantedOffset.Magnitude;
+	if WantedDistance &lt; 0.001 then
+		self._cameraCollisionFraction = 1;
+		return WantedOffset;
+	end;
+
+	self._cameraRaycastParams.FilterDescendantsInstances = {self.Character};
+	local WorldDirection = BaseCFrame:VectorToWorldSpace(WantedOffset);
+	local SafeDistance = WantedDistance;
+
+	local function considerHit(Result: RaycastResult?)
+		if Result then
+			SafeDistance = math.min(
+				SafeDistance,
+				math.max(0, Result.Distance - Config.CAMERA_COLLISION_PADDING)
+			);
+		end;
+	end;
+
+	--// Protege o ponto da camera contra paredes muito finas.
+	considerHit(Workspace:Raycast(BaseCFrame.Position, WorldDirection, self._cameraRaycastParams));
+
+	--// Protege o near plane inteiro: somente checar o centro ainda deixaria as
+	--// bordas da tela atravessarem paredes ao girar junto de uma quina.
+	local Viewport = Camera.ViewportSize;
+	if Viewport.Y &gt; 0 then
+		local NearDistance = math.max(math.abs(Camera.NearPlaneZ), 0.1);
+		local UnpaddedHalfHeight = math.tan(math.rad(Camera.FieldOfView * 0.5)) * NearDistance;
+		local HalfHeight = UnpaddedHalfHeight + Config.CAMERA_COLLISION_MARGIN;
+		local HalfWidth = UnpaddedHalfHeight * (Viewport.X / Viewport.Y)
+			+ Config.CAMERA_COLLISION_MARGIN;
+		local NearPlaneCFrame = BaseCFrame * CFrame.new(0, 0, -NearDistance);
+		local NearPlaneSize = Vector3.new(
+			HalfWidth * 2,
+			HalfHeight * 2,
+			Config.CAMERA_COLLISION_MARGIN * 2
+		);
+		considerHit(Workspace:Blockcast(
+			NearPlaneCFrame,
+			NearPlaneSize,
+			WorldDirection,
+			self._cameraRaycastParams
+		));
+	end;
+
+	local SafeFraction = math.clamp(SafeDistance / WantedDistance, 0, 1);
+	if SafeFraction &lt; self._cameraCollisionFraction then
+		--// Fechar imediatamente: nunca existe um frame visivel do outro lado.
+		self._cameraCollisionFraction = SafeFraction;
+	else
+		--// Abrir suavemente evita o "tranco" ao desencostar da parede.
+		local ReleaseAlpha = 1 - math.exp(-Config.CAMERA_COLLISION_RELEASE * math.min(Delta, 0.1));
+		self._cameraCollisionFraction += (SafeFraction - self._cameraCollisionFraction) * ReleaseAlpha;
+	end;
+
+	return WantedOffset * self._cameraCollisionFraction;
 end;
 
 --// Internal function for ContextActionService

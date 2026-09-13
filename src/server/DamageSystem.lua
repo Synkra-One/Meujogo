@@ -59,6 +59,94 @@ export type DamageInfo = {
 -- character -> os.clock() do último dano tomado (gate da regeneração).
 local lastDamageAt: { [Model]: number } = {}
 
+-- Uma única reação autoritativa por character. Animações iniciadas no
+-- servidor replicam para vítima e atacante; isso evita cada tela decidir um
+-- estado diferente a partir do próprio HealthChanged.
+local reactionTracks: { [Model]: AnimationTrack } = {}
+local hurtHealthConnections: { [Model]: RBXScriptConnection } = {}
+
+local function stopReaction(model: Model, fadeTime: number)
+	local previous = reactionTracks[model]
+	local healthConnection = hurtHealthConnections[model]
+	if healthConnection then
+		hurtHealthConnections[model] = nil
+		healthConnection:Disconnect()
+	end
+	if not previous then
+		return
+	end
+	reactionTracks[model] = nil
+	pcall(function()
+		previous:Stop(fadeTime)
+		previous:Destroy()
+	end)
+end
+
+local function playReaction(model: Model, humanoid: Humanoid, animationId: string, priority: Enum.AnimationPriority, looped: boolean?)
+	if animationId == "" or animationId == "rbxassetid://0" then
+		return
+	end
+
+	stopReaction(model, 0.05)
+
+	local animator = humanoid:FindFirstChildOfClass("Animator")
+	if not animator then
+		animator = Instance.new("Animator")
+		animator.Parent = humanoid
+	end
+
+	local animation = Instance.new("Animation")
+	animation.AnimationId = animationId
+	local ok, loaded = pcall(function()
+		return animator:LoadAnimation(animation)
+	end)
+	animation:Destroy()
+	if not ok or not loaded then
+		warn("[DamageSystem] Não foi possível carregar a animação de combate " .. animationId)
+		return
+	end
+
+	local track = loaded :: AnimationTrack
+	track.Priority = priority
+	track.Looped = looped == true
+	reactionTracks[model] = track
+	track.Stopped:Once(function()
+		if reactionTracks[model] == track then
+			reactionTracks[model] = nil
+		end
+		track:Destroy()
+	end)
+	track:Play(0.06)
+end
+
+local function playHurtReaction(model: Model, humanoid: Humanoid)
+	local root = model:FindFirstChild("HumanoidRootPart")
+	local speed = if root and root:IsA("BasePart")
+		then (root.AssemblyLinearVelocity * Vector3.new(1, 0, 1)).Magnitude
+		else 0
+	local animationId = if speed > 0.5
+		then GameConfig.Health.HurtWalkAnimationId
+		else GameConfig.Health.HurtIdleAnimationId
+	playReaction(model, humanoid, animationId, Enum.AnimationPriority.Action2, true)
+	if reactionTracks[model] then
+		model:SetAttribute("CombatAnimationState", "Hurt")
+		hurtHealthConnections[model] = humanoid.HealthChanged:Connect(function(newHealth: number)
+			if newHealth <= 0 then
+				return
+			end
+			if newHealth >= humanoid.MaxHealth - 0.01 then
+				model:SetAttribute("CombatAnimationState", nil)
+				stopReaction(model, 0.08)
+			end
+		end)
+	end
+end
+
+local function playDeathReaction(model: Model, humanoid: Humanoid)
+	model:SetAttribute("CombatAnimationState", "Death")
+	playReaction(model, humanoid, GameConfig.Health.DeathAnimationId, Enum.AnimationPriority.Action4)
+end
+
 --------------------------------------------------------------------------------
 -- Resolução de alvo
 --------------------------------------------------------------------------------
@@ -116,9 +204,12 @@ end
 -- Morte
 --------------------------------------------------------------------------------
 
-local function handleDeath(model: Model, info: DamageInfo?)
+local function handleDeath(model: Model, humanoid: Humanoid, info: DamageInfo?)
 	if model:FindFirstChild("Dead") then
 		return
+	end
+	if model:GetAttribute("CombatAnimationState") ~= "Death" then
+		playDeathReaction(model, humanoid)
 	end
 
 	local dead = Instance.new("BoolValue")
@@ -200,6 +291,12 @@ function DamageSystem.Apply(target: unknown, amount: number, info: DamageInfo?):
 	end
 
 	local before = humanoid.Health
+	local expectedLethal = amount >= before
+	if expectedLethal then
+		-- Começa antes de zerar a vida para não perder o primeiro frame quando
+		-- o Humanoid entra no estado Dead.
+		playDeathReaction(model, humanoid)
+	end
 	humanoid:TakeDamage(amount)
 	local applied = before - humanoid.Health
 	if applied <= 0 then
@@ -209,9 +306,16 @@ function DamageSystem.Apply(target: unknown, amount: number, info: DamageInfo?):
 	lastDamageAt[model] = os.clock()
 
 	if humanoid.Health <= 0 then
-		handleDeath(model, info)
+		handleDeath(model, humanoid, info)
 		return applied, true
 	end
+
+	if expectedLethal then
+		-- Proteção para qualquer sistema externo que tenha impedido o dano
+		-- letal depois da nossa previsão.
+		model:SetAttribute("CombatAnimationState", nil)
+	end
+	playHurtReaction(model, humanoid)
 
 	return applied, false
 end
@@ -227,8 +331,9 @@ function DamageSystem.Execute(target: unknown, info: DamageInfo?): boolean
 		return false
 	end
 
+	playDeathReaction(model, humanoid)
 	humanoid.Health = 0
-	handleDeath(model, info)
+	handleDeath(model, humanoid, info)
 	return true
 end
 
@@ -275,6 +380,9 @@ end
 local function onCharacterAdded(character: Model)
 	local humanoid = character:FindFirstChildOfClass("Humanoid") or character:WaitForChild("Humanoid", 10)
 	if humanoid and humanoid:IsA("Humanoid") then
+		-- Sem isso o Roblox quebra os joints no mesmo instante da morte e
+		-- nenhuma animação de queda consegue mover o corpo R6.
+		humanoid.BreakJointsOnDeath = false
 		-- COMPOSTURA -> vida máxima. Sem personagem escolhido, StatScaling
 		-- devolve o meio da faixa; GameConfig.Health.Max continua sendo o
 		-- teto de referência do jogo (a faixa de Compostura é centrada nele).
@@ -287,6 +395,7 @@ local function onCharacterAdded(character: Model)
 
 	character.Destroying:Connect(function()
 		lastDamageAt[character] = nil
+		stopReaction(character, 0)
 	end)
 end
 

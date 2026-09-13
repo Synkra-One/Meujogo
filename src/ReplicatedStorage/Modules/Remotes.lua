@@ -105,11 +105,12 @@ Remotes.SabotageAction = getRemote("SabotageAction")
 -- Client -> Server (FireServer):
 --   target: Player          -- jogador-alvo
 -- Server (LethalAbility.lua) valida Role == Espiao, cooldown e alcance
---   (8 studs); se tudo ok, "elimina" o alvo (placeholder: teleporta o
---   character para workspace.Eliminados e trava os controles) e dispara
---   PlayerKilled para todos os clientes -- este remote não é retransmitido.
+--   (8 studs); se tudo ok, executa o alvo pelo DamageSystem, preserva o
+--   cadáver durante a apresentação e dispara PlayerKilled para todos os
+--   clientes -- este remote não é retransmitido.
 -- Se a validação falhar (não é Espiao, fora de alcance, cooldown ativo,
---   alvo já eliminado), a ação é rejeitada em silêncio.
+--   alvo já eliminado), a ação é rejeitada em silêncio. A morte passa pelo
+--   DamageSystem, portanto também dispara Humanoid.Died, animação e tela.
 --------------------------------------------------------------------------------
 Remotes.LethalAbilityUsed = getRemote("LethalAbilityUsed")
 

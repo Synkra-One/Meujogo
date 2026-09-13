@@ -25,7 +25,8 @@ local Remotes = require(ReplicatedStorage.Modules.Remotes)
 
 local DiscoveredItemsStore = {}
 
-DiscoveredItemsStore.Changed = Instance.new("BindableEvent") -- (entry) por item novo
+local changedEvent = Instance.new("BindableEvent")
+DiscoveredItemsStore.Changed = changedEvent.Event -- (entry) por item novo
 
 local byKey: { [string]: { [string]: any } } = {}
 local ordered: { { [string]: any } } = {}
@@ -41,7 +42,7 @@ local function onDiscovered(entry: unknown)
 	end
 	byKey[key] = entry :: any
 	table.insert(ordered, entry :: any)
-	DiscoveredItemsStore.Changed:Fire(entry)
+	changedEvent:Fire(entry)
 end
 
 --[[

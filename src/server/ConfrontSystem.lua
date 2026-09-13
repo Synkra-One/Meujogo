@@ -37,8 +37,8 @@
 
 	PARTE 3 -- EXECUTAR (Tool "ArmaRara" = Lança Ancestral, ver ItemRegistry)
 	  Cliente dispara ConfrontKill:FireServer(target). Com a arma equipada e
-	  o alvo vivo dentro de KillRange, o alvo é eliminado
-	  (Elimination.Eliminate) e PlayerKilled é disparado com cause
+	  o alvo vivo dentro de KillRange, o alvo é executado pelo DamageSystem
+	  e PlayerKilled é disparado com cause
 	  "Confronto". Se o alvo NÃO era o Espião, dispara também o hook
 	  ConfrontSystem.PunicaoInocente -- por enquanto ninguém escuta.
 
@@ -73,6 +73,7 @@ local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local AssetRegistry = require(ReplicatedStorage.Modules.AssetRegistry)
 local SafeAttribute = require(ReplicatedStorage.Modules.SafeAttribute)
 local Elimination = require(script.Parent.Elimination)
+local DamageSystem = require(script.Parent.DamageSystem)
 local SoundManager = require(script.Parent.SoundManager)
 local RaftObjective = require(script.Parent.RaftObjective)
 local MonsterLightWeakness = require(script.Parent.MonsterLightWeakness)
@@ -371,8 +372,9 @@ local function onConfrontKill(killer: Player, target: unknown)
 	local targetRoot = targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart")
 
 	if targetPlayer.Character and PowerStatus.BlockAttack(targetPlayer.Character) then return end
-	Elimination.Eliminate(targetPlayer)
-	Remotes.PlayerKilled:FireAllClients(targetPlayer.UserId, killer.UserId, "Confronto")
+	if not DamageSystem.Execute(targetPlayer, { Source = killer, Cause = "Confronto" }) then
+		return
+	end
 	print(string.format("[ConfrontSystem] %s executou %s.", killer.Name, targetPlayer.Name))
 
 	if targetRoot and targetRoot:IsA("BasePart") then
