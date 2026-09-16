@@ -2,7 +2,6 @@
 <roblox version="4"><Item class="LocalScript" referent="172">
           <Properties>
             <string name="Name">DeathScreenUI</string>
-            <BinaryString name="AttributesSerialize" />
             <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
             <bool name="Disabled">false</bool>
             <ContentId name="LinkedSource">
@@ -572,13 +571,11 @@ deathEvent.OnClientEvent:Connect(playDeathSequence)
 whiteFadeInEvent.OnClientEvent:Connect(fadeToWhite)
 whiteFadeOutEvent.OnClientEvent:Connect(fadeFromWhite)</string>
             <int64 name="SourceAssetId">-1</int64>
-            <BinaryString name="Tags" />
           </Properties>
           <Item class="Sound" referent="173">
             <Properties>
               <string name="Name">DeathSound</string>
               <bool name="AcousticSimulationEnabled">true</bool>
-              <BinaryString name="AttributesSerialize" />
               <Content name="AudioContent">
                 <uri>rbxassetid://140695149439373</uri>
               </Content>
@@ -596,7 +593,6 @@ whiteFadeOutEvent.OnClientEvent:Connect(fadeFromWhite)</string>
               <bool name="DefinesCapabilities">false</bool>
               <Ref name="SoundGroup">null</Ref>
               <int64 name="SourceAssetId">140695149439373</int64>
-              <BinaryString name="Tags" />
               <double name="TimePosition">0</double>
               <float name="Volume">0.5</float>
             </Properties>
@@ -604,7 +600,6 @@ whiteFadeOutEvent.OnClientEvent:Connect(fadeFromWhite)</string>
           <Item class="ScreenGui" referent="174">
             <Properties>
               <string name="Name">FrostVignette</string>
-              <BinaryString name="AttributesSerialize" />
               <bool name="AutoLocalize">true</bool>
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="ClipToDeviceSafeArea">true</bool>
@@ -621,13 +616,11 @@ whiteFadeOutEvent.OnClientEvent:Connect(fadeFromWhite)</string>
               <token name="SelectionBehaviorUp">0</token>
               <bool name="SelectionGroup">false</bool>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
               <token name="ZIndexBehavior">1</token>
             </Properties>
             <Item class="Decal" referent="175">
               <Properties>
                 <string name="Name">Vignette</string>
-                <BinaryString name="AttributesSerialize" />
                 <bool name="AutoLocalize">true</bool>
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <Color3 name="Color3">
@@ -651,7 +644,6 @@ whiteFadeOutEvent.OnClientEvent:Connect(fadeFromWhite)</string>
                 </Content>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">10344339796</int64>
-                <BinaryString name="Tags" />
                 <Content name="TextureContent">
                   <uri>rbxassetid://10344339712</uri>
                 </Content>

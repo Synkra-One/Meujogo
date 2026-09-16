@@ -2,7 +2,6 @@
 <roblox version="4"><Item class="Model" referent="18">
           <Properties>
             <string name="Name">ViewModel</string>
-            <BinaryString name="AttributesSerialize" />
             <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
             <token name="LevelOfDetail">0</token>
             <CoordinateFrame name="ModelMeshCFrame">
@@ -32,7 +31,6 @@
             <float name="ScaleFactor">1</float>
             <SharedString name="SlimHash">rxNJufX5oaagQE3qNtzJSQ==</SharedString>
             <int64 name="SourceAssetId">-1</int64>
-            <BinaryString name="Tags" />
             <OptionalCoordinateFrame name="WorldPivotData">
               <CFrame>
                 <X>-6.785034</X>
@@ -53,7 +51,6 @@
           <Item class="Humanoid" referent="20">
             <Properties>
               <string name="Name">Humanoid</string>
-              <BinaryString name="AttributesSerialize" />
               <bool name="AutoJumpEnabled">true</bool>
               <bool name="AutoRotate">true</bool>
               <bool name="AutomaticScalingEnabled">true</bool>
@@ -83,7 +80,6 @@
               <token name="RigType">0</token>
               <bool name="DefinesCapabilities">false</bool>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
               <bool name="UseJumpPower">true</bool>
               <float name="WalkSpeed">16</float>
             </Properties>
@@ -91,7 +87,6 @@
           <Item class="Pants" referent="21">
             <Properties>
               <string name="Name">Pants</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <Color3 name="Color3">
                 <R>1</R>
@@ -104,14 +99,12 @@
               </ContentId>
               <bool name="DefinesCapabilities">false</bool>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
             </Properties>
           </Item>
           <Item class="Part" referent="22">
             <Properties>
               <string name="Name">Left Leg</string>
               <bool name="Anchored">true</bool>
-              <BinaryString name="AttributesSerialize" />
               <bool name="AudioCanCollide">true</bool>
               <float name="BackParamA">-0.5</float>
               <float name="BackParamB">0.5</float>
@@ -193,7 +186,6 @@
                 <Z>1</Z>
               </Vector3>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
               <float name="TopParamA">-0.5</float>
               <float name="TopParamB">0.5</float>
               <token name="TopSurface">3</token>
@@ -208,7 +200,6 @@
             <Item class="Snap" referent="23">
               <Properties>
                 <string name="Name">Snap</string>
-                <BinaryString name="AttributesSerialize" />
                 <CoordinateFrame name="C0">
                   <X>0</X>
                   <Y>1</Y>
@@ -243,13 +234,11 @@
                 <Ref name="Part1">null</Ref>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="Attachment" referent="24">
               <Properties>
                 <string name="Name">LeftFootAttachment</string>
-                <BinaryString name="AttributesSerialize" />
                 <CoordinateFrame name="CFrame">
                   <X>0</X>
                   <Y>-1</Y>
@@ -267,7 +256,6 @@
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
                 <bool name="Visible">false</bool>
               </Properties>
             </Item>
@@ -276,7 +264,6 @@
             <Properties>
               <string name="Name">HumanoidRootPart</string>
               <bool name="Anchored">true</bool>
-              <BinaryString name="AttributesSerialize" />
               <bool name="AudioCanCollide">true</bool>
               <float name="BackParamA">-0.5</float>
               <float name="BackParamB">0.5</float>
@@ -358,7 +345,6 @@
                 <Z>1</Z>
               </Vector3>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
               <float name="TopParamA">-0.5</float>
               <float name="TopParamB">0.5</float>
               <token name="TopSurface">0</token>
@@ -373,7 +359,6 @@
             <Item class="Motor6D" referent="25">
               <Properties>
                 <string name="Name">Right Leg</string>
-                <BinaryString name="AttributesSerialize" />
                 <CoordinateFrame name="C0">
                   <X>0.5</X>
                   <Y>-2</Y>
@@ -410,13 +395,11 @@
                 <Ref name="Part1">26</Ref>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="Motor6D" referent="27">
               <Properties>
                 <string name="Name">Left Leg</string>
-                <BinaryString name="AttributesSerialize" />
                 <CoordinateFrame name="C0">
                   <X>-0.5</X>
                   <Y>-2</Y>
@@ -453,7 +436,6 @@
                 <Ref name="Part1">22</Ref>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
           </Item>
@@ -461,7 +443,6 @@
             <Properties>
               <string name="Name">Right Leg</string>
               <bool name="Anchored">true</bool>
-              <BinaryString name="AttributesSerialize" />
               <bool name="AudioCanCollide">true</bool>
               <float name="BackParamA">-0.5</float>
               <float name="BackParamB">0.5</float>
@@ -543,7 +524,6 @@
                 <Z>1</Z>
               </Vector3>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
               <float name="TopParamA">-0.5</float>
               <float name="TopParamB">0.5</float>
               <token name="TopSurface">3</token>
@@ -558,7 +538,6 @@
             <Item class="Snap" referent="28">
               <Properties>
                 <string name="Name">Snap</string>
-                <BinaryString name="AttributesSerialize" />
                 <CoordinateFrame name="C0">
                   <X>0</X>
                   <Y>1</Y>
@@ -593,13 +572,11 @@
                 <Ref name="Part1">null</Ref>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="Attachment" referent="29">
               <Properties>
                 <string name="Name">RightFootAttachment</string>
-                <BinaryString name="AttributesSerialize" />
                 <CoordinateFrame name="CFrame">
                   <X>0</X>
                   <Y>-1</Y>
@@ -617,7 +594,6 @@
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
                 <bool name="Visible">false</bool>
               </Properties>
             </Item>

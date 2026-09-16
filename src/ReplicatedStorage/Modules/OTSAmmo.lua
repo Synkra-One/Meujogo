@@ -1,6 +1,6 @@
 --!strict
 --[[
-	Ammo (compartilhado client/server)
+	OTSAmmo (compartilhado client/server)
 	Só LEITURA e as regrinhas de nomenclatura da munição. Quem ESCREVE é o
 	servidor (AmmoSystem.lua) -- este módulo existe pra client e server
 	concordarem em "qual munição essa arma usa" e "onde a reserva está
@@ -8,12 +8,12 @@
 
 	DOIS ESTOQUES, não confunda:
 	  PENTE   -> Tool/Settings/Config/Ammo (NumberValue). Gasta 1 por tiro
-	             (FirearmServer). É o número da esquerda na HUD.
+	             (OTSFirearmService). É o número da esquerda na HUD.
 	  RESERVA -> Attribute "Municao_<Tipo>" no Player (ex: "Municao_Pistola").
 	             Recarregar move RESERVA -> PENTE. É o número da direita.
 
 	A reserva mora num Attribute do Player de propósito: Attributes replicam
-	sozinhos pra todos os clientes, então a HUD (client/PistolController) lê direto,
+	sozinhos pra todos os clientes, então a HUD (client/OTSController) lê direto,
 	sem precisar de RemoteEvent nenhum pra ficar em sincronia.
 
 	Números (tipos por arma, teto, quanto cada caixa dá): GameConfig.Firearms.

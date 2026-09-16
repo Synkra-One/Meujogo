@@ -11,15 +11,19 @@ local Remotes = require(Modules.Remotes)
 local Visuals = require(script.Parent.FlashlightVisuals)
 local HUD = require(script.Parent.FlashlightHUD)
 local ExposureFX = require(script.Parent.FlashlightExposureFX)
+local Pose = require(script.Parent.FlashlightPose)
 
 local player = Players.LocalPlayer
 local hud = HUD.new(player:WaitForChild("PlayerGui") :: PlayerGui)
 local fx = ExposureFX.new(player)
+local pose: Pose.Controller = Pose.new()
+local remotePoses: { [Tool]: Pose.Controller } = {}
 local equipped: Tool? = nil
 local predicted = false
 local pendingAt: number? = nil
 local toggleSequence = 0
 local lastToggle, lastAim, lastHUD = -math.huge, -math.huge, 0
+local lastBlockedReason, lastBlockedWarn = "", -math.huge
 local lastDirection: Vector3? = nil
 local aimDirection = Vector3.new(0, 0, -1)
 local visibleTools: { [Tool]: Player } = {}
@@ -42,26 +46,47 @@ local function battery(): number
 	return if type(value) == "number" then value else Config.BatteryMax
 end
 
-local function eligible(): boolean
+local function canUseRole(): boolean
+	return player:GetAttribute("Role") == GameConfig.Roles.Survivor or RunService:IsStudio()
+end
+
+local function blockedReason(): string?
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	if not character or not humanoid or humanoid.Health <= 0 or not equipped or equipped.Parent ~= character
-		or player:GetAttribute("Role") ~= GameConfig.Roles.Survivor or player:GetAttribute("Eliminado") == true
-		or player:GetAttribute("InWaitingRoom") == true then return false end
+		or player:GetAttribute("Eliminado") == true then return "sem personagem vivo ou lanterna equipada" end
+	if not canUseRole() then return "papel atual nao pode usar lanterna" end
+	if player:GetAttribute("InWaitingRoom") == true and not RunService:IsStudio() then return "sala de espera" end
 	for _, flag in { "GrabLocked", "ShadowRushBusy", "TeleportBusy", "PowerStunned", "Amarrado" } do
-		if character:GetAttribute(flag) == true or player:GetAttribute(flag) == true then return false end
+		if character:GetAttribute(flag) == true or player:GetAttribute(flag) == true then return flag end
 	end
-	return true
+	return nil
+end
+
+local function eligible(): boolean
+	return blockedReason() == nil
+end
+
+local function warnBlocked(reason: string?)
+	local now = os.clock()
+	reason = reason or "bloqueio desconhecido"
+	if reason == lastBlockedReason and now - lastBlockedWarn < 1.5 then return end
+	lastBlockedReason, lastBlockedWarn = reason, now
+	warn("[Lanterna] Nao ligou: " .. reason)
 end
 
 local function toggle()
 	local tool = equipped
 	local now = os.clock()
-	if not tool or not eligible() or now - lastToggle < Config.ToggleCooldown then return end
+	if not tool then return end
+	local reason = blockedReason()
+	if reason then warnBlocked(reason); return end
+	if now - lastToggle < Config.ToggleCooldown then return end
 	lastToggle = now
 	if battery() <= 0 then empty:Play(); predicted = false; return end
 	predicted, pendingAt = not predicted, now
 	toggleSequence += 1
+	pose:PlayClick()
 	switch:Play()
 	Remotes.Flashlight:FireServer("Toggle", tool, predicted, aimDirection, toggleSequence)
 end
@@ -73,15 +98,20 @@ local function unequip()
 	table.clear(toolConnections)
 	ContextActionService:UnbindAction(ACTION)
 	if old then Visuals.Remove(old) end
+	pose:SetTool(nil)
 	hud:Update(false, 0, false, 0)
 end
 
 local function equip(tool: Tool)
 	if equipped == tool then return end
 	unequip()
+	local duplicatePose = remotePoses[tool]
+	if duplicatePose then duplicatePose:Destroy(); remotePoses[tool] = nil end
 	equipped = tool
 	predicted = tool:GetAttribute("FlashlightOn") == true
 	lastAim, lastDirection, aimPoint = -math.huge, nil, nil
+	pose:SetTool(tool)
+	print(string.format("[Lanterna] Sistema novo equipado. Use clique, toque, R2, T ou Y. Bateria: %.0f%%.", battery()))
 	local camera = workspace.CurrentCamera
 	if camera then aimDirection = camera.CFrame.LookVector end
 	table.insert(toolConnections, tool.Activated:Connect(toggle))
@@ -114,6 +144,8 @@ local function unwatchCharacter(owner: Player)
 	for tool, toolOwner in visibleTools do
 		if toolOwner == owner then
 			Visuals.Remove(tool)
+			local remotePose = remotePoses[tool]
+			if remotePose then remotePose:Destroy(); remotePoses[tool] = nil end
 			visibleTools[tool] = nil
 		end
 	end
@@ -125,13 +157,21 @@ local function watchCharacter(owner: Player, character: Model)
 	local function added(child: Instance)
 		if not child:IsA("Tool") or child:GetAttribute("Lanterna") ~= true then return end
 		visibleTools[child] = owner
-		if owner == player and player:GetAttribute("Role") == GameConfig.Roles.Survivor then equip(child) end
+		if owner == player and canUseRole() then
+			equip(child)
+		else
+			local remotePose = Pose.new(false)
+			remotePose:SetTool(child)
+			remotePoses[child] = remotePose
+		end
 	end
 	characterConnections[owner] = {
 		character.ChildAdded:Connect(added),
 		character.ChildRemoved:Connect(function(child)
 			if child:IsA("Tool") then
 				Visuals.Remove(child)
+				local remotePose = remotePoses[child]
+				if remotePose then remotePose:Destroy(); remotePoses[child] = nil end
 				visibleTools[child] = nil
 				if child == equipped then unequip() end
 			end
@@ -161,7 +201,7 @@ end)
 for _, owner in Players:GetPlayers() do watchPlayer(owner) end
 
 player:GetAttributeChangedSignal("Role"):Connect(function()
-	if player:GetAttribute("Role") ~= GameConfig.Roles.Survivor then unequip(); return end
+	if not canUseRole() then unequip(); return end
 	local character = player.Character
 	if character then
 		for _, child in character:GetChildren() do
@@ -195,15 +235,23 @@ RunService:BindToRenderStep("SurvivorFlashlight", Enum.RenderPriority.Camera.Val
 			Remotes.Flashlight:FireServer("Aim", equipped, aimDirection)
 		end
 	end
+	-- Apply shoulders before reading the Tool attachments so the held model and
+	-- emitter are evaluated from the same rendered arm pose in this frame.
+	pose:Update(aimDirection, equipped ~= nil and allowed, dt)
 	for tool, owner in visibleTools do
 		local isLocal = owner == player
 		local on = if isLocal then predicted and allowed else tool:GetAttribute("FlashlightOn") == true
 		local direction = if isLocal then aimDirection else tool:GetAttribute("FlashlightDirection")
-		Visuals.Update(tool, if typeof(direction) == "Vector3" then direction else Vector3.new(0, 0, -1), on, dt)
+		local finalDirection = if typeof(direction) == "Vector3" then direction else Vector3.new(0, 0, -1)
+		if not isLocal then
+			local remotePose = remotePoses[tool]
+			if remotePose then remotePose:Update(finalDirection, on, dt) end
+		end
+		Visuals.Update(tool, finalDirection, on, dt)
 	end
 	if now - lastHUD >= 0.05 then
 		lastHUD = now
-		hud:Update(equipped ~= nil and player:GetAttribute("Role") == GameConfig.Roles.Survivor,
+		hud:Update(equipped ~= nil and canUseRole(),
 			battery(), predicted and allowed, now)
 	end
 	fx:Update(dt)
@@ -212,6 +260,11 @@ end)
 script.Destroying:Connect(function()
 	RunService:UnbindFromRenderStep("SurvivorFlashlight")
 	unequip()
+	pose:Destroy()
+	for tool, remotePose in remotePoses do
+		remotePose:Destroy()
+		remotePoses[tool] = nil
+	end
 	for owner in characterConnections do unwatchCharacter(owner) end
 	for _, connections in playerConnections do for _, connection in connections do connection:Disconnect() end end
 	hud.Gui:Destroy()

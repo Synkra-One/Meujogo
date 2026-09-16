@@ -78,8 +78,11 @@ local function setHolding(value: boolean)
 	Remotes.SprintIntent:FireServer(value)
 end
 
-UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
-	if gameProcessed then
+UserInputService.InputBegan:Connect(function(input: InputObject, _gameProcessed: boolean)
+	-- Outros controles locais (câmera/PlayerModule) podem marcar Shift como
+	-- processado antes deste listener. A intenção de correr ainda precisa
+	-- chegar ao servidor; só um campo de texto realmente deve bloqueá-la.
+	if UserInputService:GetFocusedTextBox() then
 		return
 	end
 	if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
@@ -286,10 +289,18 @@ local function hookCharacter(character: Model)
 	end)
 end
 
-if LocalPlayer.Character then
-	task.defer(hookCharacter, LocalPlayer.Character)
+local function onCharacterAdded(character: Model)
+	hookCharacter(character)
+	-- Se a troca de corpo ocorreu com Shift já pressionado, InputBegan não
+	-- dispara de novo. Reenvia o estado físico atual para o servidor.
+	setHolding(UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
+		or UserInputService:IsKeyDown(Enum.KeyCode.RightShift))
 end
-LocalPlayer.CharacterAdded:Connect(hookCharacter)
+
+if LocalPlayer.Character then
+	task.defer(onCharacterAdded, LocalPlayer.Character)
+end
+LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
 
 RunService.RenderStepped:Connect(function(dt: number)
 	removeLegacyStatusGuis()

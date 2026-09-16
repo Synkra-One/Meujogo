@@ -2,7 +2,6 @@
 <roblox version="4"><Item class="ModuleScript" referent="131">
           <Properties>
             <string name="Name">PlayerModule</string>
-            <BinaryString name="AttributesSerialize" />
             <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
             <ContentId name="LinkedSource">
               <null>
@@ -43,12 +42,10 @@ end
 return PlayerModule.new()
 </string>
             <int64 name="SourceAssetId">15102217735</int64>
-            <BinaryString name="Tags" />
           </Properties>
           <Item class="ModuleScript" referent="132">
             <Properties>
               <string name="Name">CameraModule</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <ContentId name="LinkedSource">
                 <null>
@@ -635,12 +632,10 @@ local cameraModuleObject = CameraModule.new()
 return {}
 </string>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
             </Properties>
             <Item class="ModuleScript" referent="133">
               <Properties>
                 <string name="Name">BaseCamera</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -1513,13 +1508,11 @@ end
 return BaseCamera
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="134">
               <Properties>
                 <string name="Name">LegacyCamera</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -1645,13 +1638,11 @@ end
 return LegacyCamera
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="135">
               <Properties>
                 <string name="Name">VRBaseCamera</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -2106,13 +2097,11 @@ end
 
 return VRBaseCamera</string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="136">
               <Properties>
                 <string name="Name">CameraUtils</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -2431,13 +2420,11 @@ return CameraUtils
 
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="137">
               <Properties>
                 <string name="Name">MouseLockController</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -2657,13 +2644,11 @@ end
 return MouseLockController
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="138">
               <Properties>
                 <string name="Name">TransparencyController</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -2852,13 +2837,11 @@ end
 return TransparencyController
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="139">
               <Properties>
                 <string name="Name">VRVehicleCamera</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -3081,13 +3064,11 @@ end
 return VRVehicleCamera
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="140">
               <Properties>
                 <string name="Name">Invisicam</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -3650,13 +3631,11 @@ end
 return Invisicam
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="141">
               <Properties>
                 <string name="Name">ClassicCamera</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -3920,13 +3899,11 @@ end
 return ClassicCamera
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="142">
               <Properties>
                 <string name="Name">BaseOcclusion</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -3983,13 +3960,11 @@ end
 return BaseOcclusion
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="143">
               <Properties>
                 <string name="Name">ZoomController</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -4136,12 +4111,10 @@ end
 return Zoom
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
               <Item class="ModuleScript" referent="144">
                 <Properties>
                   <string name="Name">Popper</string>
-                  <BinaryString name="AttributesSerialize" />
                   <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                   <ContentId name="LinkedSource">
                     <null>
@@ -4493,14 +4466,12 @@ end
 return Popper
 </string>
                   <int64 name="SourceAssetId">-1</int64>
-                  <BinaryString name="Tags" />
                 </Properties>
               </Item>
             </Item>
             <Item class="ModuleScript" referent="145">
               <Properties>
                 <string name="Name">VehicleCamera</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -4731,12 +4702,10 @@ end
 return VehicleCamera
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
               <Item class="ModuleScript" referent="146">
                 <Properties>
                   <string name="Name">VehicleCameraConfig</string>
-                  <BinaryString name="AttributesSerialize" />
                   <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                   <ContentId name="LinkedSource">
                     <null>
@@ -4806,13 +4775,11 @@ return VehicleCamera
 return VEHICLE_CAMERA_CONFIG
 </string>
                   <int64 name="SourceAssetId">-1</int64>
-                  <BinaryString name="Tags" />
                 </Properties>
               </Item>
               <Item class="ModuleScript" referent="147">
                 <Properties>
                   <string name="Name">VehicleCameraCore</string>
-                  <BinaryString name="AttributesSerialize" />
                   <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                   <ContentId name="LinkedSource">
                     <null>
@@ -5004,14 +4971,12 @@ end
 return VehicleCameraCore
 </string>
                   <int64 name="SourceAssetId">-1</int64>
-                  <BinaryString name="Tags" />
                 </Properties>
               </Item>
             </Item>
             <Item class="ModuleScript" referent="148">
               <Properties>
                 <string name="Name">CameraToggleStateController</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -5098,13 +5063,11 @@ return function(isFirstPerson: boolean)
 end
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="149">
               <Properties>
                 <string name="Name">VRCamera</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -5576,13 +5539,11 @@ end
 
 return VRCamera</string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="150">
               <Properties>
                 <string name="Name">Poppercam</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -5704,13 +5665,11 @@ end
 return Poppercam
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="151">
               <Properties>
                 <string name="Name">CameraUI</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -5757,13 +5716,11 @@ end
 return CameraUI
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="152">
               <Properties>
                 <string name="Name">CameraInput</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -6335,13 +6292,11 @@ end
 
 return CameraInput</string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="153">
               <Properties>
                 <string name="Name">OrbitalCamera</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -6657,14 +6612,12 @@ end
 return OrbitalCamera
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
           </Item>
           <Item class="ModuleScript" referent="154">
             <Properties>
               <string name="Name">ControlModule</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <ContentId name="LinkedSource">
                 <null>
@@ -7397,12 +7350,10 @@ end
 return ControlModule.new()
 </string>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
             </Properties>
             <Item class="ModuleScript" referent="155">
               <Properties>
                 <string name="Name">Keyboard</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -7589,13 +7540,11 @@ end
 return Keyboard
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="156">
               <Properties>
                 <string name="Name">Gamepad</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -7819,13 +7768,11 @@ end
 return Gamepad
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="157">
               <Properties>
                 <string name="Name">PathDisplay</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -7967,13 +7914,11 @@ end
 return PathDisplay
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="158">
               <Properties>
                 <string name="Name">ClickToMoveDisplay</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -8468,13 +8413,11 @@ end
 return ClickToMoveDisplay
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="159">
               <Properties>
                 <string name="Name">VehicleController</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -8673,13 +8616,11 @@ end
 return VehicleController
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="160">
               <Properties>
                 <string name="Name">VRNavigation</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -9147,13 +9088,11 @@ end
 return VRNavigation
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="161">
               <Properties>
                 <string name="Name">TouchThumbstick</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -9365,13 +9304,11 @@ end
 return TouchThumbstick
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="162">
               <Properties>
                 <string name="Name">ClickToMoveController</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -10549,13 +10486,11 @@ end
 return ClickToMove
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="163">
               <Properties>
                 <string name="Name">DynamicThumbstick</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -11152,13 +11087,11 @@ end
 return DynamicThumbstick
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="164">
               <Properties>
                 <string name="Name">TouchJump</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -11372,13 +11305,11 @@ end
 return TouchJump
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="165">
               <Properties>
                 <string name="Name">BaseCharacterController</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -11434,7 +11365,6 @@ end
 return BaseCharacterController
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
           </Item>

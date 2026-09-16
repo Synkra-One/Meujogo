@@ -2,7 +2,6 @@
 <roblox version="4"><Item class="Script" referent="97">
           <Properties>
             <string name="Name">NoCollision</string>
-            <BinaryString name="AttributesSerialize" />
             <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
             <bool name="Disabled">false</bool>
             <ContentId name="LinkedSource">
@@ -44,7 +43,6 @@ game:GetService("Workspace").ChildAdded:Connect(function(Child)
 	end
 end)</string>
             <int64 name="SourceAssetId">6117952432</int64>
-            <BinaryString name="Tags" />
           </Properties>
         </Item>
         <SharedStrings>

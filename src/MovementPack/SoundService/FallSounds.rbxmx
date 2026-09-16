@@ -2,17 +2,14 @@
 <roblox version="4"><Item class="Folder" referent="183">
           <Properties>
             <string name="Name">FallSounds</string>
-            <BinaryString name="AttributesSerialize" />
             <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
             <bool name="DefinesCapabilities">false</bool>
             <int64 name="SourceAssetId">-1</int64>
-            <BinaryString name="Tags" />
           </Properties>
           <Item class="Sound" referent="184">
             <Properties>
               <string name="Name">LargeFall</string>
               <bool name="AcousticSimulationEnabled">true</bool>
-              <BinaryString name="AttributesSerialize" />
               <Content name="AudioContent">
                 <uri>rbxassetid://87304538225333</uri>
               </Content>
@@ -30,7 +27,6 @@
               <bool name="DefinesCapabilities">false</bool>
               <Ref name="SoundGroup">null</Ref>
               <int64 name="SourceAssetId">18788816670</int64>
-              <BinaryString name="Tags" />
               <double name="TimePosition">0</double>
               <float name="Volume">0.3</float>
             </Properties>
@@ -39,7 +35,6 @@
             <Properties>
               <string name="Name">MediumFall</string>
               <bool name="AcousticSimulationEnabled">true</bool>
-              <BinaryString name="AttributesSerialize" />
               <Content name="AudioContent">
                 <uri>rbxassetid://139985956189349</uri>
               </Content>
@@ -57,7 +52,6 @@
               <bool name="DefinesCapabilities">false</bool>
               <Ref name="SoundGroup">null</Ref>
               <int64 name="SourceAssetId">18788900844</int64>
-              <BinaryString name="Tags" />
               <double name="TimePosition">0</double>
               <float name="Volume">0.3</float>
             </Properties>
@@ -66,7 +60,6 @@
             <Properties>
               <string name="Name">SmallFall</string>
               <bool name="AcousticSimulationEnabled">true</bool>
-              <BinaryString name="AttributesSerialize" />
               <Content name="AudioContent">
                 <uri>rbxassetid://124829818510825</uri>
               </Content>
@@ -84,7 +77,6 @@
               <bool name="DefinesCapabilities">false</bool>
               <Ref name="SoundGroup">null</Ref>
               <int64 name="SourceAssetId">18788897933</int64>
-              <BinaryString name="Tags" />
               <double name="TimePosition">0</double>
               <float name="Volume">0.3</float>
             </Properties>

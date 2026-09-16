@@ -2,7 +2,6 @@
 <roblox version="4"><Item class="ModuleScript" referent="58">
             <Properties>
               <string name="Name">FootstepModule</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <ContentId name="LinkedSource">
                 <null>
@@ -217,21 +216,17 @@ end
 
 return main</string>
               <int64 name="SourceAssetId">6034003547</int64>
-              <BinaryString name="Tags" />
             </Properties>
             <Item class="Folder" referent="59">
               <Properties>
                 <string name="Name">Footsteps</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
               <Item class="ModuleScript" referent="60">
                 <Properties>
                   <string name="Name">Default</string>
-                  <BinaryString name="AttributesSerialize" />
                   <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                   <ContentId name="LinkedSource">
                     <null>
@@ -524,13 +519,11 @@ Default.SoundIds = {
 
 return Default</string>
                   <int64 name="SourceAssetId">-1</int64>
-                  <BinaryString name="Tags" />
                 </Properties>
               </Item>
               <Item class="ModuleScript" referent="61">
                 <Properties>
                   <string name="Name">Fart</string>
-                  <BinaryString name="AttributesSerialize" />
                   <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                   <ContentId name="LinkedSource">
                     <null>
@@ -635,13 +628,11 @@ Fart.SoundIds = {
 
 return Fart</string>
                   <int64 name="SourceAssetId">-1</int64>
-                  <BinaryString name="Tags" />
                 </Properties>
               </Item>
               <Item class="ModuleScript" referent="62">
                 <Properties>
                   <string name="Name">Water</string>
-                  <BinaryString name="AttributesSerialize" />
                   <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                   <ContentId name="LinkedSource">
                     <null>
@@ -782,23 +773,19 @@ Default.SoundIds = {
 
 return Default</string>
                   <int64 name="SourceAssetId">-1</int64>
-                  <BinaryString name="Tags" />
                 </Properties>
               </Item>
             </Item>
             <Item class="Folder" referent="63">
               <Properties>
                 <string name="Name">Landing</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
               <Item class="ModuleScript" referent="64">
                 <Properties>
                   <string name="Name">Default</string>
-                  <BinaryString name="AttributesSerialize" />
                   <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                   <ContentId name="LinkedSource">
                     <null>
@@ -964,13 +951,11 @@ Default.SoundIds = {
 
 return Default</string>
                   <int64 name="SourceAssetId">-1</int64>
-                  <BinaryString name="Tags" />
                 </Properties>
               </Item>
               <Item class="ModuleScript" referent="65">
                 <Properties>
                   <string name="Name">Fart</string>
-                  <BinaryString name="AttributesSerialize" />
                   <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                   <ContentId name="LinkedSource">
                     <null>
@@ -1075,13 +1060,11 @@ Fart.SoundIds = {
 
 return Fart</string>
                   <int64 name="SourceAssetId">-1</int64>
-                  <BinaryString name="Tags" />
                 </Properties>
               </Item>
               <Item class="ModuleScript" referent="66">
                 <Properties>
                   <string name="Name">Water</string>
-                  <BinaryString name="AttributesSerialize" />
                   <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                   <ContentId name="LinkedSource">
                     <null>
@@ -1216,23 +1199,19 @@ Default.SoundIds = {
 
 return Default</string>
                   <int64 name="SourceAssetId">-1</int64>
-                  <BinaryString name="Tags" />
                 </Properties>
               </Item>
             </Item>
             <Item class="Folder" referent="67">
               <Properties>
                 <string name="Name">Jumping</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
               <Item class="ModuleScript" referent="68">
                 <Properties>
                   <string name="Name">Default</string>
-                  <BinaryString name="AttributesSerialize" />
                   <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                   <ContentId name="LinkedSource">
                     <null>
@@ -1382,13 +1361,11 @@ Default.SoundIds = {
 
 return Default</string>
                   <int64 name="SourceAssetId">-1</int64>
-                  <BinaryString name="Tags" />
                 </Properties>
               </Item>
               <Item class="ModuleScript" referent="69">
                 <Properties>
                   <string name="Name">Fart</string>
-                  <BinaryString name="AttributesSerialize" />
                   <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                   <ContentId name="LinkedSource">
                     <null>
@@ -1493,13 +1470,11 @@ Fart.SoundIds = {
 
 return Fart</string>
                   <int64 name="SourceAssetId">-1</int64>
-                  <BinaryString name="Tags" />
                 </Properties>
               </Item>
               <Item class="ModuleScript" referent="70">
                 <Properties>
                   <string name="Name">Water</string>
-                  <BinaryString name="AttributesSerialize" />
                   <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                   <ContentId name="LinkedSource">
                     <null>
@@ -1634,7 +1609,6 @@ Default.SoundIds = {
 
 return Default</string>
                   <int64 name="SourceAssetId">-1</int64>
-                  <BinaryString name="Tags" />
                 </Properties>
               </Item>
             </Item>

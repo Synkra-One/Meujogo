@@ -2,7 +2,6 @@
 <roblox version="4"><Item class="LocalScript" referent="123">
           <Properties>
             <string name="Name">Animate</string>
-            <BinaryString name="AttributesSerialize" />
             <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
             <bool name="Disabled">false</bool>
             <ContentId name="LinkedSource">
@@ -18,8 +17,8 @@
 -- pelo nome "Animate"). Com timeout + aviso, da pra ver o motivo no Output.
 local Torso = Figure:WaitForChild("Torso", 8)
 if not Torso then
-	warn("[Animate] SEM 'Torso' apos 8s -> o jogo NAO esta em R6. "
-		.. "Game Settings > Avatar > Avatar Type > R6. Animacoes de movimento desligadas.")
+	warn("[Animate] SEM 'Torso' apos 8s -&gt; o jogo NAO esta em R6. "
+		.. "Game Settings &gt; Avatar &gt; Avatar Type &gt; R6. Animacoes de movimento desligadas.")
 	return
 end
 local Humanoid = Figure:WaitForChild("Humanoid")
@@ -86,14 +85,44 @@ local TRANSITIONS = {
 
 local animTable = {}
 
+-- Um único Animate controla o personagem. O perfil Previous mantém as
+-- animações que já estavam funcionando no jogo; ImportedArczis fica guardado
+-- para teste sem precisar reimportar outro script no Workspace.
+local ANIMATION_PROFILE = "Previous"
+local LOCOMOTION_PROFILES = {
+	ImportedArczis = {
+		idle = "rbxassetid://77181920794051",
+		walk = "rbxassetid://125038208630708",
+		run = "rbxassetid://96383664079896",
+		climb = "rbxassetid://132969691712833",
+		fall = "rbxassetid://71277689201143",
+		jump = "rbxassetid://123602498784037",
+	},
+	Previous = {
+		idle = "rbxassetid://111750589949462",
+		walk = "rbxassetid://104664677962249",
+		run = "rbxassetid://84555759625363",
+		climb = "rbxassetid://180436334",
+		fall = "rbxassetid://110440366272499",
+		jump = "rbxassetid://120443640364165",
+	},
+}
+local locomotion = LOCOMOTION_PROFILES[ANIMATION_PROFILE]
+assert(locomotion, "Perfil de animação inválido: " .. tostring(ANIMATION_PROFILE))
+
 -- All animation IDs are defined here in the script only.
 -- (No longer reads Animation objects parented under this script.)
 local animNames = {
 	idle = {
-		{ id = "rbxassetid://109143561038911", weight = 10 }, -- [Meujogo] idle em pe definido pelo usuario
+		{ id = locomotion.idle, weight = 10 },
 	},
 	walk = {
-		{ id = "rbxassetid://84329977047483", weight = 10 }, -- [Meujogo] walk do usuario
+		{ id = locomotion.walk, weight = 10 },
+	},
+	-- [Meujogo] Trotar (Crouching.startJog, segurar ControlKey). Mesmo lugar
+	-- que walk/run: e so mais um item de animNames, tocado por onRunning().
+	jog = {
+		{ id = "rbxassetid://82928206448633", weight = 10 },
 	},
 	hurt_idle = {
 		{ id = "rbxassetid://96462680767143", weight = 10 }, -- [Meujogo] dano parado
@@ -102,22 +131,22 @@ local animNames = {
 		{ id = "rbxassetid://123093322235597", weight = 10 }, -- [Meujogo] dano andando
 	},
 	run = {
-		{ id = "rbxassetid://109418716176884", weight = 10 }, -- [Meujogo] corrida Shift do usuario
+		{ id = locomotion.run, weight = 10 },
 	},
 	swim = {
 		{ id = "rbxassetid://131167550146543", weight = 10 }, -- [Meujogo] nado ao mover dentro da agua
 	},
 	climb = {
-		{ id = "rbxassetid://180436334", weight = 10 },
+		{ id = locomotion.climb, weight = 10 },
 	},
 	sit = {
 		{ id = "rbxassetid://178130996", weight = 10 },
 	},
 	fall = {
-		{ id = "rbxassetid://180436148", weight = 10 },
+		{ id = locomotion.fall, weight = 10 },
 	},
 	jump = {
-		{ id = "rbxassetid://125750702", weight = 10 },
+		{ id = locomotion.jump, weight = 10 },
 	},
 	death = {
 		{ id = "rbxassetid://136002279138060", weight = 10 }, -- [Meujogo] morte do player
@@ -235,7 +264,7 @@ local function playAnimation(animName, forcedTransition)
 	currentAnimTrack.Priority = Enum.AnimationPriority.Movement
 	-- [Meujogo] forca loop nas continuas: se a anim do usuario foi publicada
 	-- como nao-loopavel, sem isso ela toca uma vez e congela.
-	if animName == "idle" or animName == "walk" or animName == "run" or animName == "swim" then
+	if animName == "idle" or animName == "walk" or animName == "jog" or animName == "run" or animName == "swim" then
 		currentAnimTrack.Looped = true
 	end
 	currentAnimTrack:Play(transition)
@@ -281,6 +310,10 @@ end
 -- Use the movement script's Shift state for sprint animation. WalkSpeed alone
 -- can be raised by monster/passive/power multipliers and should still walk.
 local SPRINT_SPEED_THRESHOLD = 20
+-- [Meujogo] mesma ideia para o trote (Crouching.IsJogging): so entra abaixo
+-- disso se a velocidade real caiu por outro motivo (agua, atordoamento),
+-- e nao pelo JogSpeed do personagem (12,45 a 21,25 studs/s, sempre acima).
+local JOG_SPEED_THRESHOLD = 10
 
 function onRunning(speed)
 	local hrp = Figure:FindFirstChild("HumanoidRootPart")
@@ -306,6 +339,10 @@ function onRunning(speed)
 				sprintDustPlayed = true
 				emitSprintDust(8) -- [Meujogo] fumaca pequena, nao explosao
 			end
+		elseif hrp and hrp:GetAttribute("IsJogging") == true
+			and Humanoid.WalkSpeed &gt;= JOG_SPEED_THRESHOLD then
+			playAnimation("jog")
+			setAnimationSpeed(speed / 14.5)
 		else
 			playAnimation("walk")
 			setAnimationSpeed(speed / 14.5)
@@ -474,23 +511,19 @@ while Figure.Parent ~= nil do
 	move()
 end</string>
             <int64 name="SourceAssetId">3286651982</int64>
-            <BinaryString name="Tags" />
           </Properties>
           <Item class="NumberValue" referent="124">
             <Properties>
               <string name="Name">ScaleDampeningPercent</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
               <double name="Value">0.4000000059604645</double>
             </Properties>
           </Item>
           <Item class="Attachment" referent="125">
             <Properties>
               <string name="Name">SprintImpact</string>
-              <BinaryString name="AttributesSerialize" />
               <CoordinateFrame name="CFrame">
                 <X>0</X>
                 <Y>-3</Y>
@@ -508,7 +541,6 @@ end</string>
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
               <bool name="Visible">false</bool>
             </Properties>
             <Item class="ParticleEmitter" referent="126">
@@ -519,7 +551,6 @@ end</string>
                   <Y>0</Y>
                   <Z>0</Z>
                 </Vector3>
-                <BinaryString name="AttributesSerialize">AgAAAAkAAABFbWl0Q291bnQGAAAAAAAAMkAJAAAARW1pdERlbGF5BgAAAAAAAAAA</BinaryString>
                 <float name="Brightness">1</float>
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ColorSequence name="Color">0 0.3882353 0.3882353 0.3882353 0 1 0.3882353 0.3882353 0.3882353 0 </ColorSequence>
@@ -555,7 +586,6 @@ end</string>
                   <Y>360</Y>
                 </Vector2>
                 <NumberSequence name="Squash">0 0 0 1 0 0 </NumberSequence>
-                <BinaryString name="Tags" />
                 <Content name="TextureContent">
                   <uri>rbxassetid://9544354287</uri>
                 </Content>
@@ -574,7 +604,6 @@ end</string>
                   <Y>0</Y>
                   <Z>0</Z>
                 </Vector3>
-                <BinaryString name="AttributesSerialize">AgAAAAkAAABFbWl0Q291bnQGAAAAAAAAHEAJAAAARW1pdERlbGF5BgAAAAAAAAAA</BinaryString>
                 <float name="Brightness">1</float>
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ColorSequence name="Color">0 0.588235 0.564706 0.584314 0 1 0.588235 0.564706 0.584314 0 </ColorSequence>
@@ -610,7 +639,6 @@ end</string>
                   <Y>30</Y>
                 </Vector2>
                 <NumberSequence name="Squash">0 0 0 1 3 0 </NumberSequence>
-                <BinaryString name="Tags" />
                 <Content name="TextureContent">
                   <uri>rbxassetid://9544366974</uri>
                 </Content>
@@ -629,7 +657,6 @@ end</string>
                   <Y>-6.40612</Y>
                   <Z>0</Z>
                 </Vector3>
-                <BinaryString name="AttributesSerialize">AgAAAAkAAABFbWl0Q291bnQGAAAAAAAAKEAJAAAARW1pdERlbGF5BgAAAAAAAAAA</BinaryString>
                 <float name="Brightness">1</float>
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ColorSequence name="Color">0 0.588235 0.564706 0.584314 0 1 0.588235 0.564706 0.584314 0 </ColorSequence>
@@ -665,7 +692,6 @@ end</string>
                   <Y>30</Y>
                 </Vector2>
                 <NumberSequence name="Squash">0 0 0 1 0 0 </NumberSequence>
-                <BinaryString name="Tags" />
                 <Content name="TextureContent">
                   <uri>rbxassetid://7216854921</uri>
                 </Content>
@@ -684,7 +710,6 @@ end</string>
                   <Y>0</Y>
                   <Z>0</Z>
                 </Vector3>
-                <BinaryString name="AttributesSerialize">AgAAAAkAAABFbWl0Q291bnQGAAAAAAAAKEAJAAAARW1pdERlbGF5BgAAAAAAAAAA</BinaryString>
                 <float name="Brightness">2</float>
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ColorSequence name="Color">0 0.588235 0.564706 0.584314 0 1 0.588235 0.564706 0.584314 0 </ColorSequence>
@@ -720,7 +745,6 @@ end</string>
                   <Y>30</Y>
                 </Vector2>
                 <NumberSequence name="Squash">0 0 0 1 0 0 </NumberSequence>
-                <BinaryString name="Tags" />
                 <Content name="TextureContent">
                   <uri>rbxassetid://9544354287</uri>
                 </Content>

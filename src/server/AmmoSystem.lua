@@ -2,11 +2,11 @@
 --[[
 	AmmoSystem
 	Dono da RESERVA de munição de cada jogador (o pente da arma é do
-	FirearmServer -- ver o cabeçalho de Modules/Ammo.lua pra diferença entre
+	OTSFirearmService -- ver o cabeçalho de Modules/OTSAmmo.lua pra diferença entre
 	os dois estoques).
 
 	ONDE FICA: Attribute "Municao_<Tipo>" no Player. Só o servidor escreve;
-	o cliente (PistolController) lê pela replicação normal de Attributes, sem
+	o cliente (OTSController) lê pela replicação normal de Attributes, sem
 	RemoteEvent. Reseta pro GameConfig.Firearms.StartingReserve a cada spawn.
 
 	CAIXAS DE MUNIÇÃO NO CHÃO: qualquer BasePart com os Attributes
@@ -17,7 +17,7 @@
 	pras caixas que o WeaponSpawner.lua espalha quanto pras que você colocar
 	na mão no Studio. Pegar com a reserva já cheia não consome a caixa.
 
-	Uso (uma vez no boot do servidor, ANTES de FirearmServer):
+	Uso (uma vez no boot do servidor, ANTES de OTSFirearmService):
 		local AmmoSystem = require(script.AmmoSystem)
 		AmmoSystem.Init()
 ]]
@@ -26,7 +26,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
-local Ammo = require(ReplicatedStorage.Modules.Ammo)
+local Ammo = require(ReplicatedStorage.Modules.OTSAmmo)
 
 local AmmoSystem = {}
 
@@ -183,7 +183,7 @@ end
 --[[
 	Init()
 	Reserva inicial a cada spawn + prompts em toda caixa de munição
-	existente/futura. Chame uma vez no boot, ANTES de FirearmServer.
+	existente/futura. Chame uma vez no boot, ANTES de OTSFirearmService.
 ]]
 function AmmoSystem.Init()
 	local function watchPlayer(player: Player)

@@ -20,8 +20,8 @@
 	               cerca curta caída.
 	  Torre        Torre de vigia (escada TrussPart escalável).
 	  Farol        Farol na ponta rochosa + barraco do faroleiro.
-	  VilaNativa   6 cabanas nativas em anel largo, totem, fogueira apagada,
-	               secador de peixe, canoas, potes.
+	  VilaNativa   5 moradias + casa comunal mobiliadas, varandas, totem,
+	               fogueira, preparo de carne, sangue e canoa.
 	  Trilhas      Lampiões a cada ~60 studs; acesos só perto dos POIs.
 	  Layout       Marcadores invisíveis de cada site (Attribute Poi/Raio) --
 	               LobbyManager/RaftGenerator/PlaneCrash leem daqui depois de
@@ -35,6 +35,7 @@ local Terrain = Workspace.Terrain
 
 local IslandLayout = require(script.Parent.IslandLayout)
 local S = require(script.Parent.Structures)
+local NativeVillage = require(script.Parent.NativeVillage)
 
 local PoiGenerator = {}
 
@@ -269,41 +270,8 @@ local function buildLighthouse(folder: Folder, site: IslandLayout.Site, rng: Ran
 	end
 end
 
-local function buildVillage(folder: Folder, site: IslandLayout.Site, rng: Random)
-	local cx, cz = site.x, site.z
-	local center = Vector3.new(cx, 0, cz)
-	local huts = 6
-	local ring = 32
-	local start = rng:NextNumber(0, TAU)
-
-	for i = 1, huts do
-		local a = start + (i - 1) / huts * TAU + rng:NextNumber(-0.12, 0.12)
-		local rr = ring + rng:NextNumber(-3, 3)
-		local x, z = polar(cx, cz, a, rr)
-		S.Hut(folder, groundCF(x, z, center), rng:NextNumber(6, 8.5), rng)
-	end
-
-	S.Totem(folder, groundCF(cx, cz), rng)
-	local fa = start + 0.5
-	local fx, fz = polar(cx, cz, fa, 10)
-	S.FireCircle(folder, groundCF(fx, fz), rng, false)
-	-- (polar devolve 2 valores: sempre em locais antes de passar junto de
-	-- outro argumento, senão o Lua trunca pra um só.)
-	local rx, rz = polar(cx, cz, fa + 2.0, 14)
-	S.FishRack(folder, groundCF(rx, rz, center))
-	for i = 1, 2 do
-		local a = start + i * 2.4
-		local kx, kz = polar(cx, cz, a, 20)
-		S.Canoe(folder, groundCF(kx, kz) * CFrame.Angles(0, a + math.pi / 2, 0))
-	end
-	for i = 1, 5 do
-		local a = rng:NextNumber(0, TAU)
-		local d = rng:NextNumber(5, ring * 0.7)
-		local px, pz = polar(cx, cz, a, d)
-		S.Pot(folder, groundCF(px, pz), rng:NextNumber(1.0, 1.6))
-	end
-	-- Caminhos pisados entre cabanas: só marcadores de spawn extra no centro.
-	S.Marker(folder, "SpawnPOI", groundCF(cx, cz) * CFrame.new(6, 2, 0), { SpawnPOI = true })
+local function buildVillage(folder: Folder, site: IslandLayout.Site)
+	NativeVillage.Build(folder, Vector3.new(site.x, groundY(site.x, site.z), site.z), IslandLayout.Seed())
 end
 
 --------------------------------------------------------------------------------
@@ -351,6 +319,52 @@ end
 --------------------------------------------------------------------------------
 -- API
 --------------------------------------------------------------------------------
+
+-- Atualização isolada do mapa salvo. Não use Generate() só para mudar a vila:
+-- aquela função também reconstrói todos os outros POIs e seus marcadores.
+function PoiGenerator.GenerateVillage(): Folder
+	assert(not game:GetService("RunService"):IsRunning(), "Atualize a vila em modo de edição, fora do Play.")
+	local ilha = getIlha()
+	local pois = ilha:FindFirstChild("POIs")
+	assert(pois, "Gere os POIs primeiro: Workspace.Ilha.POIs não existe.")
+	local old = pois:FindFirstChild("VilaNativa")
+	local layout = ilha:FindFirstChild("Layout")
+	local anchor = if layout then layout:FindFirstChild("VilaNativa") else nil
+	assert(anchor and anchor:IsA("BasePart"), "Marcador Layout.VilaNativa ausente; não vou adivinhar a posição da vila salva.")
+	local center = anchor.Position
+	local replacement = Instance.new("Folder")
+	replacement.Name = "VilaNativa"
+	-- Constrói antes de mexer na antiga. Um erro deixa a cena atual intacta.
+	local ok, err = pcall(NativeVillage.Build, replacement, center, IslandLayout.Seed())
+	if not ok then
+		replacement:Destroy()
+		error(err)
+	end
+	if old then
+		local storage = game:GetService("ServerStorage")
+		local backups = storage:FindFirstChild("MapEditBackups")
+		if not backups then
+			backups = Instance.new("Folder")
+			backups.Name = "MapEditBackups"
+			backups.Parent = storage
+		end
+		-- Move o original inteiro para backup: inclui alterações manuais e loot.
+		-- Nunca apaga o conteúdo anterior, nem toca em Ilha.VilaNativa (rádio).
+		local legacyNames = { CabanaNativa = true, Totem = true, Fogueira = true,
+			SecadorDePeixe = true, Canoa = true, Pote = true, SpawnPOI = true }
+		for _, child in old:GetChildren() do
+			if not child:GetAttribute("VilaGerada") and not legacyNames[child.Name] then
+				-- Objetos extras pertencem ao projeto: conservam identidade/posição.
+				child.Parent = replacement
+			end
+		end
+		old.Name = "VilaNativa_" .. os.date("!%Y%m%d_%H%M%S") .. "_" .. (#backups:GetChildren() + 1)
+		old.Parent = backups
+	end
+	replacement.Parent = pois
+	print("[PoiGenerator] Vila ampliada; anterior em ServerStorage.MapEditBackups. Salve o lugar.")
+	return replacement
+end
 
 function PoiGenerator.Clear()
 	local ilha = Workspace:FindFirstChild("Ilha")
@@ -427,7 +441,7 @@ function PoiGenerator.Generate(): number
 		built += 1
 	end
 	if sites.VilaNativa then
-		buildVillage(poiFolder("VilaNativa"), sites.VilaNativa, rng)
+		buildVillage(poiFolder("VilaNativa"), sites.VilaNativa)
 		built += 1
 		task.wait()
 	end

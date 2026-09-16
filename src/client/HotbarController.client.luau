@@ -12,9 +12,8 @@
 	  - Tecla G: LARGA a Tool no chão (Remotes.DropItem -> DropItemSystem.lua
 	    no servidor). Larga a Tool equipada; se nenhuma estiver equipada,
 	    larga a do slot 1.
-	  - Mouse: clicar no slot equipa; o botão ⤓ larga. Funciona normalmente --
-	    o cursor não fica mais travado no centro (o CameraWeapon, que travava,
-	    foi removido junto com o sistema OTS).
+	  - Mouse: clicar no slot equipa; o botão ⤓ larga. O LeftControl alterna a
+	    câmera de ombro quando for necessário liberar o cursor.
 
 	IMAGEM DO SLOT (renderToolModel / ItemIcons.Resolve), nessa ordem:
 	  1. rbxassetid de ItemIcons.Map[itemId], se você tiver colado a arte.

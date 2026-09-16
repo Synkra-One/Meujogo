@@ -135,6 +135,60 @@ function StatScaling.StealthThresholdMultiplier(player: Player?): number
 	return StatScaling.Lerp(StatScaling.Of(player, "Furtividade"), CFG.StealthThreshold)
 end
 
+--[[
+	NoiseState(speed, walkBase)
+	Classifica o movimento pela velocidade horizontal REAL, normalizada pela
+	base de caminhada do personagem. Devolve a chave de GameConfig.Noise.States
+	("Crouch" | "Walk" | "Jog" | "Sprint") ou nil quando está parado.
+
+	É medição física de propósito: é o que impede o cliente de mentir postura
+	para andar em silêncio na velocidade de corrida. Ver Characters.MovementBands.
+]]
+function StatScaling.NoiseState(speed: number, walkBase: number): string?
+	if speed <= GameConfig.Noise.MinMovingSpeed or walkBase <= 0 then
+		return nil
+	end
+	local ratio = speed / walkBase
+	if ratio <= CFG.MovementBands.Crouch then
+		return "Crouch"
+	elseif ratio <= CFG.MovementBands.Walk then
+		return "Walk"
+	elseif ratio <= CFG.SprintSpeedRatio then
+		return "Jog"
+	end
+	return "Sprint"
+end
+
+-- Toda leitura de Furtividade passa por aqui, então o "0 = nada muda" e o
+-- "personagem ainda não escolhido = meio da faixa" valem para os dois números.
+local function stealthLerp(player: Player?, state: string, field: string): number?
+	local profile = GameConfig.Noise.States[state]
+	if not profile then
+		return nil
+	end
+	return StatScaling.Lerp(StatScaling.Of(player, "Furtividade"), (profile :: any)[field])
+end
+
+--[[
+	NoiseRadius(player, state)
+	Furtividade -> até onde o Monstro pode ouvir este estado de movimento, em
+	studs. FAIXA INVERTIDA: Furtividade alta devolve um raio MENOR.
+	Devolve nil se o estado não existe.
+]]
+function StatScaling.NoiseRadius(player: Player?, state: string): number?
+	return stealthLerp(player, state, "Radius")
+end
+
+--[[
+	NoisePingInterval(player, state)
+	Furtividade -> segundos entre um ruído e o próximo deste mesmo estado.
+	FAIXA INVERTIDA ao contrário das outras: Furtividade alta devolve um
+	intervalo MAIOR (menos pings). Devolve nil se o estado não existe.
+]]
+function StatScaling.NoisePingInterval(player: Player?, state: string): number?
+	return stealthLerp(player, state, "Interval")
+end
+
 --[[ Reparo -> multiplicador de progresso de objetivo (Jangada / Rádio). ]]
 function StatScaling.RepairMultiplier(player: Player?): number
 	return StatScaling.Lerp(StatScaling.Of(player, "Reparo"), CFG.RepairSpeed) * perkMultiplier(player, "Repair")

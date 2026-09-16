@@ -3,7 +3,6 @@
           <Properties>
             <string name="Name">RayPart</string>
             <bool name="Anchored">false</bool>
-            <BinaryString name="AttributesSerialize" />
             <bool name="AudioCanCollide">true</bool>
             <float name="BackParamA">-0.5</float>
             <float name="BackParamB">0.5</float>
@@ -85,7 +84,6 @@
               <Z>0.2</Z>
             </Vector3>
             <int64 name="SourceAssetId">-1</int64>
-            <BinaryString name="Tags" />
             <float name="TopParamA">-0.5</float>
             <float name="TopParamB">0.5</float>
             <token name="TopSurface">0</token>

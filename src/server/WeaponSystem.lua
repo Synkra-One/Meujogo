@@ -17,8 +17,8 @@
 
 	PEDRA AFIADA: Tool.Activated -> ponto de impacto na direção que o
 	jogador olha (ThrowDistance), som posicional (SoundManager, placeholder)
-	e dispara o hook WeaponSystem.NoiseMade(position) -- gancho pronto pra
-	uma futura IA do Monstro reagir a barulho, ninguém escuta ainda.
+	e dispara WeaponSystem.NoiseMade(position, player, intensity), consumido
+	pela super audição do NoiseService.
 
 	IMPORTANTE (setup no Studio, fora do escopo deste script): Tools com
 	Attribute "FacaImprovisada" / "LancaDeBambu" / "PedraAfiada" = true
@@ -42,7 +42,8 @@ local PowerStatus = require(script.Parent.SurvivorPowerStatus)
 
 local WeaponSystem = {}
 
--- Hook público: nenhuma IA de Monstro escuta isso ainda.
+-- Hook público: (position, player?, intensity?). Fontes ambientais legadas
+-- sem jogador continuam válidas, mas não revelam sobreviventes no NoiseService.
 WeaponSystem.NoiseMade = Instance.new("BindableEvent")
 
 local watchedTools: { [Tool]: true } = {}
@@ -141,7 +142,7 @@ local function onPedraActivated(player: Player)
 
 	local impact = root.Position + root.CFrame.LookVector * GameConfig.Weapons.ThrowDistance
 	SoundManager.PlayThrowSound(impact)
-	WeaponSystem.NoiseMade:Fire(impact)
+	WeaponSystem.NoiseMade:Fire(impact, player, GameConfig.Noise.StoneIntensity)
 	print(string.format("[WeaponSystem] %s arremessou uma Pedra Afiada -- barulho perto de (%.0f, %.0f, %.0f).", player.Name, impact.X, impact.Y, impact.Z))
 end
 

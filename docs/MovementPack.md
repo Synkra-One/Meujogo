@@ -1,7 +1,23 @@
 # Sistema de movimento (Ultimate R6 Movement System)
 
-Substituiu o sistema de câmera/arma OTS (`src/client/CameraWeapon`, removido).
-A doc antiga daquele sistema está em `docs/CameraWeapon.md` só como histórico.
+Continua sendo o único dono da locomoção, câmera base, crouch, sprint e Animate.
+O Digital's OTS usa esses estados sem instalar outro pacote de movimento.
+
+## Mesclagem do `Arczis Movement System.rbxm`
+
+O arquivo adicional colocado na raiz foi inspecionado por classe e por Source.
+Ele e uma edicao menor da mesma base: Bobbing Camera, Turning, Animate,
+Crouching, CustomShiftLock, Footsteps, RbxCharacterSounds e ragdoll. As versoes
+ja presentes em `src/MovementPack` foram mantidas porque incluem, alem disso,
+sprint/fôlego autoritativo, crawl, celular/controle, IK, quedas seguras,
+integracao com medo/poderes/agua e protecoes de respawn.
+
+Foi incorporada a animacao `LandAnim` dessa edicao em
+`src/client/FallEffects.client.luau`, usando carregamento protegido. O
+`RagdollV3` antigo nao foi copiado: ele apaga o character real no cliente e
+mantem clones por tempo praticamente infinito, enquanto o `R6Ragdoll` atual
+ja cobre morte e respawn de forma compativel com a rodada. Importar o `.rbxm`
+inteiro continua proibido, pois duplicaria todos os controladores acima.
 
 ## Origem
 
@@ -137,28 +153,46 @@ e ignoram qualquer outro UserId.
 
 ## Animações — IDs em uso
 
-Tudo nos **defaults R6 da Roblox** (públicos, garantido que carregam). O
-usuário fez `walk` e `run` próprias — quando publicar e passar os IDs, é só
-trocar essas duas linhas em `Animate.rbxmx`.
+Existe apenas um controlador `Animate`, em `StarterCharacterScripts`. Ele
+mantém dois perfis na própria fonte: `Previous`, ativo, e `ImportedArczis`,
+guardado para teste sem reimportar nenhum pacote no Workspace. As animações
+de dano, nado e morte que já pertenciam ao jogo continuam no mesmo controlador.
 
 | Arquivo | Anim | ID | Origem |
 |---|---|---|---|
-| `Animate.rbxmx` (tabela `animNames` no código) | idle | `109143561038911` | **animação do usuário** |
-| | walk | `84329977047483` | **animação do usuário** |
-| | run | `87202665361349` | **animação do usuário** |
+| `Animate.rbxmx` (perfil `Previous`) | idle | `109143561038911` | jogo atual |
+| | walk | `84329977047483` | jogo atual |
+| | run | `109418716176884` | jogo atual |
 | | jump | `125750702` | Roblox R6 |
 | | fall | `180436148` | Roblox R6 |
 | | climb | `180436334` | Roblox R6 |
 | | sit | `178130996` | Roblox R6 |
-| `Crouching.rbxmx` (6 objetos `Animation`) | Crouching | `125164434023167` | crouch idle indicado pelo usuário |
-| | CrouchWalk | `80429715000556` | crouch andando indicado pelo usuário |
-| | CrouchToCrawl / CrawlIdle / CrawlWalk / CrawlToCrouch | vazio | opcional; o script procura aliases como `CrouchIdle`, `Agachar`, `AndarAgachado`, `RastejarIdle` |
+| `Crouching.rbxmx` (perfil `Previous`) | Crouching | `108853143115126` | jogo atual |
+| | CrouchWalk | `125168404409395` | jogo atual |
+| | CrouchToCrawl | vazio | não configurado no jogo atual |
+| | CrawlIdle | vazio | não configurado no jogo atual |
+| | CrawlWalk | vazio | não configurado no jogo atual |
+| | CrawlToCrouch | vazio | não configurado no jogo atual |
 | `src/client/FallEffects.client.luau` | FALL_ANIM_LONG / SHORT | `180436148` | Roblox R6 (mesma do fall) |
 | | FALL_ANIM_LAND | vazio | pouso normal só volta pro idle |
 
-`Animate` lê do **código** (tabela `animNames`). `Crouching` prefere objetos
-`Animation` preenchidos no Explorer e cai nos IDs de fallback só quando não
-encontra uma animação customizada.
+`Animate` lê o perfil selecionado no **código** e monta a tabela `animNames`.
+`Crouching` usa o perfil selecionado e mantém os seis objetos `Animation`
+sincronizados com os mesmos IDs.
+
+## Limpeza das cópias importadas
+
+`tools/consolidate_duplicates.server.luau` é a migração conservadora para a
+experiência que recebeu o `.rbxm` manualmente. Ela mescla `Modules`, `Remotes`,
+`FallSystem` e `FallSounds`; mantém as versões canônicas do Rojo; remove o
+StaminaSystem inseguro de cliente e o remote legado `UpdateRunningState`; e
+retira os `Animate` dos rigs auxiliares. O pacote `.rbxm` original permanece em
+`Arczis animations/` com os AnimSaves editáveis.
+
+`tools/audit_duplicates.server.luau` verifica a árvore final e falha visualmente
+no relatório se novas cópias funcionais forem importadas no futuro. Objetos de
+cenário com o mesmo nome, como árvores e lampiões em posições diferentes, são
+instâncias intencionais e não entram na limpeza.
 
 ### Publicar uma animação da AnimSaves
 
@@ -188,10 +222,55 @@ Mudanças:
   `CameraMaxZoomDistance = 9`: prende a câmera perto do personagem (é isso que
   dá o "colado", o offset sozinho só desloca pro lado).
 
-**LeftControl continua alternando.** Desligar solta o mouse do centro — é
-assim que dá pra clicar na hotbar. Com ela ligada o cursor fica travado no
-meio da tela, o que também faz o `PistolController` mirar exatamente no centro
-(`GetMouseLocation` devolve o centro quando `MouseBehavior = LockCenter`).
+**LeftControl não alterna mais a câmera.** `SHIFT_LOCK_KEYBINDS` ficou vazio
+de propósito: a tecla agora é exclusiva do Trotar (ver a seção abaixo), e a
+câmera de ombro fica sempre ligada, sem tecla pra desligar. Efeito colateral:
+a hotbar perdeu o clique do mouse durante o jogo (o cursor não solta mais do
+centro); os atalhos numéricos (`1`/`2`/`3`) em `HotbarController` continuam
+funcionando normalmente. Se precisar do clique de volta, vale trocar
+`SHIFT_LOCK_KEYBINDS` para outra tecla livre em vez de deixá-la vazia.
+
+## Três estados de solo: Andar / Trotar / Correr
+
+No estilo *Friday the 13th*. Tudo no `Crouching`, que continua o único dono da
+velocidade.
+
+| Estado | Tecla | `CONFIG` | Velocidade | Fôlego |
+|---|---|---|---|---|
+| Rastejar | `Z` (precisa estar agachado) | `CrawlSpeed` | 3 | — |
+| Agachar | `C` | `CrouchSpeed` | 6 | — |
+| **Andar** | *nada* — é o padrão | `NormalSpeed` | 12 | — |
+| **Trotar** | `LeftControl`/`RightControl` — **segurar** | `JogSpeed` | **15** | — |
+| **Correr** | `Shift` / `ButtonL3` — segurar | `SprintSpeed` | 23 | gasta |
+
+**Andar é o movimento normal.** Quem não aperta nada se move exatamente como
+sempre foi (antes de qualquer um destes três estados existir): nada no jogo
+ficou mais lento por padrão. Trotar é o estado novo, entre andar e correr, e
+é **opt-in**, segurando `Control` — igual o Correr, não é alternável.
+
+Correr **cancela** o trote (Shift é intenção explícita de fazer barulho, tem
+prioridade); soltar o Shift devolve para trote se `Control` ainda estiver
+pressionado, ou para andar caso contrário — a mesma reconciliação que o
+sprint já fazia no Heartbeat, replicada para o trote.
+
+O único aviso visual é um FOV intermediário (`JogFOV = 78`, entre o padrão 70
+e o de corrida 90) enquanto segura `Control`. Sem toggle sticky: soltar a
+tecla volta direto ao FOV padrão, igual o sprint sempre fez.
+
+O trote publica `IsJogging` na HumanoidRootPart, junto de `IsSprinting` e
+`IsCrouching`. Como os outros, é **local e não autoritativo**: o servidor
+classifica o ruído pela velocidade medida (ver `docs/SuperAudicao.md`), então
+forjar "estou trotando" não silencia ninguém.
+
+Nada mais precisou mudar: `Animate` e `Turning` só reagem acima de
+`SPRINT_SPEED_THRESHOLD = 20`, então andar e trotar usam a mesma animação de
+caminhada, escalada pela velocidade; e `Footsteps` deriva volume, tom e
+cadência de `Velocity.Magnitude`, então andar já soa mais baixo e mais espaçado
+sozinho.
+
+**Se mudar estas velocidades**, revise `GameConfig.Characters.MovementBands` —
+são as proporções sobre `NormalSpeed` que o servidor usa para reconhecer cada
+estado no sistema de audição.
 
 ## Números de corrida / fôlego (ajustados)
 
@@ -228,16 +307,13 @@ quando cai abaixo disso.
 
 ## Armas depois da troca
 
-`src/client/CameraWeapon` (câmera de ombro, mira, recuo, HUD de arma) foi
-removido porque brigava com o `PlayerModule` do pacote pelo CFrame da câmera.
+O `OTSController.client.luau` integra somente a Glock17 do Digital's OTS:
+botão direito mira, clique atira enquanto mira e `R` recarrega. O HUD original
+do pacote recebeu o contador de pente/reserva; o servidor calcula o tiro e
+controla dano e recarga. As animações usam apenas `PistolAnimations`.
 
-O `PistolController.client.luau` agora integra somente a Glock17: clique atira,
-botão direito mira, `R` recarrega. A HUD tem pente/reserva, progresso da recarga,
-crosshair, recuo e hitmarker confirmado. O servidor calcula o tiro e controla
-a recarga; as animações usam apenas `PistolAnimations`.
-
-A câmera de ombro continua sendo o `CustomShiftLock`. O controlador da pistola
-adiciona apenas recuo angular. `Crouching` continua dono do FOV e da velocidade:
+A câmera de ombro continua sendo o `CustomShiftLock`. O controlador adiciona
+apenas recoil angular. `Crouching` continua dono do FOV, da vinheta e da velocidade:
 o atributo local `Character.FirearmAiming` pede FOV de mira e bloqueia o sprint
 enquanto se mira. Não há outro PlayerModule/Animate nem outro tween de FOV.
 

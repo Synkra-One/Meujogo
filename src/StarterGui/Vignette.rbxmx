@@ -2,7 +2,6 @@
 <roblox version="4"><Item class="ScreenGui" referent="101">
           <Properties>
             <string name="Name">Vignette</string>
-            <BinaryString name="AttributesSerialize" />
             <bool name="AutoLocalize">true</bool>
             <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
             <bool name="ClipToDeviceSafeArea">true</bool>
@@ -19,7 +18,6 @@
             <token name="SelectionBehaviorUp">0</token>
             <bool name="SelectionGroup">false</bool>
             <int64 name="SourceAssetId">11730834770</int64>
-            <BinaryString name="Tags" />
             <token name="ZIndexBehavior">0</token>
           </Properties>
           <Item class="ImageLabel" referent="102">
@@ -30,7 +28,6 @@
                 <X>0</X>
                 <Y>0</Y>
               </Vector2>
-              <BinaryString name="AttributesSerialize" />
               <bool name="AutoLocalize">true</bool>
               <token name="AutomaticSize">0</token>
               <Color3 name="BackgroundColor3">
@@ -111,7 +108,6 @@
               </Rect2D>
               <float name="SliceScale">1</float>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
               <UDim2 name="TileSize">
                 <XS>1</XS>
                 <XO>0</XO>

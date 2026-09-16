@@ -1,81 +1,112 @@
-# Pistola OTS — integração R6
+# Digital's OTS Patch2 — integração da Glock17
 
-Origem: `Sistema de armas/Digital's OTS Patch2.rbxm`. A Glock17 de 65 instâncias
-já extraída em `WeaponAssets/Tools.rbxmx` é a pistola desse pacote. O projeto
-carrega apenas essa Tool; fuzis e shotgun não são entregues nem aceitos pelo
-controlador. Meshes, grip, welds, sons, efeitos e as quatro animações da pistola
-foram reaproveitados. O Framework, PlayerModule e Animate originais não são importados.
+Origem preservada: `Sistema de armas/Digital's OTS Patch2.rbxm`.
+Backup das nove Tools preservado: `WeaponAssets_backup/Tools-todas-as-armas.rbxmx`.
 
-## Testar no lobby
+O projeto ativo usa somente a Glock17. A Tool, meshes, welds, sons, partículas,
+tracers, impactos, HUD e animações vieram do pacote. O Framework foi adaptado
+porque a versão original tentava substituir o PlayerModule, Animate, sprint,
+passos, câmera e movimentação, além de aceitar alvo/dano enviados pelo cliente.
+O resultado mantém a apresentação do OTS e usa o servidor do jogo para validar
+posse, vida, mira, cadência, munição, parede, raycast, dano e recarga.
 
-Sincronize pelo Rojo e reinicie o Play. Não importe o pacote inteiro novamente.
-À direita do spawn há a bancada `Workspace.TestePistolaLobby`, criada em runtime:
+## IDs de animação da Glock17
 
-1. `E` perto da pistola para pegar; equipe pela hotbar (normalmente `1`).
-2. Pegue a caixa de **34 cartuchos**, ao lado. O pente começa com **17**.
-3. Botão esquerdo atira; botão direito segurado mira; `R` recarrega; `G` larga.
-4. Atire no alvo diante da bancada: a vida aparece sobre ele e o alvo renasce em 3 s.
-5. No controle: gatilho direito atira pelo sistema de Tools, esquerdo mira, `X` recarrega.
-   No toque: botões ATIRAR, MIRAR (alternar) e RECARREGAR.
+Todos ficam em `src/ReplicatedStorage/WeaponAssets/Animations.rbxmx`, dentro de
+`Animations/PistolAnimations`. Troque o valor entre `<uri>` e `</uri>`.
 
-Apenas **uma pistola de treino** existe por servidor. Pegar não cria uma cópia
-extra; após destruição/morte ela volta em 3 s. Uma arma largada conserva munição.
-A caixa volta 5 s após esgotar; pegar com a reserva quase cheia conserva a sobra.
-A pistola de teste só dá dano em alvos marcados `FirearmTestTarget`; jogadores
-no lobby/sala de espera também ficam protegidos das outras pistolas.
+| Estado | ID atual | Marker esperado |
+| --- | --- | --- |
+| Fire | `rbxassetid://17861277580` | nenhum obrigatório |
+| Holster/equipada | `rbxassetid://17837420732` | nenhum obrigatório |
+| Reload | `rbxassetid://17837428175` | `Start`, `MagOut`, `MagIn`, `BoltPull`, `BoltRelease`, `End` |
+| Aim | `rbxassetid://97722809924272` | nenhum obrigatório |
 
-`GameConfig.Testing.LobbyPistol = false` desativa a bancada no próximo servidor.
-O atalho `M` continua trocando para `R6 novo`; desequipa antes para conservar
-a Tool na mochila e garante Animator criado no servidor. A reserva segue a regra
-geral do jogo e reinicia ao trocar Character: pegue munição novamente.
+As animações novas devem ser R6, publicadas pela conta/grupo autorizado para a
+experiência. Se a nova recarga não tiver markers, o servidor usa tempos de
+fallback e a arma continua funcional, mas som e movimento do pente podem ficar
+menos sincronizados com o clipe.
 
-## Comportamento e parâmetros
+## Arquivos antigos removidos
 
-`Modules/FirearmRules.lua`: semiautomática, intervalo mínimo **0,18 s**, alcance
-**600 studs**, recarga **2,2 s**, dispersão de quadril **1,05°** e mira **0,25°**.
-O dano original da Tool foi mantido: cabeça 17, tronco 13, membros 7, antes dos
-modificadores de personagem/armadura do jogo. Reserva máxima: 68.
+- `src/server/FirearmServer.lua`
+- `src/client/PistolController.client.luau`
+- `src/client/PistolHUD.lua`
+- `src/client/PistolPose.lua`
+- `src/client/PistolGripTest.client.luau`
+- `src/server/PistolGripCalibration.server.luau`
+- `src/ReplicatedStorage/Modules/FirearmRules.lua`
+- `src/ReplicatedStorage/Modules/Ammo.lua`
+- `src/ReplicatedStorage/Modules/WeaponEffects.lua`
+- `src/ReplicatedStorage/Modules/PistolGrip.lua`
+- `src/ReplicatedStorage/Remotes/FirearmHit.model.json`
+- `src/ReplicatedStorage/Remotes/PistolGripTest.model.json`
+- documentação/teste do calibrador e da pose antigos
 
-O servidor verifica posse, vida, restrição, fase, cadência, pente e recarga.
-Um disparo desconta uma bala e faz raycast do cano, incluindo obstrução entre
-cabeça e cano; não atravessa paredes para atingir o ponto visto pela câmera.
-Valores não finitos e mensagens antigas de dano/recarga são rejeitados.
-O cliente só antecipa pose, recuo e contador; hitmarkers dependem do servidor.
-Não há compensação de lag/rebobinamento de alvos: teste acertos móveis com latência.
+## Componentes ativos do OTS
 
-Recarga tem início/fim e sons agendados no servidor. Markers do cliente não
-concedem munição. Largar, desequipar, morrer ou trocar Character cancela,
-restaura o pente visível e invalida callbacks antigos.
+- `src/client/OTSController.client.luau`: equipar, mirar, atirar, recarregar,
+  animações, recoil e input de mouse/controle/touch.
+- `src/client/OTSHUD.lua`: controla o ScreenGui original e integra o contador de
+  pente/reserva na mesma interface.
+- `src/server/OTSFirearmService.lua`: autoridade de tiro, dano, recarga e
+  replicação dos efeitos.
+- `src/ReplicatedStorage/Modules/OTSAmmo.lua`, `OTSRules.lua`, `OTSEffects.lua`.
+- `src/StarterGui/Weapon.rbxmx`: HUD original do pacote, sem uma segunda vinheta.
+- `src/ReplicatedStorage/WeaponAssets`: Glock17 e apenas os assets necessários
+  de pistola/HUD/impacto.
 
-## Compatibilidade e limitações verificáveis
+Os quatro RemoteEvents reaproveitados ficam em `ReplicatedStorage/Remotes`:
+`FirearmShoot`, `FirearmReload`, `FirearmDamage` e `FirearmFeed`. Os vinte
+remotes inseguros do pacote original não foram copiados.
 
-O jogo continua usando o PlayerModule/CustomShiftLock, caminhada, corrida,
-idle e healing atuais. A mira sinaliza `Character.FirearmAiming`; o próprio
-`Crouching` resolve FOV/sprint. O recuo é uma rotação aditiva, sem substituir
-posição, colisão, zoom ou CameraType da câmera.
+## Duplicações eliminadas e sistemas preservados
 
-As animações OTS são R6 e pertencem a terceiros:
+Não existe um segundo Animate, PlayerModule, sistema de sprint, stamina,
+crouch, footsteps, câmera, hotbar, dano ou inventário. A mira publica o atributo
+`Character.FirearmAiming`; o `Crouching` atual continua dono do FOV e agora
+compõe o `AimFOV` da Tool e a mira com a mesma vinheta já usada por
+crouch/crawl. O
+`CustomShiftLock` continua dono da câmera de ombro e de sua colisão.
 
-| Pose | ID |
-|---|---|
-| Holster | 17837420732 |
-| Aim | 17834125927 |
-| Fire | 17861277580 |
-| Reload | 100982287999803 |
+Continuam ativos por serem integração do jogo, e não uma segunda implementação
+da Glock: `AmmoSystem`, `WeaponSpawner`, `LobbyFiringRange`, `DropItemSystem`,
+`DamageSystem`, `HotbarController` e `ItemDiscovery`.
 
-Pickups com ActionText `Pegar`/`Pegar munição` tocam a animação local
-`103236301003312` ao confirmar o `E`, junto de um efeito sonoro curto local.
+## Dependências e verificações
 
-A autorização destes assets na experiência não pode ser confirmada pelo build.
-Se o Output mostrar falha de carregamento, autorize os assets para a experiência
-ou substitua por animações publicadas na sua conta/grupo. A pistola ainda atira
-e recarrega sem elas, mas a pose/recarga visual ficará incompleta. Sons/meshes
-também precisam estar disponíveis. [Permissões de assets no Roblox](https://create.roblox.com/docs/projects/assets).
+Dependências diretas: `WeaponAssets/{Tools,Animations,Audios,Effects}`,
+`OTSAmmo`, `OTSRules`, `OTSEffects`, `Remotes`, `AmmoSystem`, `DamageSystem` e
+`SurvivorPowerStatus`. A Tool ativa contém somente `Glock17` e não tem scripts
+embutidos.
 
-## Verificação
+Verificado automaticamente:
 
-`python3 tests/run_firearms.py /caminho/luau` exercita o servidor e pickups com
-serviços simulados. `rojo build` valida a montagem do projeto; `luau-compile`
-valida a sintaxe. Isso não substitui Play no Studio nem teste com dois jogadores.
-Confira no Play as quatro poses, mão/grip no R6 novo, FOV ao mirar/agachar/correr,
-colisão com paredes, recarga cancelada, queda/repickup, respawn, mouse e toque.
+- build completo do Rojo;
+- compilação das fontes OTS dentro do arquivo construído;
+- somente uma Glock, um HUD e um controlador ativos;
+- raycast e dano no servidor, cadência, paredes, posse, lobby e estados
+  bloqueados;
+- recarga, reserva parcial, cancelamento, morte, troca de Character e pickups;
+- pacote original e backup permaneceram com os mesmos hashes.
+
+Ainda depende de Play no Roblox Studio: autorização dos assets, aparência da
+Glock na mão R6, markers reais das animações publicadas, câmera em paredes,
+touch/gamepad e teste com dois jogadores. Falha de autorização aparece no
+Output como `Failed to load animation` ou `not authorized to access Asset`.
+Na validação headless, os sons OTS de kill/armour break `17146316146` e
+`17146437786` retornaram sem autorização; tiro, recarga e hitmarker precisam ser
+confirmados no Play, e esses dois IDs devem ser trocados se o erro também surgir
+na experiência publicada.
+
+## Roteiro de teste no Studio
+
+1. Sincronize o Rojo, pare qualquer Play antigo e inicie uma sessão nova.
+2. Equipe a Glock17. A postura Holster deve substituir apenas os braços/torso;
+   pernas e locomoção continuam usando as animações normais do jogo.
+3. Segure botão direito/L2 (ou MIRAR no touch), confirme FOV/crosshair, e atire.
+4. Pressione `R`/`X`, confirme pente, sons, markers e reserva.
+5. Tente atirar sem mirar, sem munição, durante recarga e através de parede.
+6. Largue com `G`, pegue novamente e confirme que o pente foi preservado.
+7. Teste morte, respawn, crouch, sprint, stamina e troca de personagem com a
+   arma equipada e guardada.

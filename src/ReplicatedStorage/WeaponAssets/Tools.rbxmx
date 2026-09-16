@@ -3,15 +3,12 @@
   <Item class="Folder" referent="48">
     <Properties>
       <string name="Name">Tools</string>
-      <BinaryString name="AttributesSerialize" />
       <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
       <bool name="DefinesCapabilities">false</bool>
-      <BinaryString name="Tags" />
     </Properties>
     <Item class="Tool" referent="326">
       <Properties>
         <string name="Name">Glock17</string>
-        <BinaryString name="AttributesSerialize" />
         <bool name="CanBeDropped">true</bool>
         <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
         <bool name="Enabled">true</bool>
@@ -57,7 +54,6 @@
         <bool name="RequiresHandle">true</bool>
         <bool name="DefinesCapabilities">false</bool>
         <float name="ScaleFactor">1</float>
-        <BinaryString name="Tags" />
         <Content name="TextureContent">
           <null>
               </null>
@@ -84,7 +80,6 @@
         <Properties>
           <string name="Name">Handle</string>
           <bool name="Anchored">false</bool>
-          <BinaryString name="AttributesSerialize" />
           <bool name="AudioCanCollide">true</bool>
           <float name="BackParamA">-0.5</float>
           <float name="BackParamB">0.5</float>
@@ -165,7 +160,6 @@
             <Y>0.5</Y>
             <Z>0.5</Z>
           </Vector3>
-          <BinaryString name="Tags" />
           <float name="TopParamA">-0.5</float>
           <float name="TopParamB">0.5</float>
           <token name="TopSurface">0</token>
@@ -180,7 +174,6 @@
         <Item class="Sound" referent="328">
           <Properties>
             <string name="Name">MagIn</string>
-            <BinaryString name="AttributesSerialize" />
             <Content name="AudioContent">
               <uri>rbxassetid://8028186410</uri>
             </Content>
@@ -197,7 +190,6 @@
             <token name="RollOffMode">0</token>
             <bool name="DefinesCapabilities">false</bool>
             <Ref name="SoundGroup">null</Ref>
-            <BinaryString name="Tags" />
             <double name="TimePosition">0</double>
             <float name="Volume">0.4</float>
           </Properties>
@@ -205,7 +197,6 @@
         <Item class="Sound" referent="329">
           <Properties>
             <string name="Name">MagOut</string>
-            <BinaryString name="AttributesSerialize" />
             <Content name="AudioContent">
               <uri>rbxassetid://8028185786</uri>
             </Content>
@@ -222,7 +213,6 @@
             <token name="RollOffMode">0</token>
             <bool name="DefinesCapabilities">false</bool>
             <Ref name="SoundGroup">null</Ref>
-            <BinaryString name="Tags" />
             <double name="TimePosition">0</double>
             <float name="Volume">0.4</float>
           </Properties>
@@ -230,7 +220,6 @@
         <Item class="Sound" referent="330">
           <Properties>
             <string name="Name">BoltIn</string>
-            <BinaryString name="AttributesSerialize" />
             <Content name="AudioContent">
               <uri>rbxassetid://4681152014</uri>
             </Content>
@@ -247,7 +236,6 @@
             <token name="RollOffMode">0</token>
             <bool name="DefinesCapabilities">false</bool>
             <Ref name="SoundGroup">null</Ref>
-            <BinaryString name="Tags" />
             <double name="TimePosition">0</double>
             <float name="Volume">0.4</float>
           </Properties>
@@ -255,7 +243,6 @@
         <Item class="Sound" referent="331">
           <Properties>
             <string name="Name">BoltOut</string>
-            <BinaryString name="AttributesSerialize" />
             <Content name="AudioContent">
               <uri>rbxassetid://4681153447</uri>
             </Content>
@@ -272,7 +259,6 @@
             <token name="RollOffMode">0</token>
             <bool name="DefinesCapabilities">false</bool>
             <Ref name="SoundGroup">null</Ref>
-            <BinaryString name="Tags" />
             <double name="TimePosition">0</double>
             <float name="Volume">0.4</float>
           </Properties>
@@ -281,56 +267,44 @@
       <Item class="BoolValue" referent="332">
         <Properties>
           <string name="Name">Weapon</string>
-          <BinaryString name="AttributesSerialize" />
           <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
           <bool name="DefinesCapabilities">false</bool>
-          <BinaryString name="Tags" />
           <bool name="Value">true</bool>
         </Properties>
       </Item>
       <Item class="Folder" referent="333">
         <Properties>
           <string name="Name">Settings</string>
-          <BinaryString name="AttributesSerialize" />
           <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
           <bool name="DefinesCapabilities">false</bool>
-          <BinaryString name="Tags" />
         </Properties>
         <Item class="Folder" referent="334">
           <Properties>
             <string name="Name">Animations</string>
-            <BinaryString name="AttributesSerialize" />
             <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
             <bool name="DefinesCapabilities">false</bool>
-            <BinaryString name="Tags" />
           </Properties>
           <Item class="BoolValue" referent="335">
             <Properties>
               <string name="Name">Pistol</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
-              <BinaryString name="Tags" />
               <bool name="Value">true</bool>
             </Properties>
           </Item>
           <Item class="BoolValue" referent="336">
             <Properties>
               <string name="Name">Shotgun</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
-              <BinaryString name="Tags" />
               <bool name="Value">false</bool>
             </Properties>
           </Item>
           <Item class="BoolValue" referent="337">
             <Properties>
               <string name="Name">Rifle</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
-              <BinaryString name="Tags" />
               <bool name="Value">false</bool>
             </Properties>
           </Item>
@@ -338,158 +312,126 @@
         <Item class="Folder" referent="338">
           <Properties>
             <string name="Name">Config</string>
-            <BinaryString name="AttributesSerialize" />
             <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
             <bool name="DefinesCapabilities">false</bool>
-            <BinaryString name="Tags" />
           </Properties>
           <Item class="NumberValue" referent="339">
             <Properties>
               <string name="Name">Ammo</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
-              <BinaryString name="Tags" />
               <double name="Value">17</double>
             </Properties>
           </Item>
           <Item class="BoolValue" referent="340">
             <Properties>
               <string name="Name">Auto</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
-              <BinaryString name="Tags" />
               <bool name="Value">false</bool>
             </Properties>
           </Item>
           <Item class="NumberValue" referent="341">
             <Properties>
               <string name="Name">Delay</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
-              <BinaryString name="Tags" />
               <double name="Value">0.06</double>
             </Properties>
           </Item>
           <Item class="NumberValue" referent="342">
             <Properties>
               <string name="Name">MaxAmmo</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
-              <BinaryString name="Tags" />
               <double name="Value">17</double>
             </Properties>
           </Item>
           <Item class="BoolValue" referent="343">
             <Properties>
               <string name="Name">ToggleFiremode</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
-              <BinaryString name="Tags" />
               <bool name="Value">true</bool>
             </Properties>
           </Item>
           <Item class="NumberValue" referent="344">
             <Properties>
               <string name="Name">AimFOV</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
-              <BinaryString name="Tags" />
               <double name="Value">62</double>
             </Properties>
           </Item>
           <Item class="BoolValue" referent="345">
             <Properties>
               <string name="Name">Reloading</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
-              <BinaryString name="Tags" />
               <bool name="Value">false</bool>
             </Properties>
           </Item>
           <Item class="NumberValue" referent="346">
             <Properties>
               <string name="Name">CrosshairShove</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
-              <BinaryString name="Tags" />
               <double name="Value">2.1</double>
             </Properties>
           </Item>
           <Item class="NumberValue" referent="347">
             <Properties>
               <string name="Name">Spread</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
-              <BinaryString name="Tags" />
               <double name="Value">3</double>
             </Properties>
           </Item>
           <Item class="BoolValue" referent="348">
             <Properties>
               <string name="Name">HasLazer</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
-              <BinaryString name="Tags" />
               <bool name="Value">false</bool>
             </Properties>
           </Item>
           <Item class="BoolValue" referent="349">
             <Properties>
               <string name="Name">LazerActivated</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
-              <BinaryString name="Tags" />
               <bool name="Value">false</bool>
             </Properties>
           </Item>
           <Item class="NumberValue" referent="350">
             <Properties>
               <string name="Name">Recoil</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
-              <BinaryString name="Tags" />
               <double name="Value">0.4</double>
             </Properties>
           </Item>
           <Item class="NumberValue" referent="351">
             <Properties>
               <string name="Name">NumberOfBullets</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
-              <BinaryString name="Tags" />
               <double name="Value">1</double>
             </Properties>
           </Item>
           <Item class="BoolValue" referent="352">
             <Properties>
               <string name="Name">HasFlashlight</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
-              <BinaryString name="Tags" />
               <bool name="Value">false</bool>
             </Properties>
           </Item>
           <Item class="BoolValue" referent="353">
             <Properties>
               <string name="Name">FlashlightActivated</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
-              <BinaryString name="Tags" />
               <bool name="Value">false</bool>
             </Properties>
           </Item>
@@ -497,38 +439,30 @@
         <Item class="Folder" referent="354">
           <Properties>
             <string name="Name">Damage</string>
-            <BinaryString name="AttributesSerialize" />
             <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
             <bool name="DefinesCapabilities">false</bool>
-            <BinaryString name="Tags" />
           </Properties>
           <Item class="NumberValue" referent="355">
             <Properties>
               <string name="Name">TorsoDamage</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
-              <BinaryString name="Tags" />
               <double name="Value">13</double>
             </Properties>
           </Item>
           <Item class="NumberValue" referent="356">
             <Properties>
               <string name="Name">HeadDamage</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
-              <BinaryString name="Tags" />
               <double name="Value">17</double>
             </Properties>
           </Item>
           <Item class="NumberValue" referent="357">
             <Properties>
               <string name="Name">LimbsDamage</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
-              <BinaryString name="Tags" />
               <double name="Value">7</double>
             </Properties>
           </Item>
@@ -537,17 +471,14 @@
       <Item class="Folder" referent="358">
         <Properties>
           <string name="Name">Model</string>
-          <BinaryString name="AttributesSerialize" />
           <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
           <bool name="DefinesCapabilities">false</bool>
-          <BinaryString name="Tags" />
         </Properties>
         <Item class="MeshPart" referent="359">
           <Properties>
             <string name="Name">MeshPart</string>
             <SharedString name="AeroMeshData">rxNJufX5oaagQE3qNtzJSQ==</SharedString>
             <bool name="Anchored">false</bool>
-            <BinaryString name="AttributesSerialize" />
             <bool name="AudioCanCollide">true</bool>
             <float name="BackParamA">-0.5</float>
             <float name="BackParamB">0.5</float>
@@ -647,7 +578,6 @@
               <Y>0.051500652</Y>
               <Z>0.059740745</Z>
             </Vector3>
-            <BinaryString name="Tags" />
             <Content name="TextureContent">
               <uri>http://www.roblox.com/asset/?id=5178119489</uri>
             </Content>
@@ -682,7 +612,6 @@
           <Item class="WeldConstraint" referent="360">
             <Properties>
               <string name="Name">WeldConstraint</string>
-              <BinaryString name="AttributesSerialize" />
               <CoordinateFrame name="CFrame0">
                 <X>-0.0023498535</X>
                 <Y>-0.77883613</Y>
@@ -702,7 +631,6 @@
               <Ref name="Part1Internal">327</Ref>
               <bool name="DefinesCapabilities">false</bool>
               <int name="State">3</int>
-              <BinaryString name="Tags" />
             </Properties>
           </Item>
         </Item>
@@ -711,7 +639,6 @@
             <string name="Name">Bolt</string>
             <SharedString name="AeroMeshData">rxNJufX5oaagQE3qNtzJSQ==</SharedString>
             <bool name="Anchored">false</bool>
-            <BinaryString name="AttributesSerialize" />
             <bool name="AudioCanCollide">true</bool>
             <float name="BackParamA">-0.5</float>
             <float name="BackParamB">0.5</float>
@@ -811,7 +738,6 @@
               <Y>0.25476095</Y>
               <Z>1.4667385</Z>
             </Vector3>
-            <BinaryString name="Tags" />
             <Content name="TextureContent">
               <uri>rbxassetid://6598178532</uri>
             </Content>
@@ -846,7 +772,6 @@
           <Item class="WeldConstraint" referent="362">
             <Properties>
               <string name="Name">WeldConstraint</string>
-              <BinaryString name="AttributesSerialize" />
               <CoordinateFrame name="CFrame0">
                 <X>-0.0021972656</X>
                 <Y>-0.6444671</Y>
@@ -866,7 +791,6 @@
               <Ref name="Part1Internal">327</Ref>
               <bool name="DefinesCapabilities">false</bool>
               <int name="State">3</int>
-              <BinaryString name="Tags" />
             </Properties>
           </Item>
         </Item>
@@ -875,7 +799,6 @@
             <string name="Name">Catch</string>
             <SharedString name="AeroMeshData">rxNJufX5oaagQE3qNtzJSQ==</SharedString>
             <bool name="Anchored">false</bool>
-            <BinaryString name="AttributesSerialize" />
             <bool name="AudioCanCollide">true</bool>
             <float name="BackParamA">-0.5</float>
             <float name="BackParamB">0.5</float>
@@ -975,7 +898,6 @@
               <Y>0.39178354</Y>
               <Z>0.49883524</Z>
             </Vector3>
-            <BinaryString name="Tags" />
             <Content name="TextureContent">
               <uri>http://www.roblox.com/asset/?id=5177942277</uri>
             </Content>
@@ -1010,7 +932,6 @@
           <Item class="WeldConstraint" referent="364">
             <Properties>
               <string name="Name">WeldConstraint</string>
-              <BinaryString name="AttributesSerialize" />
               <CoordinateFrame name="CFrame0">
                 <X>0.008331299</X>
                 <Y>-0.02923584</Y>
@@ -1030,7 +951,6 @@
               <Ref name="Part1Internal">327</Ref>
               <bool name="DefinesCapabilities">false</bool>
               <int name="State">3</int>
-              <BinaryString name="Tags" />
             </Properties>
           </Item>
         </Item>
@@ -1039,7 +959,6 @@
             <string name="Name">Frame</string>
             <SharedString name="AeroMeshData">rxNJufX5oaagQE3qNtzJSQ==</SharedString>
             <bool name="Anchored">false</bool>
-            <BinaryString name="AttributesSerialize" />
             <bool name="AudioCanCollide">true</bool>
             <float name="BackParamA">-0.5</float>
             <float name="BackParamB">0.5</float>
@@ -1139,7 +1058,6 @@
               <Y>1.6225139</Y>
               <Z>0.8797017</Z>
             </Vector3>
-            <BinaryString name="Tags" />
             <Content name="TextureContent">
               <uri>rbxassetid://6598205763</uri>
             </Content>
@@ -1174,7 +1092,6 @@
           <Item class="WeldConstraint" referent="366">
             <Properties>
               <string name="Name">WeldConstraint</string>
-              <BinaryString name="AttributesSerialize" />
               <CoordinateFrame name="CFrame0">
                 <X>-0.0024108887</X>
                 <Y>0.1482544</Y>
@@ -1194,7 +1111,6 @@
               <Ref name="Part1Internal">327</Ref>
               <bool name="DefinesCapabilities">false</bool>
               <int name="State">3</int>
-              <BinaryString name="Tags" />
             </Properties>
           </Item>
         </Item>
@@ -1203,7 +1119,6 @@
             <string name="Name">Trigger</string>
             <SharedString name="AeroMeshData">rxNJufX5oaagQE3qNtzJSQ==</SharedString>
             <bool name="Anchored">false</bool>
-            <BinaryString name="AttributesSerialize" />
             <bool name="AudioCanCollide">true</bool>
             <float name="BackParamA">-0.5</float>
             <float name="BackParamB">0.5</float>
@@ -1303,7 +1218,6 @@
               <Y>0.19485195</Y>
               <Z>0.23364754</Z>
             </Vector3>
-            <BinaryString name="Tags" />
             <Content name="TextureContent">
               <uri>http://www.roblox.com/asset/?id=5177942277</uri>
             </Content>
@@ -1338,7 +1252,6 @@
           <Item class="WeldConstraint" referent="368">
             <Properties>
               <string name="Name">WeldConstraint</string>
-              <BinaryString name="AttributesSerialize" />
               <CoordinateFrame name="CFrame0">
                 <X>-0.0020751953</X>
                 <Y>0.12994385</Y>
@@ -1358,7 +1271,6 @@
               <Ref name="Part1Internal">327</Ref>
               <bool name="DefinesCapabilities">false</bool>
               <int name="State">3</int>
-              <BinaryString name="Tags" />
             </Properties>
           </Item>
         </Item>
@@ -1367,7 +1279,6 @@
             <string name="Name">Slide</string>
             <SharedString name="AeroMeshData">rxNJufX5oaagQE3qNtzJSQ==</SharedString>
             <bool name="Anchored">false</bool>
-            <BinaryString name="AttributesSerialize" />
             <bool name="AudioCanCollide">true</bool>
             <float name="BackParamA">-0.5</float>
             <float name="BackParamB">0.5</float>
@@ -1467,7 +1378,6 @@
               <Y>0.25441322</Y>
               <Z>1.4667385</Z>
             </Vector3>
-            <BinaryString name="Tags" />
             <Content name="TextureContent">
               <uri>rbxassetid://6598178532</uri>
             </Content>
@@ -1502,7 +1412,6 @@
           <Item class="WeldConstraint" referent="370">
             <Properties>
               <string name="Name">WeldConstraint</string>
-              <BinaryString name="AttributesSerialize" />
               <CoordinateFrame name="CFrame0">
                 <X>-0.0021972656</X>
                 <Y>-0.64559627</Y>
@@ -1522,7 +1431,6 @@
               <Ref name="Part1Internal">327</Ref>
               <bool name="DefinesCapabilities">false</bool>
               <int name="State">3</int>
-              <BinaryString name="Tags" />
             </Properties>
           </Item>
         </Item>
@@ -1531,7 +1439,6 @@
             <string name="Name">Release</string>
             <SharedString name="AeroMeshData">rxNJufX5oaagQE3qNtzJSQ==</SharedString>
             <bool name="Anchored">false</bool>
-            <BinaryString name="AttributesSerialize" />
             <bool name="AudioCanCollide">true</bool>
             <float name="BackParamA">-0.5</float>
             <float name="BackParamB">0.5</float>
@@ -1631,7 +1538,6 @@
               <Y>0.12394333</Y>
               <Z>0.096672334</Z>
             </Vector3>
-            <BinaryString name="Tags" />
             <Content name="TextureContent">
               <uri>http://www.roblox.com/asset/?id=5177942277</uri>
             </Content>
@@ -1666,7 +1572,6 @@
           <Item class="WeldConstraint" referent="372">
             <Properties>
               <string name="Name">WeldConstraint</string>
-              <BinaryString name="AttributesSerialize" />
               <CoordinateFrame name="CFrame0">
                 <X>0.0008239746</X>
                 <Y>-0.082336426</Y>
@@ -1686,7 +1591,6 @@
               <Ref name="Part1Internal">327</Ref>
               <bool name="DefinesCapabilities">false</bool>
               <int name="State">3</int>
-              <BinaryString name="Tags" />
             </Properties>
           </Item>
         </Item>
@@ -1695,7 +1599,6 @@
             <string name="Name">Barrel</string>
             <SharedString name="AeroMeshData">rxNJufX5oaagQE3qNtzJSQ==</SharedString>
             <bool name="Anchored">false</bool>
-            <BinaryString name="AttributesSerialize" />
             <bool name="AudioCanCollide">true</bool>
             <float name="BackParamA">-0.5</float>
             <float name="BackParamB">0.5</float>
@@ -1795,7 +1698,6 @@
               <Y>0.9141492</Y>
               <Z>0.1957252</Z>
             </Vector3>
-            <BinaryString name="Tags" />
             <Content name="TextureContent">
               <uri>http://www.roblox.com/asset/?id=5177954316</uri>
             </Content>
@@ -1830,7 +1732,6 @@
           <Item class="WeldConstraint" referent="374">
             <Properties>
               <string name="Name">WeldConstraint</string>
-              <BinaryString name="AttributesSerialize" />
               <CoordinateFrame name="CFrame0">
                 <X>-0.0025634766</X>
                 <Y>0.50845337</Y>
@@ -1850,7 +1751,6 @@
               <Ref name="Part1Internal">327</Ref>
               <bool name="DefinesCapabilities">false</bool>
               <int name="State">3</int>
-              <BinaryString name="Tags" />
             </Properties>
           </Item>
         </Item>
@@ -1859,7 +1759,6 @@
             <string name="Name">FrontSightStock</string>
             <SharedString name="AeroMeshData">rxNJufX5oaagQE3qNtzJSQ==</SharedString>
             <bool name="Anchored">false</bool>
-            <BinaryString name="AttributesSerialize" />
             <bool name="AudioCanCollide">true</bool>
             <float name="BackParamA">-0.5</float>
             <float name="BackParamB">0.5</float>
@@ -1959,7 +1858,6 @@
               <Y>0.054</Y>
               <Z>0.052</Z>
             </Vector3>
-            <BinaryString name="Tags" />
             <Content name="TextureContent">
               <uri>rbxassetid://5178119136</uri>
             </Content>
@@ -1994,7 +1892,6 @@
           <Item class="WeldConstraint" referent="376">
             <Properties>
               <string name="Name">WeldConstraint</string>
-              <BinaryString name="AttributesSerialize" />
               <CoordinateFrame name="CFrame0">
                 <X>-0.0015563965</X>
                 <Y>-0.77975166</Y>
@@ -2014,7 +1911,6 @@
               <Ref name="Part1Internal">327</Ref>
               <bool name="DefinesCapabilities">false</bool>
               <int name="State">3</int>
-              <BinaryString name="Tags" />
             </Properties>
           </Item>
         </Item>
@@ -2022,16 +1918,13 @@
       <Item class="Folder" referent="377">
         <Properties>
           <string name="Name">Components</string>
-          <BinaryString name="AttributesSerialize" />
           <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
           <bool name="DefinesCapabilities">false</bool>
-          <BinaryString name="Tags" />
         </Properties>
         <Item class="Part" referent="378">
           <Properties>
             <string name="Name">Ejector</string>
             <bool name="Anchored">false</bool>
-            <BinaryString name="AttributesSerialize" />
             <bool name="AudioCanCollide">true</bool>
             <float name="BackParamA">-0.5</float>
             <float name="BackParamB">0.5</float>
@@ -2112,7 +2005,6 @@
               <Y>0.2</Y>
               <Z>0.2</Z>
             </Vector3>
-            <BinaryString name="Tags" />
             <float name="TopParamA">-0.5</float>
             <float name="TopParamB">0.5</float>
             <token name="TopSurface">0</token>
@@ -2127,7 +2019,6 @@
           <Item class="WeldConstraint" referent="379">
             <Properties>
               <string name="Name">WeldConstraint</string>
-              <BinaryString name="AttributesSerialize" />
               <CoordinateFrame name="CFrame0">
                 <X>-0.17882347</X>
                 <Y>-0.6497458</Y>
@@ -2147,7 +2038,6 @@
               <Ref name="Part1Internal">327</Ref>
               <bool name="DefinesCapabilities">false</bool>
               <int name="State">3</int>
-              <BinaryString name="Tags" />
             </Properties>
           </Item>
         </Item>
@@ -2155,7 +2045,6 @@
           <Properties>
             <string name="Name">Muzzle</string>
             <bool name="Anchored">false</bool>
-            <BinaryString name="AttributesSerialize" />
             <bool name="AudioCanCollide">true</bool>
             <float name="BackParamA">-0.5</float>
             <float name="BackParamB">0.5</float>
@@ -2236,7 +2125,6 @@
               <Y>0.2</Y>
               <Z>0.2</Z>
             </Vector3>
-            <BinaryString name="Tags" />
             <float name="TopParamA">-0.5</float>
             <float name="TopParamB">0.5</float>
             <token name="TopSurface">0</token>
@@ -2251,7 +2139,6 @@
           <Item class="WeldConstraint" referent="381">
             <Properties>
               <string name="Name">WeldConstraint</string>
-              <BinaryString name="AttributesSerialize" />
               <CoordinateFrame name="CFrame0">
                 <X>0.0031757355</X>
                 <Y>-0.70474577</Y>
@@ -2271,13 +2158,11 @@
               <Ref name="Part1Internal">327</Ref>
               <bool name="DefinesCapabilities">false</bool>
               <int name="State">3</int>
-              <BinaryString name="Tags" />
             </Properties>
           </Item>
           <Item class="Attachment" referent="382">
             <Properties>
               <string name="Name">FrontView</string>
-              <BinaryString name="AttributesSerialize" />
               <CoordinateFrame name="CFrame">
                 <X>0</X>
                 <Y>0</Y>
@@ -2294,7 +2179,6 @@
               </CoordinateFrame>
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
-              <BinaryString name="Tags" />
               <bool name="Visible">false</bool>
             </Properties>
             <Item class="ParticleEmitter" referent="383">
@@ -2305,7 +2189,6 @@
                   <Y>0</Y>
                   <Z>0</Z>
                 </Vector3>
-                <BinaryString name="AttributesSerialize" />
                 <float name="Brightness">1</float>
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ColorSequence name="Color">0 1 0.7294118 0.09411765 0 0.5 0.9372549 0.34117648 0.16078432 0 1 1 0.34117648 0.078431375 0 </ColorSequence>
@@ -2337,7 +2220,6 @@
                   <Y>0</Y>
                 </Vector2>
                 <NumberSequence name="Squash">0 0 0 1 0 0 </NumberSequence>
-                <BinaryString name="Tags" />
                 <Content name="TextureContent">
                   <uri>rbxassetid://872910628</uri>
                 </Content>
@@ -2356,7 +2238,6 @@
                   <Y>0</Y>
                   <Z>0</Z>
                 </Vector3>
-                <BinaryString name="AttributesSerialize" />
                 <float name="Brightness">1</float>
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ColorSequence name="Color">0 1 0.7294118 0.09411765 0 0.5 0.9372549 0.34117648 0.16078432 0 1 1 0.34117648 0.078431375 0 </ColorSequence>
@@ -2388,7 +2269,6 @@
                   <Y>0</Y>
                 </Vector2>
                 <NumberSequence name="Squash">0 0 0 1 0 0 </NumberSequence>
-                <BinaryString name="Tags" />
                 <Content name="TextureContent">
                   <uri>rbxassetid://872910628</uri>
                 </Content>
@@ -2407,7 +2287,6 @@
                   <Y>0</Y>
                   <Z>0</Z>
                 </Vector3>
-                <BinaryString name="AttributesSerialize" />
                 <float name="Brightness">1</float>
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ColorSequence name="Color">0 1 0.7294118 0.09411765 0 0.5 0.9372549 0.34117648 0.16078432 0 1 1 0.34117648 0.078431375 0 </ColorSequence>
@@ -2439,7 +2318,6 @@
                   <Y>0</Y>
                 </Vector2>
                 <NumberSequence name="Squash">0 0 0 1 0 0 </NumberSequence>
-                <BinaryString name="Tags" />
                 <Content name="TextureContent">
                   <uri>rbxassetid://872910628</uri>
                 </Content>
@@ -2454,7 +2332,6 @@
           <Item class="Attachment" referent="386">
             <Properties>
               <string name="Name">SideView</string>
-              <BinaryString name="AttributesSerialize" />
               <CoordinateFrame name="CFrame">
                 <X>0</X>
                 <Y>0</Y>
@@ -2471,7 +2348,6 @@
               </CoordinateFrame>
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
-              <BinaryString name="Tags" />
               <bool name="Visible">false</bool>
             </Properties>
             <Item class="ParticleEmitter" referent="387">
@@ -2482,7 +2358,6 @@
                   <Y>0</Y>
                   <Z>0</Z>
                 </Vector3>
-                <BinaryString name="AttributesSerialize" />
                 <float name="Brightness">1</float>
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ColorSequence name="Color">0 1 0.7294118 0.09411765 0 0.5 0.9372549 0.34117648 0.16078432 0 1 1 0.34117648 0.078431375 0 </ColorSequence>
@@ -2514,7 +2389,6 @@
                   <Y>0</Y>
                 </Vector2>
                 <NumberSequence name="Squash">0 -0.3 0 1 -0.3 0 </NumberSequence>
-                <BinaryString name="Tags" />
                 <Content name="TextureContent">
                   <uri>rbxassetid://6783066456</uri>
                 </Content>
@@ -2533,7 +2407,6 @@
                   <Y>0</Y>
                   <Z>0</Z>
                 </Vector3>
-                <BinaryString name="AttributesSerialize" />
                 <float name="Brightness">1</float>
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ColorSequence name="Color">0 1 0.7294118 0.09411765 0 0.5 0.9372549 0.34117648 0.16078432 0 1 1 0.34117648 0.078431375 0 </ColorSequence>
@@ -2565,7 +2438,6 @@
                   <Y>0</Y>
                 </Vector2>
                 <NumberSequence name="Squash">0 -0.3 0 1 -0.3 0 </NumberSequence>
-                <BinaryString name="Tags" />
                 <Content name="TextureContent">
                   <uri>rbxassetid://6783066456</uri>
                 </Content>
@@ -2583,7 +2455,6 @@
             <string name="Name">Mag</string>
             <SharedString name="AeroMeshData">rxNJufX5oaagQE3qNtzJSQ==</SharedString>
             <bool name="Anchored">false</bool>
-            <BinaryString name="AttributesSerialize" />
             <bool name="AudioCanCollide">true</bool>
             <float name="BackParamA">-0.5</float>
             <float name="BackParamB">0.5</float>
@@ -2683,7 +2554,6 @@
               <Y>0.59711856</Y>
               <Z>0.90898407</Z>
             </Vector3>
-            <BinaryString name="Tags" />
             <Content name="TextureContent">
               <uri>rbxassetid://6598232675</uri>
             </Content>
@@ -2718,7 +2588,6 @@
           <Item class="WeldConstraint" referent="390">
             <Properties>
               <string name="Name">WeldConstraint</string>
-              <BinaryString name="AttributesSerialize" />
               <CoordinateFrame name="CFrame0">
                 <X>-0.002166748</X>
                 <Y>-0.25979614</Y>
@@ -2738,7 +2607,6 @@
               <Ref name="Part1Internal">327</Ref>
               <bool name="DefinesCapabilities">false</bool>
               <int name="State">3</int>
-              <BinaryString name="Tags" />
             </Properties>
           </Item>
         </Item>

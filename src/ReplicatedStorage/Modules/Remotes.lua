@@ -53,6 +53,11 @@ end
 
 local Remotes = {}
 
+-- S -> C SOMENTE para monstros vivos/ativos que detectaram o som.
+-- (noisePosition: Vector3, intensity: number). Sem identidade/alvo/posição futura.
+-- Não possui OnServerEvent: só sistemas do servidor podem produzir ruído.
+Remotes.NoiseDetected = getRemote("NoiseDetected")
+
 -- C -> S: "Aim", tool, unitDirection | "Toggle", tool, enabled, unitDirection, sequence.
 -- No hit, target, origin, battery or damage is accepted from a client.
 -- S -> C: "State", tool, enabled, battery, sequence (toggle acknowledgement).
@@ -73,13 +78,14 @@ Remotes.FearPresentation = getRemote("FearPresentation")
 -- Server -> Client: snapshot da sala (state, endsAt, members, roster).
 Remotes.WaitingRoom = getRemote("WaitingRoom")
 
+-- C -> S: token numérico do character atual. O cliente só confirma depois
+-- de câmera, HumanoidRootPart e controlador de movimento estarem ligados ao
+-- corpo novo. O servidor valida character + token antes de iniciar o teleporte.
+Remotes.CharacterPresentationReady = getRemote("CharacterPresentationReady")
+
 -- Opcao secreta de teste local: cliente autorizado aperta M e pede ao servidor
 -- para vestir o rig Workspace.R6 como Character, sem expor isso para todos.
 Remotes.TestRigSwap = getRemote("TestRigSwap")
-
--- Teste secreto de calibração da Glock17. O servidor valida UserId, Tool
--- equipada e incrementos pequenos antes de mudar os Attributes do Grip.
-Remotes.PistolGripTest = getRemote("PistolGripTest")
 
 --------------------------------------------------------------------------------
 -- SabotageAction
@@ -432,7 +438,7 @@ Remotes.SprintIntent = getRemote("SprintIntent")
 Remotes.OpenCrate = getRemote("OpenCrate")
 
 --------------------------------------------------------------------------------
--- ARMAS DE FOGO (client/PistolController <-> FirearmServer)
+-- DIGITAL'S OTS (client/OTSController <-> server/OTSFirearmService)
 --------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------
@@ -445,12 +451,6 @@ Remotes.OpenCrate = getRemote("OpenCrate")
 Remotes.FirearmShoot = getRemote("FirearmShoot")
 
 --------------------------------------------------------------------------------
--- FirearmHit: legado reservado, sem listener no servidor.
--- Efeitos agora nascem exclusivamente do raycast validado de FirearmShoot.
---------------------------------------------------------------------------------
-Remotes.FirearmHit = getRemote("FirearmHit")
-
---------------------------------------------------------------------------------
 -- FirearmDamage: SOMENTE Server -> Client, hitmarker confirmado.
 -- kind: "Hit" | "Head" | "Armor" | "HeadArmor".
 -- Não aceita FireServer. Dano/morte passam pelo DamageSystem e Elimination.
@@ -459,9 +459,10 @@ Remotes.FirearmDamage = getRemote("FirearmDamage")
 
 --------------------------------------------------------------------------------
 -- FirearmReload
--- Client -> Server: tool: Tool, action: "Start" | "Cancel".
+-- Client -> Server: tool: Tool, action: "Start" | "Cancel" | "Marker", marker?: string.
 -- Server -> Client: tool, state: "Start" | "Done" | "Cancelled", duration?: number.
--- Tempo e transferência de munição são do servidor. Markers não concedem munição.
+-- Tempo e transferência de munição são do servidor. Markers sincronizam apenas
+-- os sons/peças da animação; não concedem munição.
 -- Desequipar/largar/morrer cancela e restaura o pente visível.
 --------------------------------------------------------------------------------
 Remotes.FirearmReload = getRemote("FirearmReload")

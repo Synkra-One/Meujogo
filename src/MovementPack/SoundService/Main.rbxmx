@@ -2,53 +2,43 @@
 <roblox version="4"><Item class="SoundGroup" referent="178">
           <Properties>
             <string name="Name">Main</string>
-            <BinaryString name="AttributesSerialize" />
             <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
             <bool name="DefinesCapabilities">false</bool>
             <int64 name="SourceAssetId">-1</int64>
-            <BinaryString name="Tags" />
             <float name="Volume">1</float>
           </Properties>
           <Item class="SoundGroup" referent="179">
             <Properties>
               <string name="Name">Character</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
               <float name="Volume">1</float>
             </Properties>
             <Item class="SoundGroup" referent="180">
               <Properties>
                 <string name="Name">Landing</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
                 <float name="Volume">1</float>
               </Properties>
             </Item>
             <Item class="SoundGroup" referent="181">
               <Properties>
                 <string name="Name">Jumping</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
                 <float name="Volume">1</float>
               </Properties>
             </Item>
             <Item class="SoundGroup" referent="182">
               <Properties>
                 <string name="Name">Footsteps</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
                 <float name="Volume">1</float>
               </Properties>
             </Item>

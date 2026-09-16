@@ -2,7 +2,6 @@
 <roblox version="4"><Item class="LocalScript" referent="110">
           <Properties>
             <string name="Name">CustomShiftLock</string>
-            <BinaryString name="AttributesSerialize" />
             <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
             <bool name="Disabled">false</bool>
             <ContentId name="LinkedSource">
@@ -20,12 +19,10 @@
 
 require(script:WaitForChild("SmoothShiftLock"));</string>
             <int64 name="SourceAssetId">13628590040</int64>
-            <BinaryString name="Tags" />
           </Properties>
           <Item class="ModuleScript" referent="111">
             <Properties>
               <string name="Name">SmoothShiftLock</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <ContentId name="LinkedSource">
                 <null>
@@ -70,8 +67,11 @@ local Config = {
 	CAMERA_COLLISION_RELEASE    = 12,                         --// Retorno suave do ombro ao sair de uma parede
 	LOCKED_MOUSE_ICON           =                             --// Locked mouse icon
 		"rbxasset://textures/MouseLockedCursor.png",
+	-- [Meujogo] LeftControl agora e o trote (Crouching.WalkKey/JogKeys) --
+	-- lista vazia = nenhuma tecla alterna mais a camera de ombro (ela ja
+	-- fica ligada por padrao no spawn, ver mais abaixo).
 	SHIFT_LOCK_KEYBINDS         =                             --// Shift lock keybinds
-		{Enum.KeyCode.LeftControl,}
+		{}
 };
 
 --// [ Constructor: ]
@@ -344,12 +344,10 @@ end);
 
 return shiftLock;</string>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
             </Properties>
             <Item class="ModuleScript" referent="112">
               <Properties>
                 <string name="Name">Maid</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -560,13 +558,11 @@ Maid.Destroy = Maid.DoCleaning
 return Maid
 </string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
             <Item class="ModuleScript" referent="113">
               <Properties>
                 <string name="Name">Spring</string>
-                <BinaryString name="AttributesSerialize" />
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <ContentId name="LinkedSource">
                   <null>
@@ -801,7 +797,6 @@ end
 
 return Spring</string>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
               </Properties>
             </Item>
           </Item>

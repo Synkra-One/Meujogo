@@ -70,7 +70,7 @@ Criados:
 Modificados:
 
 - `src/ReplicatedStorage/Modules/GameConfig.lua`, `Remotes.lua`.
-- `src/server/init.server.luau`, `MonsterCombat.lua`, `MonsterTeleport.lua`, `StaminaSystem.lua`, `MonsterLightWeakness.lua`, `FirearmServer.lua`, `UtilityItemSystem.lua`, `WeaponSystem.lua`.
+- `src/server/init.server.luau`, `MonsterCombat.lua`, `MonsterTeleport.lua`, `StaminaSystem.lua`, `MonsterLightWeakness.lua`, `OTSFirearmService.lua`, `UtilityItemSystem.lua`, `WeaponSystem.lua`.
 - `src/client/MonsterController.client.luau`, `MonsterTeleportController.client.luau`, `MovementWatchdog.client.luau`.
 - `src/MovementPack/StarterCharacterScripts/Crouching.rbxmx`, `CustomShiftLock.rbxmx`, `Animate.rbxmx`.
 

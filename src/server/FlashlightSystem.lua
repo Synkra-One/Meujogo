@@ -1,12 +1,14 @@
 --!strict
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local StarterPack = game:GetService("StarterPack")
 local Workspace = game:GetService("Workspace")
 local Modules = game:GetService("ReplicatedStorage").Modules
 local Config = require(Modules.FlashlightConfig)
 local Rules = require(Modules.FlashlightRules)
 local Rig = require(Modules.FlashlightRig)
 local GameConfig = require(Modules.GameConfig)
+local ItemRegistry = require(Modules.ItemRegistry)
 local Remotes = require(Modules.Remotes)
 local DamageSystem = require(script.Parent.DamageSystem)
 local Round = require(script.Parent.RoundManager)
@@ -47,30 +49,58 @@ end
 local function canUse(player: Player, tool: Tool): boolean
 	local character = player.Character
 	if not character or tool.Parent ~= character or not alive(player)
-		or player:GetAttribute("Role") ~= GameConfig.Roles.Survivor
-		or player:GetAttribute("InWaitingRoom") == true then return false end
+		or (player:GetAttribute("Role") ~= GameConfig.Roles.Survivor and not RunService:IsStudio())
+		or (player:GetAttribute("InWaitingRoom") == true and not RunService:IsStudio()) then return false end
 	for _, flag in { "GrabLocked", "ShadowRushBusy", "TeleportBusy", "PowerStunned", "Amarrado" } do
 		if character:GetAttribute(flag) == true or player:GetAttribute(flag) == true then return false end
 	end
 	return true
 end
 
+local function isFlashlightCandidate(tool: Tool): boolean
+	local name = string.gsub(string.lower(tool.Name), "[^%w]", "")
+	return tool:GetAttribute("Lanterna") == true
+		or tool:GetAttribute("IsFlashlight") == true
+		or string.find(name, "lanterna", 1, true) ~= nil
+		or string.find(name, "flashlight", 1, true) ~= nil
+end
+
+local function isCurrentFlashlight(tool: Tool): boolean
+	return tool:GetAttribute("Lanterna") == true
+		and tool:GetAttribute("FlashlightModelAssetId") == ItemRegistry.Items.Lanterna.AssetId
+end
+
+local function normalizeFlashlight(tool: Tool): Tool?
+	if not isFlashlightCandidate(tool) then
+		return tool
+	end
+	if isCurrentFlashlight(tool) and Rig.Prepare(tool) then
+		return tool
+	end
+	warn(string.format("[FlashlightSystem] Lanterna antiga removida do inventario: %s", tool:GetFullName()))
+	tool:Destroy()
+	return nil
+end
+
 local function watch(tool: Instance)
-	if not tool:IsA("Tool") or tool:GetAttribute("Lanterna") ~= true or lamps[tool] then return end
-	if not Rig.Prepare(tool) then return end
-	local battery = tool:GetAttribute("Battery")
+	if not tool:IsA("Tool") then return end
+	local normalized = normalizeFlashlight(tool)
+	if not normalized or normalized:GetAttribute("Lanterna") ~= true or lamps[normalized] then return end
+	local activeTool = normalized
+	if not Rig.Prepare(activeTool) then return end
+	local battery = activeTool:GetAttribute("Battery")
 	if type(battery) ~= "number" or battery ~= battery then battery = Config.BatteryMax end
 	local state: Lamp = { battery = math.clamp(battery, 0, Config.BatteryMax), on = false,
 		direction = Vector3.new(0, 0, -1), aimAt = 0, drainAt = os.clock() }
-	lamps[tool] = state
-	setOn(tool, state, false)
-	tool.Unequipped:Connect(function() setOn(tool, state, false) end)
-	tool.AncestryChanged:Connect(function()
-		local parent = tool.Parent
+	lamps[activeTool] = state
+	setOn(activeTool, state, false)
+	activeTool.Unequipped:Connect(function() setOn(activeTool, state, false) end)
+	activeTool.AncestryChanged:Connect(function()
+		local parent = activeTool.Parent
 		local owner = if parent and parent:IsA("Model") then Players:GetPlayerFromCharacter(parent) else nil
-		if not owner or not canUse(owner, tool) then setOn(tool, state, false) end
+		if not owner or not canUse(owner, activeTool) then setOn(activeTool, state, false) end
 	end)
-	tool.Destroying:Connect(function() lamps[tool] = nil end)
+	activeTool.Destroying:Connect(function() lamps[activeTool] = nil end)
 end
 
 -- Server-only recharge API. Refill never turns a light back on automatically.
@@ -172,11 +202,38 @@ function System.Reset()
 end
 
 local function watchContainer(container: Instance)
-	container.ChildAdded:Connect(watch)
-	for _, child in container:GetChildren() do watch(child) end
+	container.DescendantAdded:Connect(watch)
+	for _, child in container:GetDescendants() do watch(child) end
+end
+
+local function normalizeStarterPack()
+	StarterPack.DescendantAdded:Connect(function(child)
+		if child:IsA("Tool") and isFlashlightCandidate(child) then
+			child:Destroy()
+		end
+	end)
+	for _, child in StarterPack:GetDescendants() do
+		if child:IsA("Tool") and isFlashlightCandidate(child) then
+			child:Destroy()
+		end
+	end
+end
+
+local function removeInitialFlashlights(player: Player)
+	for _, container in { player:FindFirstChildOfClass("Backpack"), player:FindFirstChild("StarterGear"), player.Character } do
+		if not container then continue end
+		for _, item in container:GetDescendants() do
+			if item:IsA("Tool") and isFlashlightCandidate(item) then
+				item:Destroy()
+			end
+		end
+	end
 end
 
 local function watchPlayer(player: Player)
+	-- O jogo nao concede lanterna no loadout inicial. As unicas lanternas
+	-- validas entram depois pelos pickups/loot e usam o asset configurado.
+	removeInitialFlashlights(player)
 	player.CharacterAdded:Connect(watchContainer)
 	player.CharacterRemoving:Connect(function(character)
 		clearExposure(character)
@@ -185,15 +242,24 @@ local function watchPlayer(player: Player)
 			if state then setOn(child :: Tool, state, false) end
 		end
 	end)
-	player.ChildAdded:Connect(function(child) if child:IsA("Backpack") then watchContainer(child) end end)
+	player.ChildAdded:Connect(function(child)
+		if child:IsA("Backpack") or child.Name == "StarterGear" then
+			watchContainer(child)
+		elseif child:IsA("Tool") then
+			watch(child)
+		end
+	end)
 	local backpack = player:FindFirstChildOfClass("Backpack")
 	if backpack then watchContainer(backpack) end
+	local starterGear = player:FindFirstChild("StarterGear")
+	if starterGear then watchContainer(starterGear) end
 	if player.Character then watchContainer(player.Character) end
 end
 
 function System.Init()
 	if initialized then return end
 	initialized = true
+	normalizeStarterPack()
 	Remotes.Flashlight.OnServerEvent:Connect(request)
 	Players.PlayerAdded:Connect(watchPlayer)
 	Players.PlayerRemoving:Connect(function(player) limits[player] = nil end)

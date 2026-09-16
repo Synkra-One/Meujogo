@@ -40,7 +40,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
 local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
+local ItemRegistry = require(ReplicatedStorage.Modules.ItemRegistry)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
+local ToolFactory = require(ReplicatedStorage.Modules.ToolFactory)
 
 local DropItemSystem = {}
 
@@ -48,6 +50,7 @@ local DROP_LIFETIME = 180 -- s no chão antes do Debris limpar (se ninguém pega
 local DROP_FORWARD = 3.5 -- studs à frente do personagem
 local PICKUP_DISTANCE = 8 -- alcance do ProximityPrompt "Pegar"
 local INVENTORY_SLOT_COUNT = 3 -- mesmo limite exibido pela HotbarController
+local watchedWorldTools: { [Tool]: true } = {}
 
 local function inventoryToolCount(player: Player): number
 	local count = 0
@@ -91,12 +94,15 @@ local function getHandle(tool: Tool): BasePart?
 end
 
 -- Guarda o estado original das BaseParts pra restaurar quando a Tool for pega.
-local function makeGroundReady(tool: Tool)
+local function makeGroundReady(tool: Tool, captureCurrentState: boolean?)
 	local handle = getHandle(tool)
 	if handle then
-		tool:SetAttribute("_DropOrigCanCollide", handle.CanCollide)
-		tool:SetAttribute("_DropOrigCanTouch", handle.CanTouch)
-		tool:SetAttribute("_DropOrigAnchored", handle.Anchored)
+		if type(tool:GetAttribute("_DropOrigCanCollide")) ~= "boolean" then
+			local capture = captureCurrentState ~= false
+			tool:SetAttribute("_DropOrigCanCollide", if capture then handle.CanCollide else false)
+			tool:SetAttribute("_DropOrigCanTouch", if capture then handle.CanTouch else true)
+			tool:SetAttribute("_DropOrigAnchored", if capture then handle.Anchored else false)
+		end
 		handle.CanCollide = true
 		handle.CanTouch = false
 	end
@@ -154,25 +160,50 @@ local function attachPickupPrompt(tool: Tool)
 			or (root.Position - handle.Position).Magnitude > PICKUP_DISTANCE + 2 then
 			return
 		end
-		if tool:GetAttribute("PecaRadio") == true
-			and (player:GetAttribute("Role") ~= GameConfig.Roles.Survivor or not DropItemSystem.HasInventorySpace(player)) then
-			return
-		end
-		if tool:GetAttribute("LobbyTestWeapon") == true then
-			if player:GetAttribute("InRound") == true or player:GetAttribute("InWaitingRoom") == true then return end
-			local count = 0
-			for _, item in backpack:GetChildren() do if item:IsA("Tool") then count += 1 end end
-			if character and character:FindFirstChildOfClass("Tool") then count += 1 end
-			if count >= 3 then
-				Remotes.LobbyMessage:FireClient(player, "Libere um dos 3 espaços da mochila para pegar a pistola.")
-				return
-			end
-		end
+        if tool:GetAttribute("PecaRadio") == true
+            and (player:GetAttribute("Role") ~= GameConfig.Roles.Survivor or not DropItemSystem.HasInventorySpace(player)) then
+            return
+        end
+        if tool:GetAttribute("LobbyTestWeapon") == true then
+            if player:GetAttribute("InRound") == true then return end
+            local count = 0
+            for _, item in backpack:GetChildren() do if item:IsA("Tool") then count += 1 end end
+            if character and character:FindFirstChildOfClass("Tool") then count += 1 end
+            if count >= 3 then
+                Remotes.LobbyMessage:FireClient(player, "Libere um dos 3 espaços da mochila para pegar a pistola.")
+                return
+            end
+        end
 
 		prompt:Destroy()
 		restoreFromGround(tool)
 		tool.Parent = backpack
 	end)
+end
+
+local function watchWorldTool(tool: Instance)
+	if not tool:IsA("Tool") or watchedWorldTools[tool] or tool:GetAttribute("_Dropped") ~= true then
+		return
+	end
+	watchedWorldTools[tool] = true
+	makeGroundReady(tool, false)
+	attachPickupPrompt(tool)
+	tool.Destroying:Connect(function()
+		watchedWorldTools[tool] = nil
+	end)
+	tool.AncestryChanged:Connect(function()
+		if tool.Parent == nil then
+			watchedWorldTools[tool] = nil
+		end
+	end)
+end
+
+local function setPromptLabel(tool: Tool, text: string)
+	local handle = getHandle(tool)
+	local prompt = handle and handle:FindFirstChild("PegarPrompt")
+	if prompt and prompt:IsA("ProximityPrompt") then
+		prompt.ObjectText = text
+	end
 end
 
 --[[
@@ -184,7 +215,8 @@ end
 ]]
 function DropItemSystem.PlaceInWorld(tool: Tool, cframe: CFrame, parent: Instance?, lifetime: number?)
 	tool:SetAttribute("_Dropped", true)
-	makeGroundReady(tool)
+	watchedWorldTools[tool] = true
+	makeGroundReady(tool, true)
 	tool.Parent = parent or Workspace
 
 	local handle = getHandle(tool)
@@ -213,6 +245,30 @@ function DropItemSystem.PlaceInWorld(tool: Tool, cframe: CFrame, parent: Instanc
 			end
 		end)
 	end
+end
+
+local function migrateLegacyToolPickup(instance: Instance)
+	if not instance:IsA("BasePart") or not instance:IsDescendantOf(Workspace) then
+		return
+	end
+	local itemId = string.match(instance.Name, "^(.+)_Pickup$")
+	local def = itemId and ItemRegistry.Items[itemId]
+	if not itemId or not def or def.Category ~= "Tool" then
+		return
+	end
+
+	local tool = ToolFactory.Create(itemId)
+	if not tool then
+		warn(string.format("[DropItemSystem] Pickup antigo '%s' mantido porque a Tool nao carregou.", itemId))
+		return
+	end
+
+	local parent = instance.Parent
+	local cframe = instance.CFrame
+	tool:SetAttribute("WorldItemId", itemId)
+	instance:Destroy()
+	DropItemSystem.PlaceInWorld(tool, cframe, parent, nil)
+	setPromptLabel(tool, def.DisplayName)
 end
 
 local function dropTool(player: Player, tool: Tool)
@@ -259,6 +315,15 @@ function DropItemSystem.Init()
 			return
 		end
 		dropTool(player, tool :: Tool)
+	end)
+
+	for _, descendant in Workspace:GetDescendants() do
+		migrateLegacyToolPickup(descendant)
+		watchWorldTool(descendant)
+	end
+	Workspace.DescendantAdded:Connect(function(descendant)
+		migrateLegacyToolPickup(descendant)
+		watchWorldTool(descendant)
 	end)
 end
 

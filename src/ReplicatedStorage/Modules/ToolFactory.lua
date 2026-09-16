@@ -26,7 +26,9 @@
 local ItemRegistry = require(script.Parent.ItemRegistry)
 local AssetLoader = require(script.Parent.AssetLoader)
 local ItemIcons = require(script.Parent.ItemIcons)
+local FlashlightConfig = require(script.Parent.FlashlightConfig)
 local FlashlightRig = require(script.Parent.FlashlightRig)
+local ServerStorage = game:GetService("ServerStorage")
 
 local ToolFactory = {}
 
@@ -48,6 +50,14 @@ local function scaleModelToLength(model: Model, targetLength: number)
 	local _, size = model:GetBoundingBox()
 	local longest = math.max(size.X, size.Y, size.Z, 0.01)
 	model:ScaleTo(model:GetScale() * (targetLength / longest))
+end
+
+local function sanitizeToolPart(part: BasePart)
+	part.Anchored = false
+	part.CanCollide = false
+	part.CanTouch = true
+	part.CanQuery = false
+	part.Massless = true
 end
 
 -- Desmonta um Model carregado (AssetLoader) numa Tool: a maior Part vira
@@ -76,10 +86,12 @@ local function buildToolFromAssetModel(model: Model, toolName: string): Tool?
 
 	local handle = parts[1]
 	handle.Name = "Handle"
+	sanitizeToolPart(handle)
 	handle.Parent = tool
 
 	for i = 2, #parts do
 		local part = parts[i]
+		sanitizeToolPart(part)
 		part.Parent = handle
 		local weld = Instance.new("WeldConstraint")
 		weld.Part0 = handle
@@ -89,6 +101,33 @@ local function buildToolFromAssetModel(model: Model, toolName: string): Tool?
 
 	model:Destroy() -- já esvaziado: as Parts foram todas reparentadas acima
 	return tool
+end
+
+local function sanitizeTool(tool: Tool)
+	tool.Name = "Lanterna"
+	tool.RequiresHandle = true
+	tool.CanBeDropped = false
+	for _, descendant in tool:GetDescendants() do
+		if descendant:IsA("Script") or descendant:IsA("LocalScript") or descendant:IsA("ModuleScript") then
+			descendant:Destroy()
+		elseif descendant:IsA("BasePart") then
+			descendant.Anchored = false
+			descendant.CanCollide = false
+			descendant.CanTouch = false
+			descendant.CanQuery = false
+			descendant.Massless = true
+		end
+	end
+	tool:SetAttribute("Lanterna", true)
+	tool:SetAttribute("Battery", FlashlightConfig.BatteryMax)
+	tool:SetAttribute("FlashlightOn", false)
+end
+
+local function arczisFlashlightTemplate(): Tool?
+	local package = ServerStorage:FindFirstChild("ArczisRealisticFlashlight")
+	if not package then return nil end
+	local template = package:FindFirstChild("Flashlight", true)
+	return if template and template:IsA("Tool") then template else nil
 end
 
 local CONSTRUCTORS: { [string]: () -> Tool? } = {
@@ -168,14 +207,36 @@ local CONSTRUCTORS: { [string]: () -> Tool? } = {
 	end,
 
 	Lanterna = function()
-		local template = AssetLoader.Load(ItemRegistry.Items.Lanterna.AssetId)
+		local arczisTemplate = arczisFlashlightTemplate()
+		if arczisTemplate then
+			local tool = arczisTemplate:Clone()
+			sanitizeTool(tool)
+			if not FlashlightRig.Prepare(tool) then
+				warn("[ToolFactory] A Tool Flashlight do pacote Arczis nao possui Handle valido.")
+				tool:Destroy()
+				return nil
+			end
+			tool:SetAttribute("FlashlightModelAssetId", ItemRegistry.Items.Lanterna.AssetId)
+			return tool
+		end
+
+		local assetId = ItemRegistry.Items.Lanterna.AssetId
+		local template = if type(assetId) == "number" and assetId > 0
+			then AssetLoader.Load(assetId) else nil
 		if not template then
+			warn(string.format("[ToolFactory] O modelo unico da Lanterna (%s) nao carregou; nenhuma substituta foi criada.", tostring(assetId)))
 			return nil
 		end
 
 		local model = template:Clone()
-		scaleModelToLength(model, 1.8)
-		return FlashlightRig.Build(model)
+		scaleModelToLength(model, FlashlightConfig.ModelLength)
+		local tool = FlashlightRig.Build(model)
+		if not tool then
+			warn(string.format("[ToolFactory] O asset %s nao possui uma estrutura valida de lanterna.", tostring(assetId)))
+			return nil
+		end
+		tool:SetAttribute("FlashlightModelAssetId", assetId)
+		return tool
 	end,
 
 	Chocolate = function()
@@ -229,8 +290,8 @@ local CONSTRUCTORS: { [string]: () -> Tool? } = {
 	Create(itemId)
 	Cria uma nova instância da Tool, já com o Attribute correto marcado
 	(ItemRegistry.Items[itemId].AttributeName). nil se não houver construtor
-	pra esse id, OU se o construtor existir mas falhar (ex: Lanterna/
-	Chocolate quando o asset do Toolbox não carrega).
+	pra esse id, OU se o construtor existir mas falhar. A Lanterna usa somente
+	o modelo configurado; falhas de permissao/carregamento nao criam outro visual.
 ]]
 function ToolFactory.Create(itemId: string): Tool?
 	local constructor = CONSTRUCTORS[itemId]

@@ -51,12 +51,9 @@ local SPAWN_GRACE = 0.35 -- s de Freefall abaixo disso = não conta (assentando 
 local STAGGER_SLOWDOWN = 0.45 -- fração da velocidade durante a cambaleada da queda longa
 local STAGGER_TIME = 0.9 -- s de cambaleada (com teto -- ver applyStagger)
 
--- Queda: reaproveita a MESMA anim de "fall" do Animate (o pacote não tinha
--- uma pública separada). "Land" fica vazio de propósito -- o pouso normal só
--- volta pro idle, sem anim dedicada (playOnce ignora track nil).
-local FALL_ANIM_LONG = "rbxassetid://180436148"
-local FALL_ANIM_SHORT = "rbxassetid://180436148"
-local FALL_ANIM_LAND = ""
+-- A queda no ar ja e controlada pelo Animate. Este script assume apenas o
+-- pouso, sempre com o clipe de aterrissagem escolhido pelo jogo.
+local FALL_ANIM_LAND = "rbxassetid://127719647307661"
 
 --------------------------------------------------------------------------------
 -- Recursos do pacote (podem faltar -- tudo tolerante a nil)
@@ -75,7 +72,26 @@ do
 	end
 end
 
-local fallDamageEvent = ReplicatedStorage:FindFirstChild("FallDamageEvent")
+local fallDamageEvent: RemoteEvent? = nil
+
+local function getFallDamageEvent(): RemoteEvent?
+	if fallDamageEvent and fallDamageEvent.Parent then
+		return fallDamageEvent
+	end
+	local found = ReplicatedStorage:FindFirstChild("FallDamageEvent")
+	if found and found:IsA("RemoteEvent") then
+		fallDamageEvent = found
+		return found
+	end
+	return nil
+end
+
+task.spawn(function()
+	local found = ReplicatedStorage:WaitForChild("FallDamageEvent", 10)
+	if found and found:IsA("RemoteEvent") then
+		fallDamageEvent = found
+	end
+end)
 
 --------------------------------------------------------------------------------
 -- Estado por character
@@ -84,10 +100,11 @@ local fallDamageEvent = ReplicatedStorage:FindFirstChild("FallDamageEvent")
 local humanoid: Humanoid? = nil
 local rootPart: BasePart? = nil
 local tracks: { [string]: AnimationTrack } = {}
-local landedThisCharacter = false -- pula o 1o pouso (spawn)
 local freefallStart = 0
 local freefallStartY = 0
+local freefallPeakY = 0
 local staggerToken = 0
+local landingToken = 0
 
 -- onLanded é chamado por onCharacter (StateChanged) mas o corpo vem depois.
 local onLanded: () -> ()
@@ -99,6 +116,10 @@ local function loadTrack(anim: Animator, id: string): AnimationTrack?
 		return anim:LoadAnimation(animation)
 	end)
 	if ok and track then
+		track.Looped = false
+		-- Acima do Hurt (Action2): uma queda alta causa dano no mesmo frame e,
+		-- sem esta prioridade, a reacao de dano escondia todo o pouso.
+		track.Priority = Enum.AnimationPriority.Action3
 		return track
 	end
 	return nil
@@ -106,9 +127,10 @@ end
 
 local function onCharacter(character: Model)
 	tracks = {}
-	landedThisCharacter = false
 	freefallStart = 0
+	freefallPeakY = 0
 	staggerToken += 1
+	landingToken += 1
 
 	local hum = character:FindFirstChildOfClass("Humanoid") or character:WaitForChild("Humanoid", 10)
 	humanoid = if hum and hum:IsA("Humanoid") then hum else nil
@@ -122,8 +144,6 @@ local function onCharacter(character: Model)
 
 	local animator = currentHumanoid:FindFirstChildOfClass("Animator")
 	if animator then
-		tracks.Long = loadTrack(animator, FALL_ANIM_LONG) :: AnimationTrack
-		tracks.Short = loadTrack(animator, FALL_ANIM_SHORT) :: AnimationTrack
 		tracks.Land = loadTrack(animator, FALL_ANIM_LAND) :: AnimationTrack
 	end
 
@@ -132,10 +152,20 @@ local function onCharacter(character: Model)
 			return -- character já trocou
 		end
 		if newState == Enum.HumanoidStateType.Freefall then
-			freefallStart = os.clock()
-			freefallStartY = if rootPart then rootPart.Position.Y else 0
-		elseif newState == Enum.HumanoidStateType.Landed then
-			onLanded()
+			-- Microtrocas de estado podem acontecer no mesmo salto. Nao reinicie
+			-- a medicao, senao uma queda alta vira uma queda de poucos centimetros.
+			if freefallStart == 0 then
+				freefallStart = os.clock()
+				freefallStartY = if rootPart then rootPart.Position.Y else 0
+				freefallPeakY = freefallStartY
+			end
+		elseif newState == Enum.HumanoidStateType.Landed
+			or newState == Enum.HumanoidStateType.Running
+			or newState == Enum.HumanoidStateType.RunningNoPhysics
+			or newState == Enum.HumanoidStateType.GettingUp then
+			-- Em relevos o Humanoid frequentemente passa direto de Freefall para
+			-- Running, sem emitir Landed. O defer deixa FloorMaterial atualizar.
+			task.defer(onLanded)
 		end
 	end)
 end
@@ -148,13 +178,23 @@ local function playOnce(track: AnimationTrack?, stopAfter: number)
 	if not track then
 		return
 	end
+	local landingRoot = rootPart
+	landingToken += 1
+	local myToken = landingToken
+	if landingRoot then
+		landingRoot:SetAttribute("IsLanding", true)
+	end
 	pcall(function()
+		track:Stop(0)
 		track:Play(0.1)
 	end)
 	task.delay(stopAfter, function()
 		pcall(function()
 			track:Stop(0.2)
 		end)
+		if landingToken == myToken and landingRoot and landingRoot.Parent then
+			landingRoot:SetAttribute("IsLanding", false)
+		end
 	end)
 end
 
@@ -245,17 +285,24 @@ function onLanded()
 		return
 	end
 
-	-- Ignora o assentamento do spawn.
-	if not landedThisCharacter then
-		landedThisCharacter = true
+	if freefallStart == 0 then
 		return
 	end
-	if freefallStart == 0 or (os.clock() - freefallStart) < SPAWN_GRACE then
+	if currentHumanoid.FloorMaterial == Enum.Material.Air then
+		return -- StateChanged chegou antes do contato fisico; o Heartbeat tenta de novo.
+	end
+
+	-- Limpa antes de qualquer retorno. Assim um contato curto no spawn nao e
+	-- reinterpretado como uma queda longa alguns frames depois.
+	local startedAt = freefallStart
+	freefallStart = 0
+	local airborneTime = os.clock() - startedAt
+	if airborneTime < SPAWN_GRACE then
 		return
 	end
 
-	local fallDistance = freefallStartY - hrp.Position.Y
-	freefallStart = 0
+	local fallDistance = math.max(freefallStartY, freefallPeakY) - hrp.Position.Y
+	freefallPeakY = 0
 	if fallDistance <= MIN_DAMAGE_HEIGHT then
 		playOnce(tracks.Land, 0.5)
 		return
@@ -266,7 +313,7 @@ function onLanded()
 		if soundSmall and soundSmall:IsA("Sound") then
 			soundSmall:Play()
 		end
-		playOnce(tracks.Short, 0.6)
+		playOnce(tracks.Land, 0.7)
 		spawnDust()
 		shakeCamera(0.15, 0.35)
 		return
@@ -276,15 +323,32 @@ function onLanded()
 	if soundLarge and soundLarge:IsA("Sound") then
 		soundLarge:Play()
 	end
-	playOnce(tracks.Long, 1)
+	playOnce(tracks.Land, 0.9)
 	spawnDust()
 	shakeCamera(math.min(0.2 + fallDistance / 10, 2), math.min(0.3 + fallDistance / 50, 0.7))
 	applyStagger()
 
-	if fallDamageEvent and fallDamageEvent:IsA("RemoteEvent") then
-		fallDamageEvent:FireServer(fallDistance)
+	local event = getFallDamageEvent()
+	if event then
+		event:FireServer(fallDistance)
 	end
 end
+
+-- Fallback independente de StateChanged. E essencial em encostas e relevos,
+-- onde a maquina do Humanoid pode nao passar pelo estado Landed.
+RunService.Heartbeat:Connect(function()
+	local currentHumanoid = humanoid
+	local hrp = rootPart
+	if freefallStart == 0 or not currentHumanoid or not hrp then
+		return
+	end
+	freefallPeakY = math.max(freefallPeakY, hrp.Position.Y)
+	if currentHumanoid.FloorMaterial ~= Enum.Material.Air
+		and currentHumanoid.FloorMaterial ~= Enum.Material.Water
+		and currentHumanoid:GetState() ~= Enum.HumanoidStateType.Freefall then
+		onLanded()
+	end
+end)
 
 --------------------------------------------------------------------------------
 -- Boot

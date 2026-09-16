@@ -42,6 +42,165 @@ GameConfig.Movement = {
 	SprintSpeed = 24,
 	AimSpeed = 10,
 }
+-- Os TRÊS estados de solo (andar / trotar / correr) são do script Crouching:
+-- CONFIG.WalkSpeed, CONFIG.NormalSpeed e CONFIG.SprintSpeed. Aqui só ficam as
+-- proporções que o servidor usa para reconhecê-los (Characters.MovementBands).
+
+-- Super audição: raios em studs, intervalos em segundos.
+--
+-- COMO UM PASSO VIRA (OU NÃO VIRA) UM PING -- ver server/NoiseService.lua.
+-- Não é "entrou no raio = aparece ping". São quatro camadas:
+--
+--   1. ESTADO DE MOVIMENTO. A velocidade horizontal REAL, dividida pela base
+--      de caminhada do personagem, cai em uma das faixas de
+--      GameConfig.Characters.MovementBands: Agachado < Andar < Trotar <
+--      Correr. É medição física, não Attribute do cliente.
+--
+--   2. FURTIVIDADE. O atributo do personagem (0..100) escolhe ONDE, dentro
+--      da faixa daquele estado, ficam o ALCANCE e o INTERVALO entre ruídos.
+--      As faixas de States são INVERTIDAS de propósito (Min = o que vale com
+--      Furtividade 0, Max = com Furtividade 100): quanto mais furtivo, MENOR
+--      o alcance e MAIOR o intervalo. É isso que faz Furtividade valer de
+--      verdade, e não ser número de vitrine.
+--
+--   3. SILÊNCIO. Alcance calculado abaixo de MinAudibleRadius = o ruído nem
+--      é gerado (ver o comentário lá embaixo).
+--
+--   4. DISTÂNCIA. Mesmo dentro do alcance o ping pode não chegar, e a posição
+--      chega embaralhada quanto mais longe o Monstro estiver (DistanceFalloff).
+GameConfig.Noise = {
+	Enabled = true,
+	MinimumIntensity = 1,
+
+	-- Se o alcance que a Furtividade produziu for menor que isto, o ruído é
+	-- descartado na origem: ninguém ouve, nem um Monstro colado. É o que
+	-- deixa Marina/Kevin (Furtividade 95) andarem de fato em silêncio, em
+	-- vez de emitirem um ping de 8 studs que só apareceria num encontro que
+	-- já aconteceu. Abaixe para tornar todo mundo um pouco mais audível.
+	MinAudibleRadius = 10,
+
+	-- UM ESTADO POR ENTRADA.
+	--   Intensity = "altura" do som. Só ordena o quão grosso é o som e
+	--               dimensiona a onda no visualizador; NÃO é o que a
+	--               Furtividade mexe.
+	--   Radius    = alcance máximo em studs {Furtividade 0, Furtividade 100}.
+	--   Interval  = segundos entre um ruído e o próximo, do mesmo estado
+	--               {Furtividade 0, Furtividade 100}.
+	-- Referência de balanceamento (ilha de raio 560-820 studs): andando,
+	-- 60-120 studs para quem é pouco furtivo; trotando, 180-280; correndo,
+	-- 400-500, passando disso para Furtividade muito baixa.
+	States = {
+		-- Agachado e rastejando. Praticamente mudo já na metade da escala.
+		Crouch = {
+			Intensity = 1,
+			Radius = { Min = 26, Max = 0 },
+			Interval = { Min = 2.6, Max = 5 },
+		},
+		-- Andar: lento e de baixo risco. Furtividade alta anda em silêncio.
+		Walk = {
+			Intensity = 1,
+			Radius = { Min = 120, Max = 2 },
+			Interval = { Min = 1.6, Max = 4 },
+		},
+		-- Trotar: o movimento normal do personagem. Denuncia de longe quem
+		-- não é furtivo e quase nada quem é.
+		Jog = {
+			Intensity = 2,
+			Radius = { Min = 280, Max = 25 },
+			Interval = { Min = 1, Max = 2.6 },
+		},
+		-- Correr: gasta fôlego E entrega a posição. Furtividade reduz muito,
+		-- mas nunca zera -- correr sempre é um risco.
+		Sprint = {
+			Intensity = 3,
+			Radius = { Min = 560, Max = 120 },
+			Interval = { Min = 0.7, Max = 1.8 },
+		},
+	},
+
+	-- DISTÂNCIA: quanto mais longe, menos frequente E menos confiável.
+	-- t = distância do Monstro dividida pelo alcance daquele ruído (0 na
+	-- origem, 1 na borda).
+	DistanceFalloff = {
+		-- Até esta fração do alcance o Monstro ouve sempre, na posição certa.
+		ClearFraction = 0.35,
+		-- Na borda do alcance, só esta fração dos ruídos chega.
+		EdgeChance = 0.22,
+		-- > 1 faz a perda acelerar perto da borda em vez de cair reto.
+		Exponent = 1.6,
+		-- Erro de posição do ping, em studs: o círculo marca a REGIÃO do
+		-- barulho, não o jogador. Perto é quase exato; na borda é um palpite.
+		NearSpread = 2,
+		EdgeSpread = 34,
+	},
+
+	JumpIntensity = 2,
+	LandingIntensity = 3,
+	StoneIntensity = 4,
+	PanicIntensity = 3,
+	JumpNoiseRadius = 50,
+	LandingNoiseRadius = 70,
+	RadiusPerIntensity = 25, -- API genérica: intensidade * raio, limitado abaixo
+	MaxNoiseRadius = 700, -- teto de tudo; precisa caber o alcance de corrida acima
+	ActionPingInterval = 0.35, -- limite por fonte para ações, separado dos passos
+	JumpPingInterval = 0.5,
+	LandingPingInterval = 0.5,
+	MinMovingSpeed = 0.75,
+	MinLandingDrop = 4,
+	MinAirTime = 0.2,
+	MinJumpVerticalSpeed = 5,
+	SpawnGrace = 0.5,
+
+	-- Diagnóstico. Só serve pra DESENVOLVIMENTO -- deixe os dois false no jogo.
+	Debug = {
+		-- SÓ VALE NO STUDIO. O próprio sobrevivente que fez o barulho também
+		-- recebe o ping. Existe porque teste solo cai em UM papel só
+		-- (GameConfig.Testing.SoloStart + RoleAssignment): como Monstro não há
+		-- sobrevivente pra fazer barulho, como Sobrevivente não há Monstro pra
+		-- receber -- então com um cliente só NADA aparece, e o sistema parece
+		-- quebrado mesmo estando certo. Com isto ligado dá pra validar a
+		-- cadeia inteira correndo sozinho pela ilha.
+		SelfHear = false,
+		-- SÓ VALE NO STUDIO. Ignora o raio: todo Monstro ativo recebe o ping
+		-- não importa a distância. A ilha tem 560-820 studs de raio de costa
+		-- e o Monstro nasce sozinho numa caverna na montanha -- longe de
+		-- qualquer ponto de spawn de Sobrevivente (POIs espalhados pelo
+		-- mapa). Em teste com 2 jogadores soltos no mapa, a distância real
+		-- passa fácil de 500+ studs: nenhum raio configurado (25 a 80 studs)
+		-- alcança isso, e o Monstro nunca vê nada mesmo com tudo funcionando
+		-- certo. Ligue isto pra validar o efeito sem perseguir o outro
+		-- personagem pelo mapa inteiro primeiro.
+		IgnoreRadius = false,
+		-- Loga no Output cada ping entregue E cada descarte, com o motivo
+		-- (sem partida, fora de alcance, intensidade baixa, sem Monstro vivo).
+		Verbose = false,
+	},
+
+	Visual = {
+		Duration = 0.9,
+		SecondWaveDelay = 0.12,
+		StartScale = 0.3,
+		EndScale = 1.8,
+		BaseSizePixels = 54,
+		StartTransparency = 0.05,
+		SecondWaveTransparency = 0.35,
+		StrokeThickness = 3,
+		HaloTransparency = 0.88, -- preenchimento: dá volume sem virar mancha
+		-- Contorno escuro ATRÁS do claro. Sem ele um anel fino quase branco
+		-- some em céu/areia/névoa -- era possível o efeito estar tocando e
+		-- simplesmente não dar pra ver.
+		ShadowThickness = 2,
+		ShadowTransparency = 0.35,
+		Color = { 195, 230, 238 },
+		ShadowColor = { 8, 14, 20 },
+		-- Margem em pixels fora da tela em que a onda ainda é desenhada, pra
+		-- ela não sumir de uma vez quando o ponto passa pouquinho da borda.
+		EdgeMarginPixels = 120,
+		DisplayOrder = 80,
+		ZIndex = 10,
+		MaxActivePings = 24,
+	},
+}
 
 --------------------------------------------------------------------------------
 -- VIDA / DANO
@@ -346,12 +505,35 @@ GameConfig.Characters = {
 	-- escala junto, proporcional (é multiplicador, não valor fixo).
 	-- Referência: o WalkSpeed "normal" do pacote é 12.
 	WalkSpeed = { Min = 10, Max = 17 },
-	ReferenceWalkSpeed = 12, -- CONFIG.NormalSpeed do script Crouching
+	ReferenceWalkSpeed = 12, -- CONFIG.NormalSpeed do script Crouching (= ANDAR, o padrão)
 	SprintSpeedRatio = 1.35, -- limiar real compartilhado por StaminaSystem e Fear (tropeço)
+
+	-- CLASSIFICAÇÃO ACÚSTICA DO MOVIMENTO (server/NoiseService).
+	-- A velocidade horizontal real dividida pela base de caminhada do
+	-- personagem cai em uma destas faixas. Os números saem das velocidades do
+	-- script Crouching divididas por NormalSpeed = 12:
+	--     rastejar  3/12 = 0,25 | agachar 6/12 = 0,50
+	--     ANDAR    12/12 = 1,00 | TROTAR 15/12 = 1,25 | CORRER 23/12 = 1,92
+	-- ANDAR é o padrão (ninguém segura nada); TROTAR liga segurando Control;
+	-- CORRER segurando Shift. Por serem proporções, valem igual para quem tem
+	-- SpeedMul alto ou baixo. Exemplo real: Rafael trotando faz ~21 studs/s,
+	-- o que já passa do limiar de CORRIDA de Diego (12,1 x 1,35 = 16,3) --
+	-- e ainda assim é trote, porque cada personagem é medido pela própria
+	-- base. Analógico meio inclinado cai numa faixa mais baixa e fica mais
+	-- silencioso; isso é proposital.
+	-- Se mudar as velocidades do Crouching, revise estes dois limiares.
+	MovementBands = {
+		Crouch = 0.58, -- até aqui: agachado ou rastejando
+		Walk = 1.15, -- até aqui: ANDAR (padrão, ratio 1,00 cabe com folga)
+		-- O teto do trote é o próprio SprintSpeedRatio acima (1,35): TROTAR
+		-- (ratio 1,25) cabe com folga antes dele -- um único limiar de
+		-- corrida, compartilhado com a stamina e com o tropeço do medo.
+	},
 
 	-- Stamina -> duração do sprint. Gasto por segundo e recuperação por
 	-- segundo (o valor de fôlego vai de 0 a 100).
-	StaminaDrain = { Min = 26, Max = 11 }, -- INVERTIDO: Stamina alta gasta MENOS
+	-- Dura aproximadamente 24% mais que antes (sem mudar a velocidade da corrida).
+	StaminaDrain = { Min = 21, Max = 9 }, -- INVERTIDO: Stamina alta gasta MENOS
 	StaminaRegen = { Min = 9, Max = 22 },
 	StaminaRegenDelay = 1.2, -- s parado de correr antes de começar a recuperar
 	StaminaMinToSprint = 15, -- precisa disso pra (re)começar a correr depois de zerar
@@ -363,6 +545,10 @@ GameConfig.Characters = {
 	-- Furtividade -> demora mais pra tensão subir fora de Zona Segura
 	-- (multiplica GameConfig.Tension.TimeOutsideSafeZoneThreshold).
 	StealthThreshold = { Min = 0.6, Max = 2.2 },
+	-- Furtividade também decide o ALCANCE e a FREQUÊNCIA de cada ruído de
+	-- passo que o Monstro escuta. Os números ficam por estado de movimento em
+	-- GameConfig.Noise.States, e a conta é StatScaling.NoiseRadius /
+	-- StatScaling.NoisePingInterval.
 
 	-- Reparo -> progresso da Jangada e chance de sintonizar o Rádio.
 	RepairSpeed = { Min = 0.55, Max = 1.6 },
@@ -762,7 +948,7 @@ GameConfig.Weapons = {
 }
 
 --------------------------------------------------------------------------------
--- ARMAS DE FOGO (hoje só a pistola)
+-- DIGITAL'S OTS PATCH2 (somente Glock17)
 --------------------------------------------------------------------------------
 -- Os fuzis/shotgun foram REMOVIDOS de ReplicatedStorage/WeaponAssets/Tools --
 -- o arquivo original com as 9 armas está em WeaponAssets_backup/ (fora da
@@ -843,7 +1029,7 @@ GameConfig.Testing = {
 	-- pra dar pra testar pegar/usar item sem procurar pela ilha inteira.
 	ItemsNearSpawn = true,
 
-	-- Armas de fogo entregues no Backpack a cada spawn (FirearmServer).
+	-- Armas do OTS entregues no Backpack a cada spawn (OTSFirearmService).
 	-- VAZIO = ninguém nasce armado, que é o certo: as armas ficam no CHÃO
 	-- (WeaponSpawner.lua / GameConfig.Firearms.WorldSpawns).
 	-- Pra depurar sem procurar arma no mapa, ponha { "Glock17" } aqui.

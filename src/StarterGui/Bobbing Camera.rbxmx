@@ -2,7 +2,6 @@
 <roblox version="4"><Item class="LocalScript" referent="104">
           <Properties>
             <string name="Name">Bobbing Camera</string>
-            <BinaryString name="AttributesSerialize" />
             <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
             <bool name="Disabled">false</bool>
             <ContentId name="LinkedSource">
@@ -255,7 +254,6 @@ Player.CharacterAdded:Connect(function(newChar)
 	landingTimer  = 0
 end)</string>
             <int64 name="SourceAssetId">11730333288</int64>
-            <BinaryString name="Tags" />
           </Properties>
         </Item>
       <SharedStrings>

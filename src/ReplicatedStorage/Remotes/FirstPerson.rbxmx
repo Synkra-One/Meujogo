@@ -2,11 +2,9 @@
 <roblox version="4"><Item class="RemoteEvent" referent="56">
             <Properties>
               <string name="Name">FirstPerson</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
             </Properties>
           </Item>
         <SharedStrings>

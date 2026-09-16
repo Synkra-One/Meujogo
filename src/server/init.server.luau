@@ -66,6 +66,17 @@ if not Workspace:FindFirstChild("Ilha") then
 	)
 end
 
+-- O lobby é independente da ilha: outro gerador, outra área do mundo. Avisado
+-- em separado pra não somer dentro do aviso do mapa.
+if not Workspace:FindFirstChild("Lobby") then
+	warn(
+		"[Boot] Workspace.Lobby não existe -- o terminal do aeroporto não foi gerado e salvo ainda.\n"
+			.. "Em MODO DE EDIÇÃO (sem Play), rode na Command Bar:\n"
+			.. "  local Lobby = require(game.ServerScriptService.Server.Tools.AirportLobbyGenerator) Lobby.Generate()\n"
+			.. "e SALVE o lugar (Ctrl+S). Sem ele o jogador ainda nasce certo, só que numa laje vazia."
+	)
+end
+
 local function safeInit(name: string, moduleScript: ModuleScript)
 	local loaded, module = pcall(require, moduleScript)
 	if not loaded then
@@ -97,7 +108,8 @@ safeInit("WaitingRoomManager", script.WaitingRoomManager)
 safeInit("TestRigSwap", script.TestRigSwap)
 safeInit("StaminaSystem", script.StaminaSystem)
 safeInit("FearSystem", script.FearSystem)
--- DamageSystem antes de FirearmServer/WeaponSystem: os dois roteiam o dano por
+safeInit("NoiseService", script.NoiseService)
+-- DamageSystem antes de OTSFirearmService/WeaponSystem: os dois roteiam o dano por
 -- ele (require no topo já resolve o módulo; Init() só liga MaxHealth + regen).
 safeInit("DamageSystem", script.DamageSystem)
 safeInit("AppearanceManager", script.AppearanceManager)
@@ -142,7 +154,7 @@ safeInit("SurvivorPowerSystem", script.SurvivorPowerSystem)
 safeInit("ConfrontSystem", script.ConfrontSystem)
 safeInit("CraftingSystem", script.CraftingSystem)
 safeInit("WeaponSystem", script.WeaponSystem)
-safeInit("FirearmServer", script.FirearmServer)
+safeInit("OTSFirearmService", script.OTSFirearmService)
 -- Depois de AmmoSystem + DropItemSystem: usa CreatePickup e PlaceInWorld.
 safeInit("WeaponSpawner", script.WeaponSpawner)
 safeInit("LobbyFiringRange", script.LobbyFiringRange)

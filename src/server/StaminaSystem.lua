@@ -49,8 +49,12 @@ local FearSystem = require(script.Parent.FearSystem)
 
 local StaminaSystem = {}
 
+-- Amostra já calculada no loop de stamina; consumidores não precisam de outro Heartbeat.
+-- (player, character, humanoid, root, horizontalSpeed, walkBase)
+StaminaSystem.MovementSampled = Instance.new("BindableEvent")
+
 local MAX = 100
-local TICK = 0.1 -- resolução do loop (10 Hz -- suave o bastante pra barra)
+local TICK = 0.05 -- 20 Hz: portão da corrida e HUD mudam no mesmo instante perceptível
 
 -- Fração do WalkSpeed atual acima da qual consideramos que ESTÁ correndo.
 -- O sprint do pacote é ~1.9x o andar, então 1.35x separa bem andar de correr
@@ -89,7 +93,9 @@ local function setIfChanged(instance: Instance, name: string, value: unknown)
 end
 
 local function publish(player: Player, state: State)
-	setIfChanged(player, "Stamina", math.floor(state.value + 0.5))
+	-- Uma casa decimal evita que a HUD pareça ficar parada entre saltos inteiros,
+	-- mas limita atualizações desnecessárias de Attribute pela rede.
+	setIfChanged(player, "Stamina", math.floor(state.value * 10 + 0.5) / 10)
 	setIfChanged(player, "StaminaExausto", state.exhausted or nil)
 end
 
@@ -132,7 +138,9 @@ local function step(dt: number)
 		-- todo mundo (Rafael anda mais rápido que Diego CORRE, e ainda assim
 		-- cada um gasta só quando está de fato em sprint).
 		local walkBase = StatScaling.WalkSpeed(player)
-		local moving = horizontalSpeed(root) > walkBase * SPRINT_SPEED_RATIO
+		local speed = horizontalSpeed(root)
+		StaminaSystem.MovementSampled:Fire(player, character, humanoid, root, speed, walkBase)
+		local moving = speed > walkBase * SPRINT_SPEED_RATIO
 		local shadowBusy = character:GetAttribute("ShadowRushBusy") == true
 		local grabLocked = character:GetAttribute("GrabLocked") == true
 		if character:GetAttribute("PowerInfiniteStamina") == true then

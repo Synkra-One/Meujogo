@@ -1,8 +1,8 @@
 --!strict
 --[[
-	WeaponEffects
+	OTSEffects
 	Efeitos visuais de tiro que precisam ser vistos por TODOS os jogadores,
-	por isso são criados no servidor (FirearmServer.lua) e replicam:
+	por isso são criados no servidor (OTSFirearmService.lua) e replicam:
 	  - CreateTracer(muzzleCFrame, endPosition): Beam do Muzzle até o impacto
 	  - CreateImpact(position, instance, normal): furo/partículas/som por
 	    material (Terrain -> "Ground", personagem -> "Flesh")
@@ -22,7 +22,7 @@ local WeaponAssets = SafeWait.Child(ReplicatedStorage, "WeaponAssets")
 local Effects = SafeWait.Child(WeaponAssets, "Effects")
 local Audios = SafeWait.Child(WeaponAssets, "Audios")
 
-local WeaponEffects = {}
+local OTSEffects = {}
 
 local TRACER_LIFETIME = 0.25
 local IMPACT_LIFETIME = 15
@@ -48,7 +48,7 @@ end
 -- Tracer
 --------------------------------------------------------------------------------
 
-function WeaponEffects.CreateTracer(muzzleCFrame: CFrame, endPosition: Vector3)
+function OTSEffects.CreateTracer(muzzleCFrame: CFrame, endPosition: Vector3)
 	local tracers = Effects:FindFirstChild("Tracers")
 	local startTemplate = tracers and tracers:FindFirstChild("Start")
 	local endTemplate = tracers and tracers:FindFirstChild("End")
@@ -142,7 +142,7 @@ local function spawnImpact(templateFolderName: string, position: Vector3, normal
 	end)
 end
 
-function WeaponEffects.CreateImpact(position: Vector3, instance: Instance, normal: Vector3)
+function OTSEffects.CreateImpact(position: Vector3, instance: Instance, normal: Vector3)
 	local model = instance:FindFirstAncestorOfClass("Model")
 	local isCharacter = model ~= nil and model:FindFirstChildOfClass("Humanoid") ~= nil
 
@@ -158,4 +158,4 @@ function WeaponEffects.CreateImpact(position: Vector3, instance: Instance, norma
 	end
 end
 
-return WeaponEffects
+return OTSEffects

@@ -2,6 +2,27 @@
 local Config = require(script.Parent.FlashlightConfig)
 local Rig = {}
 
+local function attachment(handle: BasePart, name: string, cf: CFrame): Attachment
+	local current = handle:FindFirstChild(name)
+	if current and current:IsA("Attachment") then
+		current.CFrame = cf
+		return current
+	end
+	if current then current:Destroy() end
+	local created = Instance.new("Attachment")
+	created.Name, created.CFrame, created.Parent = name, cf, handle
+	return created
+end
+
+local function light(parent: Attachment, className: string, name: string): Light
+	local current = parent:FindFirstChild(name)
+	if current and current.ClassName == className then return current :: any end
+	if current then current:Destroy() end
+	local created = Instance.new(className) :: Light
+	created.Name, created.Parent = name, parent
+	return created
+end
+
 local function sourceFrame(tool: Tool, handle: BasePart): CFrame
 	for _, name in { "FlashlightMuzzle", "Muzzle", "LightAttachment" } do
 		local attachment = tool:FindFirstChild(name, true)
@@ -37,27 +58,37 @@ function Rig.Prepare(tool: Tool): Attachment?
 	local handle = tool:FindFirstChild("Handle")
 	if not handle or not handle:IsA("BasePart") then return nil end
 	local existing = handle:FindFirstChild("FlashlightOrigin")
-	if existing and existing:IsA("Attachment") then return existing end
-	local cf = sourceFrame(tool, handle)
-	for _, item in tool:GetDescendants() do
-		if item:IsA("Light") or item:IsA("Beam") or item:IsA("ParticleEmitter") then item:Destroy() end
+	local cf = if existing and existing:IsA("Attachment") then existing.CFrame else sourceFrame(tool, handle)
+	if not existing then
+		for _, item in tool:GetDescendants() do
+			if item:IsA("Light") or item:IsA("Beam") or item:IsA("ParticleEmitter") then item:Destroy() end
+		end
 	end
-	local origin = Instance.new("Attachment")
-	origin.Name, origin.CFrame, origin.Parent = "FlashlightOrigin", cf, handle
-	local emitter = Instance.new("Attachment")
-	emitter.Name, emitter.CFrame, emitter.Parent = "FlashlightEmitter", cf, handle
-	local endpoint = Instance.new("Attachment")
-	endpoint.Name, endpoint.Parent = "FlashlightEnd", handle
-	local light = Instance.new("SpotLight")
-	light.Name = "LanternaLuz"
-	light.Face, light.Range, light.Angle = Enum.NormalId.Front, Config.FlashlightRange, Config.BeamAngle
-	light.Brightness, light.Color = Config.Brightness, Color3.fromRGB(240, 247, 226)
-	light.Shadows, light.Enabled, light.Parent = true, false, emitter
-	local beam = Instance.new("Beam")
+	local origin = attachment(handle, "FlashlightOrigin", cf)
+	local emitter = attachment(handle, "FlashlightEmitter", cf)
+	local endpoint = attachment(handle, "FlashlightEnd", CFrame.identity)
+	local color = Color3.fromRGB(Config.LightColor[1], Config.LightColor[2], Config.LightColor[3])
+	local hotspot = light(emitter, "SpotLight", "LanternaLuz") :: SpotLight
+	hotspot.Face, hotspot.Range, hotspot.Angle = Enum.NormalId.Front, Config.FlashlightRange, Config.BeamAngle
+	hotspot.Brightness, hotspot.Color = Config.Brightness, color
+	hotspot.Shadows, hotspot.Enabled = true, false
+	local spill = light(emitter, "SpotLight", "LanternaSpill") :: SpotLight
+	spill.Face, spill.Range, spill.Angle = Enum.NormalId.Front, Config.FlashlightRange * 0.72, Config.SpillAngle
+	spill.Brightness, spill.Color = Config.SpillBrightness, color
+	spill.Shadows, spill.Enabled = false, false
+	local fill = light(emitter, "PointLight", "LanternaFill") :: PointLight
+	fill.Range, fill.Brightness, fill.Color = Config.FillRange, Config.FillBrightness, color
+	fill.Shadows, fill.Enabled = false, false
+	local oldBeam = emitter:FindFirstChild("FlashlightBeam")
+	if oldBeam and not oldBeam:IsA("Beam") then
+		oldBeam:Destroy()
+		oldBeam = nil
+	end
+	local beam = if oldBeam then oldBeam :: Beam else Instance.new("Beam")
 	beam.Name, beam.Attachment0, beam.Attachment1 = "FlashlightBeam", emitter, endpoint
 	beam.FaceCamera, beam.LightEmission, beam.LightInfluence = true, 1, 0
 	beam.Width0, beam.Width1 = 0.16, 3
-	beam.Color = ColorSequence.new(light.Color)
+	beam.Color = ColorSequence.new(hotspot.Color)
 	beam.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.94),
 		NumberSequenceKeypoint.new(0.6, 0.985), NumberSequenceKeypoint.new(1, 1) })
 	beam.Enabled, beam.Parent = false, emitter
@@ -73,7 +104,10 @@ function Rig.Build(model: Model): Tool?
 	end
 	if #parts == 0 then model:Destroy(); return nil end
 	table.sort(parts, function(a, b) return a.Size.Magnitude > b.Size.Magnitude end)
-	local handle = if originalHandle and originalHandle:IsA("BasePart") then originalHandle else parts[1]
+	local namedHandle = model:FindFirstChild("Handle", true)
+	local handle = if originalHandle and originalHandle:IsA("BasePart") then originalHandle
+		elseif namedHandle and namedHandle:IsA("BasePart") then namedHandle
+		else parts[1]
 	local tool = Instance.new("Tool")
 	tool.Name, tool.RequiresHandle, tool.CanBeDropped = "Lanterna", true, false
 	if originalTool then tool.Grip = originalTool.Grip end
@@ -82,7 +116,7 @@ function Rig.Build(model: Model): Tool?
 	end
 	handle.Name, handle.Parent = "Handle", tool
 	for _, part in parts do
-		part.Anchored, part.CanCollide, part.Massless = false, false, true
+		part.Anchored, part.CanCollide, part.CanTouch, part.CanQuery, part.Massless = false, false, false, false, true
 		if part ~= handle then
 			part.Parent = handle
 			local weld = Instance.new("WeldConstraint")

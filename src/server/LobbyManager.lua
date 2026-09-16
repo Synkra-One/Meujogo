@@ -57,8 +57,10 @@ local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local RoundManager = require(script.Parent.RoundManager)
 local WaitingRoomManager = require(script.Parent.WaitingRoomManager)
 local IslandLayout = require(script.Parent.Tools.IslandLayout)
+local CharacterPresentation = require(script.Parent.CharacterPresentation)
 
 local LobbyManager = {}
+local initialized = false
 
 --------------------------------------------------------------------------------
 -- Lobby (posição sempre FORÇADA aqui -- ver nota no cabeçalho)
@@ -68,7 +70,7 @@ local LobbyManager = {}
 -- AreaHalf = 960 -> terreno até z = -960) e do raio máximo da ilha, pra nada
 -- da geração encostar no Lobby. Precisa bater com default.project.json e
 -- com a sala de espera (WaitingRoomManager.origin).
-local LOBBY_ORIGIN = Vector3.new(0, 10, -1500)
+local LOBBY_ORIGIN = Vector3.new(0, 40, -1500)
 
 -- Acha a instância pelo nome (recriando com a classe certa se existir com
 -- outra, ou não existir) e devolve pronta pra configurar.
@@ -361,7 +363,7 @@ local function returnEveryoneToLobby()
 	local participants = WaitingRoomManager.Reset()
 	for _, player in participants do
 		if player.Parent == Players then
-			local ok, err = pcall(function() player:LoadCharacter() end)
+			local ok, err = pcall(function() CharacterPresentation.SpawnLobbyAvatar(player) end)
 			if not ok then warn("[LobbyManager] Falha ao retornar ao lobby: " .. tostring(err)) end
 		end
 	end
@@ -392,6 +394,11 @@ local function setupIniciarPartidaPrompt()
 	prompt.Triggered:Connect(onIniciarPartidaTriggered)
 end
 
+-- Registra no carregamento do módulo. Assim o transporte já existe mesmo se
+-- alguma etapa visual do Init do lobby falhar; StartRound nunca troca o corpo
+-- e o deixa abandonado na sala de espera.
+RoundManager.SetSpawnHandler(teleportToIsland)
+
 --------------------------------------------------------------------------------
 -- Init
 --------------------------------------------------------------------------------
@@ -402,10 +409,10 @@ end
 	RoundManager. Chame uma vez no boot do servidor.
 ]]
 function LobbyManager.Init()
+	if initialized then return end
+	initialized = true
 	ensureLobbyExists()
 	setupIniciarPartidaPrompt()
-
-	RoundManager.SetSpawnHandler(teleportToIsland)
 
 	RoundManager.RoundEnded.Event:Connect(function(_winner: string, _reason: string)
 		task.delay(GameConfig.Round.IntermissionDuration, returnEveryoneToLobby)

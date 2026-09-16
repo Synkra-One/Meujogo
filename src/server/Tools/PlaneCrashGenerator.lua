@@ -57,41 +57,49 @@ local CONFIG = {
 	Seed = 2024,
 	AssetId = 15972190998,
 
-	PlaneLength = 150, -- comprimento do avião inteiro (studs) depois de escalado
+	-- Wide-body internacional: grande o bastante para a fuselagem parecer uma
+	-- estrutura explorável ao lado do personagem, sem dominar a ilha inteira.
+	PlaneLength = 260, -- comprimento do avião inteiro (studs) depois de escalado
 	SeaLevel = IslandLayout.CONFIG.SeaLevel,
 
 	Trail = {
-		WaterStart = 170, -- quanto o rastro começa ANTES da costa (dentro do mar)
-		InlandEnd = 280, -- quanto o rastro termina DEPOIS da costa (mata adentro)
-		Drift = 45, -- curva lateral máxima do rastro (studs)
-		SpreadBase = 12, -- espalhamento lateral no começo
-		SpreadEnd = 42, -- espalhamento lateral no fim (leque)
+		WaterStart = 240, -- quanto o rastro começa ANTES da costa (dentro do mar)
+		InlandEnd = 390, -- quanto o rastro termina DEPOIS da costa (mata adentro)
+		Drift = 62, -- curva lateral máxima do rastro (studs)
+		SpreadBase = 16, -- espalhamento lateral no começo
+		SpreadEnd = 58, -- espalhamento lateral no fim (leque)
+	},
+
+	CrashSite = {
+		NearbyCount = 2, -- grandes seções ainda perto da fuselagem principal
+		Length = 125, -- extensão do conjunto principal ao longo do sulco
+		Spread = 34, -- abertura lateral do local de impacto
 	},
 
 	Outliers = {
-		Count = 2, -- peças arremessadas pra longe do eixo, na mata
-		DistanceMin = 90,
-		DistanceMax = 200,
-		MinT = 0.55, -- só a partir daqui (já em terra)
+		Count = 3, -- asa/motor/cauda arremessados longe do conjunto principal
+		DistanceMin = 125,
+		DistanceMax = 310,
+		MinT = 0.5,
 	},
 
 	Debris = {
-		ExtraCount = 22, -- fragmentos extras (clones reduzidos das peças)
+		ExtraCount = 34, -- fragmentos menores conectam visualmente os locais
 		ScaleMin = 0.12,
 		ScaleMax = 0.38,
 	},
 
 	Scar = {
 		Enabled = true,
-		Depth = 3.6, -- profundidade da vala
-		Radius = 11, -- meia-largura
+		Depth = 5.2, -- profundidade da vala
+		Radius = 17, -- meia-largura
 		Step = 6, -- distância entre amostras ao longo do rastro
 	},
 
 	Clearing = {
-		TreeRemoveRadius = 26, -- árvores removidas (o avião passou por cima)
-		TreeFellRadius = 42, -- árvores tombadas (borda do impacto)
-		RockRemoveRadius = 18,
+		TreeRemoveRadius = 36, -- árvores removidas (o avião passou por cima)
+		TreeFellRadius = 58, -- árvores tombadas (borda do impacto)
+		RockRemoveRadius = 27,
 	},
 
 	-- Distância mínima do rastro a qualquer POI (marcadores em Ilha/Layout).
@@ -243,34 +251,49 @@ local function buildPlaceholderPlane(): Model
 	local dark = Color3.fromRGB(70, 72, 78)
 	local ALONG_Z = CFrame.Angles(0, math.pi / 2, 0)
 
-	-- Fuselagem: 5 segmentos ao longo de Z (comprimento total 60).
+	local function group(name: string): Model
+		local result = Instance.new("Model")
+		result.Name = name
+		result.Parent = model
+		return result
+	end
+
+	local front = group("FuselagemDianteira")
+	local rear = group("FuselagemTraseiraCauda")
+	local leftWing = group("AsaEsquerda")
+	local rightWing = group("AsaDireita")
+	local leftEngine = group("MotorEsquerdo")
+	local rightEngine = group("MotorDireito")
+
+	-- A fuselagem fica em duas seções reconhecíveis. Isso preserva a escala e
+	-- evita que cada anel do casco seja espalhado como uma peça independente.
 	for i = 1, 5 do
 		local z = (i - 3) * 12
-		newPlanePart(model, "Fuselagem_" .. i, Vector3.new(12.4, 7.5, 7.5), CFrame.new(0, 0, z) * ALONG_Z, hull, Enum.PartType.Cylinder)
+		local section = if i <= 3 then front else rear
+		newPlanePart(section, "Fuselagem_" .. i, Vector3.new(12.4, 7.5, 7.5), CFrame.new(0, 0, z) * ALONG_Z, hull, Enum.PartType.Cylinder)
+		newPlanePart(section, "FaixaE_" .. i, Vector3.new(0.3, 1.6, 11.2), CFrame.new(3.85, 0.5, z), trim)
+		newPlanePart(section, "FaixaD_" .. i, Vector3.new(0.3, 1.6, 11.2), CFrame.new(-3.85, 0.5, z), trim)
 	end
 	-- Bico.
 	for i, r in { 3.4, 2.4, 1.4, 0.7 } do
-		newPlanePart(model, "Bico_" .. i, Vector3.new(2.2, r * 2, r * 2), CFrame.new(0, 0, -30 - (i - 1) * 2) * ALONG_Z, hull, Enum.PartType.Cylinder)
+		newPlanePart(front, "Bico_" .. i, Vector3.new(2.2, r * 2, r * 2), CFrame.new(0, 0, -30 - (i - 1) * 2) * ALONG_Z, hull, Enum.PartType.Cylinder)
 	end
 	-- Cabine.
-	newPlanePart(model, "Cabine", Vector3.new(4.5, 2.4, 5), CFrame.new(0, 3.4, -22), dark)
-	-- Faixa.
-	newPlanePart(model, "Faixa", Vector3.new(0.3, 1.6, 58), CFrame.new(3.85, 0.5, 0), trim)
-	newPlanePart(model, "Faixa2", Vector3.new(0.3, 1.6, 58), CFrame.new(-3.85, 0.5, 0), trim)
+	newPlanePart(front, "Cabine", Vector3.new(4.5, 2.4, 5), CFrame.new(0, 3.4, -22), dark)
 
 	-- Asas (envergadura 64).
-	newPlanePart(model, "AsaE", Vector3.new(30, 1.2, 13), CFrame.new(-18, -1, 2) * CFrame.Angles(0, 0, math.rad(3)), hull)
-	newPlanePart(model, "AsaD", Vector3.new(30, 1.2, 13), CFrame.new(18, -1, 2) * CFrame.Angles(0, 0, math.rad(-3)), hull)
+	newPlanePart(leftWing, "AsaE", Vector3.new(30, 1.2, 13), CFrame.new(-18, -1, 2) * CFrame.Angles(0, 0, math.rad(3)), hull)
+	newPlanePart(rightWing, "AsaD", Vector3.new(30, 1.2, 13), CFrame.new(18, -1, 2) * CFrame.Angles(0, 0, math.rad(-3)), hull)
 	-- Motores sob as asas.
-	newPlanePart(model, "MotorE", Vector3.new(7, 4, 4), CFrame.new(-14, -3, 1) * ALONG_Z, dark, Enum.PartType.Cylinder)
-	newPlanePart(model, "MotorD", Vector3.new(7, 4, 4), CFrame.new(14, -3, 1) * ALONG_Z, dark, Enum.PartType.Cylinder)
+	newPlanePart(leftEngine, "MotorE", Vector3.new(7, 4, 4), CFrame.new(-14, -3, 1) * ALONG_Z, dark, Enum.PartType.Cylinder)
+	newPlanePart(rightEngine, "MotorD", Vector3.new(7, 4, 4), CFrame.new(14, -3, 1) * ALONG_Z, dark, Enum.PartType.Cylinder)
 
 	-- Cauda.
-	newPlanePart(model, "Leme", Vector3.new(1, 11, 9), CFrame.new(0, 6, 27), hull)
-	newPlanePart(model, "EstabE", Vector3.new(14, 1, 6), CFrame.new(-6, 1, 28), hull)
-	newPlanePart(model, "EstabD", Vector3.new(14, 1, 6), CFrame.new(6, 1, 28), hull)
+	newPlanePart(rear, "Leme", Vector3.new(1, 11, 9), CFrame.new(0, 6, 27), hull)
+	newPlanePart(rear, "EstabE", Vector3.new(14, 1, 6), CFrame.new(-6, 1, 28), hull)
+	newPlanePart(rear, "EstabD", Vector3.new(14, 1, 6), CFrame.new(6, 1, 28), hull)
 
-	for _, d in model:GetChildren() do
+	for _, d in model:GetDescendants() do
 		if d:IsA("BasePart") then
 			d.TopSurface = Enum.SurfaceType.Smooth
 			d.BottomSurface = Enum.SurfaceType.Smooth
@@ -307,7 +330,8 @@ local function gatherPieces(source: Model): { Model }
 		if child:IsA("BasePart") or child:IsA("Model") then
 			index += 1
 			local wrapper = Instance.new("Model")
-			wrapper.Name = "Peca_" .. index
+			wrapper.Name = child.Name
+			wrapper:SetAttribute("NomeOriginal", child.Name)
 			child.Parent = wrapper
 			-- PrimaryPart de propósito não definido: assim o pivô é o centro
 			-- da caixa, que é o que faz a peça girar "em torno dela mesma".
@@ -323,13 +347,35 @@ local function gatherPieces(source: Model): { Model }
 		if descendant:IsA("BasePart") then
 			index += 1
 			local wrapper = Instance.new("Model")
-			wrapper.Name = "Peca_" .. index
+			wrapper.Name = descendant.Name
+			wrapper:SetAttribute("NomeOriginal", descendant.Name)
 			descendant.Parent = wrapper
 			table.insert(pieces, wrapper)
 		end
 	end
 
 	return pieces
+end
+
+local function pieceRole(piece: Model): string
+	local names = string.lower(piece.Name)
+	for _, descendant in piece:GetDescendants() do
+		names ..= " " .. string.lower(descendant.Name)
+	end
+
+	if string.find(names, "fusel") or string.find(names, "body") or string.find(names, "hull")
+		or string.find(names, "cabine") or string.find(names, "cockpit") or string.find(names, "bico")
+		or string.find(names, "nose") then
+		return "Fuselagem"
+	elseif string.find(names, "asa") or string.find(names, "wing") then
+		return "Asa"
+	elseif string.find(names, "motor") or string.find(names, "engine") or string.find(names, "turbina") then
+		return "Motor"
+	elseif string.find(names, "cauda") or string.find(names, "tail") or string.find(names, "leme")
+		or string.find(names, "estab") then
+		return "Cauda"
+	end
+	return "Fragmento"
 end
 
 local function pieceVolume(piece: Model): number
@@ -659,6 +705,7 @@ function PlaneCrashGenerator.Generate(seed: number?)
 	end
 	for _, piece in pieces do
 		piece:ScaleTo(piece:GetScale() * scaleFactor)
+		piece:SetAttribute("DestrocoTipo", pieceRole(piece))
 	end
 
 	-- Maior primeiro: peça pesada viaja mais longe.
@@ -683,7 +730,16 @@ function PlaneCrashGenerator.Generate(seed: number?)
 	local placed = 0
 	local counts = { Mar = 0, Praia = 0, Floresta = 0 }
 
-	local function place(piece: Model, x: number, z: number, yaw: number, tumble: number, sinkFrac: number, isMain: boolean)
+	local function place(
+		piece: Model,
+		x: number,
+		z: number,
+		yaw: number,
+		tumble: number,
+		sinkFrac: number,
+		isMain: boolean,
+		cluster: string
+	)
 		local y, material, gx, gz = findGround(x, z)
 		if y == nil then
 			piece:Destroy()
@@ -700,6 +756,7 @@ function PlaneCrashGenerator.Generate(seed: number?)
 		applyCollisionFidelity(piece)
 
 		local folder = zoneFolderFor(y, material, mar, praia, floresta)
+		piece:SetAttribute("GrupoAcidente", cluster)
 		piece.Parent = folder
 		counts[folder.Name] += 1
 		placed += 1
@@ -713,15 +770,15 @@ function PlaneCrashGenerator.Generate(seed: number?)
 				if anchor then
 					local smoke = Instance.new("Smoke")
 					smoke.Color = Color3.fromRGB(90, 90, 95)
-					smoke.Size = 8
-					smoke.Opacity = 0.18
-					smoke.RiseVelocity = 6
+					smoke.Size = 18
+					smoke.Opacity = 0.24
+					smoke.RiseVelocity = 8
 					smoke.Parent = anchor
 
 					local glow = Instance.new("PointLight")
 					glow.Color = Color3.fromRGB(255, 130, 50)
-					glow.Brightness = 0.35
-					glow.Range = 14
+					glow.Brightness = 0.6
+					glow.Range = 26
 					glow.Shadows = false
 					glow.Parent = anchor
 				end
@@ -729,32 +786,126 @@ function PlaneCrashGenerator.Generate(seed: number?)
 		end
 	end
 
-	-- 4a) Destroço principal: fim do rastro, alinhado com a trajetória,
-	--     nariz enterrado.
+	-- Separa as peças por função. O nome vem do asset quando ele é bem
+	-- organizado; no fallback, os grupos acima garantem essa classificação.
+	local unplaced = table.clone(pieces)
+	local function takePreferred(preferred: { string }): Model?
+		local bestIndex, bestScore = nil, -math.huge
+		for index, candidate in unplaced do
+			local role = pieceRole(candidate)
+			local preference = 0
+			for rank, wanted in preferred do
+				if role == wanted then
+					preference = (#preferred - rank + 1) * 1e12
+					break
+				end
+			end
+			local score = preference + pieceVolume(candidate)
+			if score > bestScore then
+				bestIndex, bestScore = index, score
+			end
+		end
+		if not bestIndex then
+			return nil
+		end
+		return table.remove(unplaced, bestIndex)
+	end
+
+	-- 4a) Local principal: a maior seção da fuselagem termina o sulco. Outras
+	-- seções grandes ficam perto o bastante para o jogador ler um único avião.
 	local mainT = rng:NextNumber(0.9, 0.96)
 	local mainP = trailPoint(mainT)
-	place(pieces[1], mainP.X, mainP.Z, trailYaw(mainT) + rng:NextNumber(-0.25, 0.25), 0.14, 0.22, true)
+	local mainPiece = takePreferred({ "Fuselagem" })
+	assert(mainPiece, "avião sem peça principal")
+	place(mainPiece, mainP.X, mainP.Z, trailYaw(mainT) + rng:NextNumber(-0.18, 0.18), 0.12, 0.18, true, "ImpactoPrincipal")
 
-	-- 4b) Peças arremessadas pra fora do eixo, mata adentro.
-	local outlierCount = math.min(CONFIG.Outliers.Count, math.max(#pieces - 2, 0))
-	local nextIndex = 2
+	-- Manchas escuras largas tornam o ponto final legível mesmo à noite e
+	-- escondem a transição geométrica entre a fuselagem e o sulco de Terrain.
+	local impactGroundY, impactMaterial = probe(mainP.X, mainP.Z)
+	if impactGroundY then
+		local impactMarks = Instance.new("Model")
+		impactMarks.Name = "LocalDoImpacto"
+		impactMarks:SetAttribute("LocalDoImpacto", true)
+		impactMarks:SetAttribute("GrupoAcidente", "ImpactoPrincipal")
+		impactMarks.Parent = zoneFolderFor(impactGroundY, impactMaterial, mar, praia, floresta)
+
+		for i = 1, 4 do
+			local offset = side * rng:NextNumber(-22, 22) + outward * rng:NextNumber(-48, 34)
+			local markY = probe(mainP.X + offset.X, mainP.Z + offset.Z)
+			if markY then
+				local radius = rng:NextNumber(18, 34)
+				local mark = Instance.new("Part")
+				mark.Name = "SoloQueimado_" .. i
+				mark.Shape = Enum.PartType.Cylinder
+				mark.Size = Vector3.new(0.18, radius * 2, radius * rng:NextNumber(1.3, 2))
+				mark.CFrame = CFrame.new(mainP.X + offset.X, markY + 0.08, mainP.Z + offset.Z)
+					* CFrame.Angles(0, trailYaw(mainT) + rng:NextNumber(-0.3, 0.3), math.pi / 2)
+				mark.Anchored = true
+				mark.CanCollide = false
+				mark.CanQuery = false
+				mark.CanTouch = false
+				mark.CastShadow = false
+				mark.Material = Enum.Material.Slate
+				mark.Color = Color3.fromRGB(31, 29, 28)
+				mark.Transparency = 0.12
+				mark.Parent = impactMarks
+			end
+		end
+	end
+
+	local nearbyCount = math.min(CONFIG.CrashSite.NearbyCount, #unplaced)
+	for i = 1, nearbyCount do
+		local nearby = takePreferred(if i == 1 then { "Fuselagem", "Cauda" } else { "Asa", "Fuselagem" })
+		if nearby then
+			local distanceBehind = CONFIG.CrashSite.Length * i / (nearbyCount + 1)
+			local t = math.clamp(mainT - distanceBehind / trailLength, 0.65, 0.94)
+			local dir = if i % 2 == 0 then 1 else -1
+			local base = trailPoint(t)
+			local p = base + side * dir * rng:NextNumber(12, CONFIG.CrashSite.Spread)
+			place(nearby, p.X, p.Z, trailYaw(t) + rng:NextNumber(-0.5, 0.5), 0.28, 0.16, false, "ImpactoPrincipal")
+		end
+	end
+
+	-- 4b) Grandes destroços secundários. Priorizamos asa e motor para que os
+	-- pontos distantes continuem imediatamente reconhecíveis como avião.
+	local outlierCount = math.min(CONFIG.Outliers.Count, #unplaced)
 	for i = 1, outlierCount do
-		local piece = pieces[nextIndex]
-		nextIndex += 1
+		local wanted = if i == 1 then { "Asa", "Cauda" } elseif i == 2 then { "Motor", "Asa" } else { "Cauda", "Motor", "Asa" }
+		local piece = takePreferred(wanted)
+		if not piece then
+			break
+		end
 		local t = rng:NextNumber(CONFIG.Outliers.MinT, 0.95)
 		local base = trailPoint(t)
 		local dir = if i % 2 == 0 then 1 else -1
 		local dist = rng:NextNumber(CONFIG.Outliers.DistanceMin, CONFIG.Outliers.DistanceMax)
-		local p = base + side * (dir * dist) + outward * rng:NextNumber(-25, 25)
-		place(piece, p.X, p.Z, rng:NextNumber(0, TAU), 0.5, 0.15, false)
+		local longitudinal = outward * rng:NextNumber(-25, 25)
+		local p = base + side * (dir * dist) + longitudinal
+		local foundLand = false
+		-- Costas muito recortadas podem deixar o primeiro ponto no oceano.
+		-- Recolhe a distância aos poucos, preservando o lado do arremesso.
+		for shrink = 0, 6 do
+			local factor = 1 - shrink * 0.12
+			local candidate = base + side * (dir * dist * factor) + longitudinal
+			local candidateY, candidateMaterial = probe(candidate.X, candidate.Z)
+			if candidateY and candidateY >= CONFIG.SeaLevel and candidateMaterial ~= Enum.Material.Rock then
+				p = candidate
+				foundLand = true
+				break
+			end
+		end
+		if not foundLand then
+			p = base + side * (dir * 35)
+		end
+		place(piece, p.X, p.Z, rng:NextNumber(0, TAU), 0.55, 0.14, false, "DestrocoDistante")
 	end
 
-	-- 4c) O resto ao longo do rastro. Peça maior = t maior (viajou mais);
-	--     leque lateral cresce com t.
-	local remaining = #pieces - nextIndex + 1
+	-- 4c) O restante forma a ligação visual entre o primeiro contato no mar,
+	-- a praia e o local principal mata adentro.
+	local remaining = #unplaced
 	local slot = 0
-	for i = nextIndex, #pieces do
-		local piece = pieces[i]
+	while #unplaced > 0 do
+		local piece = table.remove(unplaced, 1)
 		-- pieces está ordenado do maior pro menor, então invertemos: os
 		-- últimos (menores) ficam com t baixo, perto do primeiro impacto.
 		local frac = if remaining > 1 then 1 - (slot / (remaining - 1)) else 0.5
@@ -772,7 +923,8 @@ function PlaneCrashGenerator.Generate(seed: number?)
 			if big then trailYaw(t) + rng:NextNumber(-0.9, 0.9) else rng:NextNumber(0, TAU),
 			if big then 0.25 else 0.7,
 			rng:NextNumber(0.1, 0.3),
-			false
+			false,
+			"Rastro"
 		)
 		slot += 1
 	end
@@ -782,7 +934,7 @@ function PlaneCrashGenerator.Generate(seed: number?)
 	local placedPieces = root:GetDescendants()
 	local sourcesForDebris: { Model } = {}
 	for _, d in placedPieces do
-		if d:IsA("Model") and d.Parent and d.Parent:IsA("Folder") then
+		if d:IsA("Model") and d.Parent and d.Parent:IsA("Folder") and d:GetAttribute("DestrocoTipo") ~= nil then
 			table.insert(sourcesForDebris, d)
 		end
 	end
@@ -804,7 +956,8 @@ function PlaneCrashGenerator.Generate(seed: number?)
 			local spread = (CONFIG.Trail.SpreadBase + (CONFIG.Trail.SpreadEnd - CONFIG.Trail.SpreadBase) * t) * 1.8
 			local base = trailPoint(t)
 			local p = base + side * rng:NextNumber(-spread, spread) + outward * rng:NextNumber(-10, 10)
-			place(fragment, p.X, p.Z, rng:NextNumber(0, TAU), 0.9, rng:NextNumber(0.05, 0.35), false)
+			fragment:SetAttribute("DestrocoTipo", "Fragmento")
+			place(fragment, p.X, p.Z, rng:NextNumber(0, TAU), 0.9, rng:NextNumber(0.05, 0.35), false, "Fragmento")
 		end
 	end
 

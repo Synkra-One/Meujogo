@@ -2,7 +2,6 @@
 <roblox version="4"><Item class="LocalScript" referent="114">
           <Properties>
             <string name="Name">Crouching</string>
-            <BinaryString name="AttributesSerialize" />
             <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
             <bool name="Disabled">false</bool>
             <ContentId name="LinkedSource">
@@ -66,9 +65,22 @@ local vignetteTween = nil
 -- =============================================
 -- CONFIG
 -- =============================================
+-- [Meujogo] TRES ESTADOS DE SOLO, no estilo Friday the 13th:
+--   ANDAR  (NormalSpeed) -- o movimento PADRAO: quem nao segura nada esta
+--                           andando, exatamente como era antes desta mudanca
+--                           (o unico estado de solo do jogo, ate aqui).
+--   TROTAR (JogSpeed)    -- mais rapido que andar, mais lento que correr.
+--                           Segura ControlKey pra ligar; solta pra voltar a
+--                           andar. Nao gasta folego.
+--   CORRER (SprintSpeed) -- maximo, gasta folego, denuncia a posicao.
+-- A ordem de barulho que o servidor enxerga sai dessas proporcoes sobre
+-- NormalSpeed = 12 (ver GameConfig.Characters.MovementBands):
+--   rastejar 0,25 &lt; agachar 0,50 &lt; ANDAR 1,00 &lt; TROTAR 1,25 &lt; CORRER 1,92.
+-- Mexer aqui muda a classificacao de ruido: revise as bandas junto.
 local CONFIG = {
-	NormalSpeed  = 12,
-	SprintSpeed  = 23,
+	NormalSpeed  = 12, -- ANDAR (padrao)
+	JogSpeed     = 15, -- TROTAR (segurar ControlKey)
+	SprintSpeed  = 23, -- CORRER
 	CrouchSpeed  = 6,
 	CrawlSpeed   = 3,
 	WaterSpeed   = 7, -- [Meujogo] teto de velocidade nadando / na agua
@@ -83,6 +95,8 @@ local CONFIG = {
 
 	DefaultFOV   = 70,
 	SprintFOV    = 90,
+	JogFOV       = 78, -- [Meujogo] entre o padrao (70) e o de correr (90)
+	JogFOVTime   = 0.3,
 	CrouchFOV    = 62,
 	CrawlFOV     = 55,
 
@@ -105,6 +119,11 @@ local CONFIG = {
 
 	CrouchKey  = Enum.KeyCode.C,
 	CrawlKey   = Enum.KeyCode.Z,
+	-- [Meujogo] TROTAR e SEGURAR (igual o sprint), nao alternavel.
+	JogKeys = {
+		Enum.KeyCode.LeftControl,
+		Enum.KeyCode.RightControl,
+	},
 	SprintKeys = {
 		Enum.KeyCode.LeftShift,
 		Enum.KeyCode.RightShift,
@@ -113,14 +132,27 @@ local CONFIG = {
 	ActionPriority = 2500,
 }
 
-local ANIMATION_IDS = {
-	Crouching = "rbxassetid://125164434023167",
-	CrouchWalk = "rbxassetid://80429715000556",
-	CrouchToCrawl = "",
-	CrawlIdle = "",
-	CrawlWalk = "",
-	CrawlToCrouch = "",
+local ANIMATION_PROFILE = "Previous"
+local ANIMATION_PROFILES = {
+	ImportedArczis = {
+		Crouching = "rbxassetid://99310824682831",
+		CrouchWalk = "rbxassetid://75389389155590",
+		CrouchToCrawl = "rbxassetid://112601350268211",
+		CrawlIdle = "rbxassetid://73311533107544",
+		CrawlWalk = "rbxassetid://95112663243010",
+		CrawlToCrouch = "rbxassetid://83587230625164",
+	},
+	Previous = {
+		Crouching = "rbxassetid://108853143115126",
+		CrouchWalk = "rbxassetid://125168404409395",
+		CrouchToCrawl = "",
+		CrawlIdle = "",
+		CrawlWalk = "",
+		CrawlToCrouch = "",
+	},
 }
+local ANIMATION_IDS = ANIMATION_PROFILES[ANIMATION_PROFILE]
+assert(ANIMATION_IDS, "Perfil de animação inválido: " .. tostring(ANIMATION_PROFILE))
 
 local ANIMATION_ALIASES = {
 	Crouching = { "Crouching", "CrouchIdle", "Crouch Idle", "Crouch", "Agachar", "Agachado", "AgacharIdle" },
@@ -139,6 +171,8 @@ local isCrawling        = false
 local isTransitioning   = false
 local isSprinting       = false
 local sprintKeyHeld     = false
+local isJogging         = false -- [Meujogo] trotar (segurando ControlKey)
+local jogKeyHeld        = false
 local crouchDebounce    = true
 local crawlDebounce     = true
 local isOnGround        = true
@@ -347,7 +381,8 @@ local function tweenFOV(target, duration)
 	Camera = workspace.CurrentCamera
 	if not Camera then return end
 	if Character:GetAttribute("FirearmAiming") == true then
-		target = math.min(target, 62)
+		local aimFOV = Character:GetAttribute("FirearmAimFOV")
+		target = math.min(target, if type(aimFOV) == "number" then aimFOV else 62)
 	end
 	-- One FOV owner: compose the ability with the movement/aim target here.
 	if Character:GetAttribute("ShadowRushBusy") == true then
@@ -364,6 +399,9 @@ end
 
 Character:GetAttributeChangedSignal("FirearmAiming"):Connect(function()
 	tweenFOV(movementFOV, 0.18)
+end)
+Character:GetAttributeChangedSignal("FirearmAimFOV"):Connect(function()
+	if Character:GetAttribute("FirearmAiming") == true then tweenFOV(movementFOV, 0.18) end
 end)
 Character:GetAttributeChangedSignal("ShadowRushFOV"):Connect(function()
 	tweenFOV(movementFOV, 0.12)
@@ -383,8 +421,15 @@ local function tweenCamOffset(y, duration)
 	):Play()
 end
 
-local function setVignette(targetTransparency, duration)
+-- O crouch/crawl e a mira OTS compartilham a mesma vinheta do jogo.
+-- movementVignetteTransparency guarda o estado de movimento; a mira apenas
+-- compõe o resultado, evitando um segundo ScreenGui sobre a tela.
+local movementVignetteTransparency = 1
+local function renderVignette(targetTransparency, duration)
 	if not VignetteElement then return end
+	if Character:GetAttribute("FirearmAiming") == true then
+		targetTransparency = math.min(targetTransparency, 0.6)
+	end
 	if vignetteTween then
 		vignetteTween:Cancel()
 		vignetteTween = nil
@@ -404,6 +449,15 @@ local function setVignette(targetTransparency, duration)
 	)
 	vignetteTween:Play()
 end
+
+local function setVignette(targetTransparency, duration)
+	movementVignetteTransparency = targetTransparency
+	renderVignette(targetTransparency, duration)
+end
+
+Character:GetAttributeChangedSignal("FirearmAiming"):Connect(function()
+	renderVignette(movementVignetteTransparency, 0.18)
+end)
 
 local SPEED_FLOOR = 0.001
 
@@ -429,8 +483,42 @@ local function applySpeed()
 		safeSetSpeed(CONFIG.CrouchSpeed)
 	elseif isSprinting then
 		safeSetSpeed(CONFIG.SprintSpeed)
+	elseif isJogging then
+		safeSetSpeed(CONFIG.JogSpeed)
 	else
-		safeSetSpeed(CONFIG.NormalSpeed)
+		safeSetSpeed(CONFIG.NormalSpeed) -- ANDAR: o padrao de quem nao aperta nada
+	end
+end
+
+-- [Meujogo] TROTAR: segura ControlKey pra ligar, solta pra voltar a andar --
+-- igual o sprint, so que mais lento e sem gastar folego. O Attribute e so
+-- para o proprio cliente (animacao/HUD): quem decide o barulho no servidor
+-- e a VELOCIDADE medida, nunca este booleano -- entao forjar "estou andando"
+-- nao silencia ninguem.
+local function canJogNow()
+	if Character:GetAttribute("FearTripping") == true then return false end
+	if Character:GetAttribute("FirearmAiming") == true then return false end
+	return true
+end
+
+local function startJog()
+	if isCrouching or isCrawling or isTransitioning or isSprinting then return end
+	if isJogging then return end
+	if not canJogNow() then return end
+
+	isJogging = true
+	RootPart:SetAttribute("IsJogging", true)
+	applySpeed()
+	tweenFOV(CONFIG.JogFOV, CONFIG.JogFOVTime)
+end
+
+local function stopJog()
+	if not isJogging then return end
+	isJogging = false
+	RootPart:SetAttribute("IsJogging", false)
+	applySpeed()
+	if not isCrouching and not isCrawling and not isSprinting then
+		tweenFOV(CONFIG.DefaultFOV, CONFIG.DefaultFOVTime)
 	end
 end
 
@@ -557,6 +645,9 @@ local function startSprint()
 
 	isSprinting = true
 	RootPart:SetAttribute("IsSprinting", true)
+	-- [Meujogo] correr cancela o trote: Shift e intencao explicita de barulho.
+	-- Chamado DEPOIS de isSprinting = true para nao disputar o FOV da corrida.
+	stopJog()
 	applySpeed()
 	tweenFOV(CONFIG.SprintFOV, CONFIG.SprintFOVTime)
 end
@@ -679,7 +770,9 @@ local function doCrouch()
 
 	crouchDebounce = false
 	isSprinting    = false
+	isJogging      = false
 	RootPart:SetAttribute("IsSprinting", false)
+	RootPart:SetAttribute("IsJogging", false)
 	isCrouching    = true
 
 	RootPart:SetAttribute("IsCrouching", true)
@@ -795,6 +888,16 @@ UIS.InputBegan:Connect(function(input, typing)
 			return
 		end
 	end
+
+	for _, key in ipairs(CONFIG.JogKeys) do
+		if input.KeyCode == key then
+			jogKeyHeld = true
+			if not isCrouching and not isCrawling and not isTransitioning and not isSprinting then
+				startJog()
+			end
+			return
+		end
+	end
 end)
 
 UIS.InputEnded:Connect(function(input, _typing)
@@ -805,20 +908,37 @@ UIS.InputEnded:Connect(function(input, _typing)
 			return
 		end
 	end
+
+	for _, key in ipairs(CONFIG.JogKeys) do
+		if input.KeyCode == key then
+			jogKeyHeld = false
+			stopJog()
+			return
+		end
+	end
 end)
 
 -- =============================================
 -- HEARTBEAT
 -- =============================================
 RunService.Heartbeat:Connect(function(dt)
+	-- Character swap pode acontecer enquanto Shift continua fisicamente
+	-- pressionado; nesse caso não existe um novo InputBegan para o script
+	-- recém-criado. Reconciliar com o teclado torna o sprint determinístico.
+	if UIS.KeyboardEnabled then
+		sprintKeyHeld = UIS:IsKeyDown(Enum.KeyCode.LeftShift)
+			or UIS:IsKeyDown(Enum.KeyCode.RightShift)
+	end
 	if Character:GetAttribute("PowerStunned") == true then
 		stopSprint()
+		stopJog()
 		Humanoid.WalkSpeed = 0
 		Humanoid.Jump = false
 		return
 	end
 	if Character:GetAttribute("ShadowRushBusy") == true then
 		stopSprint()
+		stopJog()
 		Humanoid.WalkSpeed = rushSpeed()
 		Humanoid.Jump = false
 		return
@@ -835,8 +955,10 @@ RunService.Heartbeat:Connect(function(dt)
 		targetSpeed = CONFIG.CrouchSpeed
 	elseif isSprinting then
 		targetSpeed = CONFIG.SprintSpeed
+	elseif isJogging then
+		targetSpeed = CONFIG.JogSpeed
 	else
-		targetSpeed = CONFIG.NormalSpeed
+		targetSpeed = CONFIG.NormalSpeed -- ANDAR
 	end
 	Humanoid.WalkSpeed = math.max(targetSpeed, SPEED_FLOOR)
 
@@ -852,7 +974,7 @@ RunService.Heartbeat:Connect(function(dt)
 	-- Attribute no character: SpeedMultiplier normal, WeakenedSpeedMultiplier
 	-- enquanto fraco pela luz; nil pra quem nao e Monstro).
 	local monMul = Character:GetAttribute("MonsterSpeedMul")
-	if type(monMul) == "number" and monMul > 0 and Humanoid.WalkSpeed > SPEED_FLOOR then
+	if type(monMul) == "number" and monMul &gt; 0 and Humanoid.WalkSpeed &gt; SPEED_FLOOR then
 		Humanoid.WalkSpeed *= monMul
 	end
 
@@ -860,7 +982,7 @@ RunService.Heartbeat:Connect(function(dt)
 	-- publica esse Attribute; Rafael ~1.4x, Diego ~0.9x). Multiplica junto com
 	-- o do Monstro, entao os dois compoem.
 	local statMul = Character:GetAttribute("SpeedMul")
-	if type(statMul) == "number" and statMul > 0 and Humanoid.WalkSpeed > SPEED_FLOOR then
+	if type(statMul) == "number" and statMul &gt; 0 and Humanoid.WalkSpeed &gt; SPEED_FLOOR then
 		Humanoid.WalkSpeed *= statMul
 	end
 
@@ -942,6 +1064,14 @@ RunService.Heartbeat:Connect(function(dt)
 				startSprint()
 			end
 		end
+
+		if not isSprinting then
+			if isJogging and (notMoving or not canJogNow()) then
+				stopJog()
+			elseif not isJogging and jogKeyHeld and canJogNow() then
+				startJog()
+			end
+		end
 	end
 end)
 
@@ -1015,6 +1145,7 @@ plr.CharacterAdded:Connect(function(newChar)
 	isCrawling        = false
 	isTransitioning   = false
 	isSprinting       = false
+	isJogging         = false
 	sprintKeyHeld     = false
 	crouchDebounce    = true
 	crawlDebounce     = true
@@ -1027,6 +1158,7 @@ plr.CharacterAdded:Connect(function(newChar)
 	RootPart:SetAttribute("IsCrawling",      false)
 	RootPart:SetAttribute("CrawlLock",       false)
 	RootPart:SetAttribute("IsSprinting",    false)
+	RootPart:SetAttribute("IsJogging",       false)
 	RootPart:SetAttribute("CanSprint",       true)
 	RootPart:SetAttribute("ForceStopSprint", false)
 
@@ -1068,16 +1200,16 @@ RootPart:SetAttribute("IsCrouching",     false)
 RootPart:SetAttribute("IsCrawling",      false)
 RootPart:SetAttribute("CrawlLock",       false)
 RootPart:SetAttribute("IsSprinting",    false)
+RootPart:SetAttribute("IsJogging",       false)
 RootPart:SetAttribute("CanSprint",       true)
-RootPart:SetAttribute("ForceStopSprint", false)</string>
+RootPart:SetAttribute("ForceStopSprint", false)
+Character:SetAttribute("MovementControllerReady", true)</string>
             <int64 name="SourceAssetId">-1</int64>
-            <BinaryString name="Tags" />
           </Properties>
           <Item class="Sound" referent="115">
             <Properties>
               <string name="Name">GetUp</string>
               <bool name="AcousticSimulationEnabled">true</bool>
-              <BinaryString name="AttributesSerialize" />
               <Content name="AudioContent">
                 <uri>rbxassetid://9113468907</uri>
               </Content>
@@ -1095,7 +1227,6 @@ RootPart:SetAttribute("ForceStopSprint", false)</string>
               <bool name="DefinesCapabilities">false</bool>
               <Ref name="SoundGroup">null</Ref>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
               <double name="TimePosition">0</double>
               <float name="Volume">1.5</float>
             </Properties>
@@ -1104,7 +1235,6 @@ RootPart:SetAttribute("ForceStopSprint", false)</string>
             <Properties>
               <string name="Name">Crouch</string>
               <bool name="AcousticSimulationEnabled">true</bool>
-              <BinaryString name="AttributesSerialize" />
               <Content name="AudioContent">
                 <uri>rbxassetid://3746956704</uri>
               </Content>
@@ -1122,7 +1252,6 @@ RootPart:SetAttribute("ForceStopSprint", false)</string>
               <bool name="DefinesCapabilities">false</bool>
               <Ref name="SoundGroup">null</Ref>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
               <double name="TimePosition">0</double>
               <float name="Volume">1</float>
             </Properties>
@@ -1131,78 +1260,66 @@ RootPart:SetAttribute("ForceStopSprint", false)</string>
             <Properties>
               <string name="Name">Crouching</string>
               <Content name="AnimationContent">
-                <uri>rbxassetid://125164434023167</uri>
+                <uri>rbxassetid://99310824682831</uri>
               </Content>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
             </Properties>
           </Item>
           <Item class="Animation" referent="118">
             <Properties>
               <string name="Name">CrouchWalk</string>
               <Content name="AnimationContent">
-                <uri>rbxassetid://80429715000556</uri>
+                <uri>rbxassetid://75389389155590</uri>
               </Content>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
             </Properties>
           </Item>
           <Item class="Animation" referent="119">
             <Properties>
               <string name="Name">CrouchToCrawl</string>
               <Content name="AnimationContent">
-                <uri></uri>
+                <uri>rbxassetid://112601350268211</uri>
               </Content>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
             </Properties>
           </Item>
           <Item class="Animation" referent="120">
             <Properties>
               <string name="Name">CrawlIdle</string>
               <Content name="AnimationContent">
-                <uri></uri>
+                <uri>rbxassetid://73311533107544</uri>
               </Content>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
             </Properties>
           </Item>
           <Item class="Animation" referent="121">
             <Properties>
               <string name="Name">CrawlWalk</string>
               <Content name="AnimationContent">
-                <uri></uri>
+                <uri>rbxassetid://95112663243010</uri>
               </Content>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
             </Properties>
           </Item>
           <Item class="Animation" referent="122">
             <Properties>
               <string name="Name">CrawlToCrouch</string>
               <Content name="AnimationContent">
-                <uri></uri>
+                <uri>rbxassetid://83587230625164</uri>
               </Content>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="DefinesCapabilities">false</bool>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
             </Properties>
           </Item>
         </Item>

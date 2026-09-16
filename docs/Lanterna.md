@@ -1,11 +1,21 @@
 # Lanterna
 
-O item `Lanterna` usa o modelo **117648733552528**, registrado em
-`ItemRegistry.lua`. Continua entrando pelo loot e pelo inventario existentes.
-O modelo foi carregado no Studio: possui a peca `Flashlight`, um `Bulb` com
-SpotLights e um `Holder`. A montagem preserva o ponto e a direcao da luz do
-`Bulb`, normaliza o comprimento para 1,8 studs e remove scripts embutidos pelo
-`AssetLoader`. Todas as pecas ficam desancoradas, sem colisao e soldadas ao Handle.
+O item `Lanterna` usa primeiro a Tool `Flashlight` do pacote Arczis versionado em
+`ServerStorage/ArczisRealisticFlashlight`. Ela fica como template inerte: scripts
+embutidos sao removidos, e o sistema existente do jogo continua dono de input,
+bateria, luz, dano, HUD, hotbar, drop e pickup. Se o pacote nao existir, o
+construtor ainda consegue cair no asset **6715358554** registrado em
+`ItemRegistry.lua`. Continua entrando pelos pickups e pelo loot do mapa.
+
+O `StarterPack` fica vazio: o jogador nao comeca com lanterna. Se uma Tool
+antiga chamada `Lanterna`/`Flashlight` ou marcada como lanterna aparecer no
+Backpack, `StarterGear` ou equipada, `FlashlightSystem` a remove. As lanternas
+obtidas no mapa usam a Tool normalizada pelo `ToolFactory`.
+
+A Tool Arczis preserva a escala e o `Grip` do pacote. Na criacao da Tool real,
+o jogo remove scripts embutidos, substitui luzes antigas pelas luzes seguras do
+jogo e deixa todas as pecas desancoradas, sem colisao, toque ou consulta fisica
+e sem massa. A normalizacao para 1,8 studs fica apenas para o fallback via asset.
 
 ## Controles
 
@@ -15,8 +25,40 @@ SpotLights e um `Holder`. A montagem preserva o ponto e a direcao da luz do
 - Celular: botao com a miniatura da lanterna.
 
 `F` continua reservado para interagir com os objetos do jogo. A luz acompanha
-o centro da camera. O ajuste visual usa apenas `RightGrip`, restaurando seu
-valor original ao desligar/desequipar, sem modificar as animacoes do corpo.
+o centro da camera com inercia curta, respiracao e balanco proporcional a
+caminhada/corrida. A Tool permanece presa ao `RightGrip` criado pelo Roblox e
+herda a orientacao do braco; o visual da lanterna nao gira mais esse joint de
+forma independente.
+
+## Animacoes R6
+
+Ao equipar, a lanterna usa as animacoes publicadas do pacote Arczis:
+
+| Estado | ID |
+| --- | --- |
+| Click | `rbxassetid://92755233522139` |
+| Equip | `rbxassetid://82905353934076` |
+| Idle | `rbxassetid://103502806390125` |
+
+`FlashlightPose` toca `Equip` uma vez ao equipar, mantem `Idle` em loop enquanto
+a Tool esta equipada e toca `Click` junto do ligar/desligar. Nao existem clips
+proprios de Walk/Run/Sprint da lanterna: as pernas continuam do `Animate` e do
+pacote de movimento, enquanto o `Idle` da lanterna deve conter apenas a camada
+superior do R6. Se a animacao publicada tambem tiver keyframes das pernas, o
+Roblox vai misturar esses joints tambem; nesse caso, republique o clip removendo
+as chaves de `Left Leg` e `Right Leg`.
+
+Agachado e Air seguem a mesma regra: locomocao existente por baixo, camada de
+lanterna por cima. Crawl libera completamente os bracos para a animacao de
+rastejar. Hurt, Death, agarramento, teleporte, stun e tropeço interrompem a
+camada da lanterna; por isso a reacao de dano continua ativa sem ser coberta
+pelo idle da lanterna.
+
+Os IDs ficam em `src/ReplicatedStorage/Modules/FlashlightConfig.lua`, em
+`Animations.Click`, `Animations.Equip` e `Animations.Idle`.
+
+O feixe combina foco principal com luz periferica e preenchimento proximo;
+abaixo de 18% de bateria, a intensidade fica levemente instavel.
 
 ## Balanceamento
 
@@ -69,6 +111,16 @@ FlashlightSystem.Recharge(tool, 25)
 A API limita a carga a 100 e nao religa automaticamente. Nenhum RemoteEvent
 aceita pedidos de recarga do cliente. Nao foi acrescentado um novo consumivel.
 
+## Pickups no Mapa
+
+`ItemSpawner` agora coloca a Tool real no chao para itens de categoria `Tool`,
+incluindo a Lanterna, em vez de um cubo generico com prompt. `DropItemSystem`
+continua sendo a entrada unica para pegar/largar Tools, entao as lanternas do
+mapa, de caixa, de drop de jogador e de inventario usam o mesmo ciclo.
+
+Mapas salvos com pickups antigos como `Lanterna_Pickup` sao migrados no boot:
+o Part antigo vira uma Tool real no mesmo lugar e ganha o prompt `Pegar`.
+
 ## Multiplayer e Organizacao
 
 - `FlashlightSystem`: posse, papel, bloqueios, bateria, ciclo de vida e exposicao.
@@ -76,6 +128,7 @@ aceita pedidos de recarga do cliente. Nao foi acrescentado um novo consumivel.
 - `FlashlightRules`: regras deterministicas de bateria e exposicao.
 - `FlashlightRig`: montagem do modelo e attachments da luz.
 - `FlashlightController`: entrada, previsao local e reconciliacao com sequencia.
+- `FlashlightPose`: pose procedural local dos bracos ao segurar/apontar.
 - `FlashlightVisuals`: luz com sombras, feixe e orientacao para cada observador.
 - `FlashlightHUD`: indicador compacto acima da hotbar, com alertas de carga.
 - `FlashlightExposureFX`: blur, cor e audio locais exclusivos do monstro.

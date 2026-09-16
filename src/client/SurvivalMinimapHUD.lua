@@ -403,7 +403,10 @@ end
 
 function SurvivalMinimapHUD:Update(dt: number, health: number, stamina: number, exhausted: boolean, holding: boolean)
 	self.healthShown += (math.clamp(health, 0, 1) - self.healthShown) * math.min(1, dt * 12)
-	self.staminaShown += (math.clamp(stamina, 0, 1) - self.staminaShown) * math.min(1, dt * 14)
+	-- `stamina` já é suavemente amostrada pelo servidor a 20 Hz. Não aplicar
+	-- outra interpolação aqui: ela atrasava o arco em relação ao momento real
+	-- em que o sprint acabava ou era liberado novamente.
+	self.staminaShown = math.clamp(stamina, 0, 1)
 
 	local healthColor = if self.healthShown < 0.3 then COLORS.HealthLow else COLORS.Health
 	local staminaColor = if exhausted

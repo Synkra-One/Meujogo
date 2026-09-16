@@ -2,7 +2,6 @@
 <roblox version="4"><Item class="Script" referent="99">
           <Properties>
             <string name="Name">DeathRespawnHandler</string>
-            <BinaryString name="AttributesSerialize" />
             <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
             <bool name="Disabled">false</bool>
             <ContentId name="LinkedSource">
@@ -14,6 +13,7 @@
             <string name="ScriptGuid">{4356A02E-729C-4D8B-9817-A20B2EC23C4F}</string>
             <string name="Source">local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CharacterPresentation = require(game:GetService("ServerScriptService"):WaitForChild("Server"):WaitForChild("CharacterPresentation"))
 
 Players.CharacterAutoLoads = false
 
@@ -69,7 +69,11 @@ local function onCharacterAdded(player, character)
 			return
 		end
 
-		player:LoadCharacter()
+		if player:GetAttribute("InRound") == true then
+			CharacterPresentation.SpawnGameCharacter(player)
+		else
+			CharacterPresentation.SpawnLobbyAvatar(player)
+		end
 
 		task.wait(0.5)
 		whiteFadeOut:FireClient(player)
@@ -95,7 +99,6 @@ for _, player in Players:GetPlayers() do
 	watchPlayer(player)
 end</string>
             <int64 name="SourceAssetId">-1</int64>
-            <BinaryString name="Tags" />
           </Properties>
         </Item>
       <SharedStrings>

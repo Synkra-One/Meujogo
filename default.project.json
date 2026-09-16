@@ -19,11 +19,7 @@
 
       "RayPart": { "$path": "src/MovementPack/ReplicatedStorage/RayPart.rbxmx" },
       "ViewModel": { "$path": "src/MovementPack/ReplicatedStorage/ViewModel.rbxmx" },
-      "idk": { "$path": "src/MovementPack/ReplicatedStorage/idk.rbxmx" },
-      "UpdateRunningState": { "$path": "src/MovementPack/ReplicatedStorage/UpdateRunningState.rbxmx" },
       "FallDamageEvent": { "$path": "src/MovementPack/ReplicatedStorage/FallDamageEvent.rbxmx" },
-      "CameraShaker": { "$path": "src/MovementPack/ReplicatedStorage/CameraShaker.rbxmx" },
-      "CameraShakeCall": { "$path": "src/MovementPack/ReplicatedStorage/CameraShakeCall.rbxmx" },
       "FallSystem": { "$path": "src/MovementPack/ReplicatedStorage/FallSystem.rbxmx" }
     },
 
@@ -39,19 +35,24 @@
     },
 
     "ServerStorage": {
-      "$path": "src/ServerStorage"
+      "$path": "src/ServerStorage",
+      "GameCharacter": {
+        "$path": "src/StarterPlayer/StarterCharacter.rbxmx"
+      },
+      "GameCharacterScripts": {
+        "$className": "Folder",
+        "Animate": {
+          "$path": "src/MovementPack/StarterCharacterScripts/Animate.rbxmx"
+        }
+      }
     },
 
     "StarterPlayer": {
       "$properties": {
         "CameraMinZoomDistance": 6,
         "CameraMaxZoomDistance": 9,
-        "LoadCharacterAppearance": false,
+        "LoadCharacterAppearance": true,
         "EnableMouseLockOption": false
-      },
-
-      "StarterCharacter": {
-        "$path": "src/StarterPlayer/StarterCharacter.rbxmx"
       },
 
       "StarterPlayerScripts": {
@@ -68,12 +69,19 @@
       },
 
       "StarterCharacterScripts": {
-        "$path": "src/MovementPack/StarterCharacterScripts"
+        "Crouching": { "$path": "src/MovementPack/StarterCharacterScripts/Crouching.rbxmx" },
+        "CustomShiftLock": { "$path": "src/MovementPack/StarterCharacterScripts/CustomShiftLock.rbxmx" },
+        "Turning": { "$path": "src/MovementPack/StarterCharacterScripts/Turning.rbxmx" }
       }
     },
 
     "StarterGui": {
       "$path": "src/StarterGui"
+    },
+
+    "StarterPack": {
+      "$className": "StarterPack",
+      "$ignoreUnknownInstances": false
     },
 
     "Workspace": {

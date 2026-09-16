@@ -10,6 +10,7 @@ local LoadoutData = require(ReplicatedStorage.Modules.LoadoutData)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local Selection = require(script.Parent.CharacterStatsApplier)
 local RoundManager = require(script.Parent.RoundManager)
+local CharacterPresentation = require(script.Parent.CharacterPresentation)
 
 local WaitingRoomManager = {}
 local members: { Player } = {}
@@ -142,7 +143,7 @@ local function updateCountdown()
 			for _, player in participants do
 				if player.Parent == Players then
 					Remotes.LobbyMessage:FireClient(player, "Não foi possível preparar a partida: " .. string.sub(reason, 1, 160))
-					pcall(function() player:LoadCharacter() end)
+					pcall(function() CharacterPresentation.SpawnLobbyAvatar(player) end)
 				end
 			end
 			WaitingRoomManager.OpenLobby()

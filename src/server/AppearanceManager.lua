@@ -36,6 +36,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local AssetRegistry = require(ReplicatedStorage.Modules.AssetRegistry)
 local LoadoutData = require(ReplicatedStorage.Modules.LoadoutData)
+local CharacterPresentation = require(script.Parent.CharacterPresentation)
 
 local AppearanceManager = {}
 
@@ -272,7 +273,7 @@ local roleAppearanceHandlers: { [string]: (Model) -> () } = {
 function AppearanceManager.ApplyAppearance(player: Player)
 	local role = player:GetAttribute("Role")
 	local character = player.Character
-	if not character then
+	if not CharacterPresentation.IsGameCharacter(character) then
 		return
 	end
 

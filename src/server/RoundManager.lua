@@ -61,6 +61,7 @@ local RadioSiteSystem = require(script.Parent.RadioSiteSystem)
 local ExtractionSystem = require(script.Parent.ExtractionSystem)
 local RaftObjective = require(script.Parent.RaftObjective)
 local RoleAssignment = require(script.Parent.RoleAssignment)
+local CharacterPresentation = require(script.Parent.CharacterPresentation)
 
 local RoundManager = {}
 
@@ -321,6 +322,7 @@ local function prepareRound(players: { Player })
 	assert(#connected >= minimum, "Jogadores insuficientes após preparar a partida.")
 	RoleAssignment.AssignRoles(connected)
 
+	local spawnedCharacters: { [Player]: Model } = {}
 	for _, player in connected do
 		player:SetAttribute("InRound", true)
 		player:SetAttribute("Amarrado", false)
@@ -329,11 +331,17 @@ local function prepareRound(players: { Player })
 		-- DeathRespawnHandler do pacote de movimento), então precisa ser
 		-- limpa aqui -- senão quem morreu na partida passada nasce eliminado.
 		Elimination.Reset(player)
-		player:LoadCharacter()
-		local character = player.Character or player.CharacterAdded:Wait()
+		local character = CharacterPresentation.SpawnGameCharacter(player)
+		spawnedCharacters[player] = character
 		assert(character, "Personagem nao foi criado durante a preparacao.")
 		assert(character:WaitForChild("HumanoidRootPart", 10), "Personagem sem HumanoidRootPart durante a preparacao.")
 		assert(character:FindFirstChildOfClass("Humanoid") or character:WaitForChild("Humanoid", 10), "Personagem sem Humanoid durante a preparacao.")
+	end
+
+	-- Todos os corpos são publicados primeiro, então os clientes preparam
+	-- câmera e movimento em paralelo. Só depois liberamos física/teleporte.
+	for _, player in connected do
+		CharacterPresentation.AwaitGameCharacterReady(player, spawnedCharacters[player], 6)
 	end
 
 	participants = connected

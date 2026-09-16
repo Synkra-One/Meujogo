@@ -6,8 +6,9 @@ local entries: { [Tool]: any } = {}
 function Visuals.Remove(tool: Tool)
 	local entry = entries[tool]
 	if not entry then return end
-	if entry.grip and entry.grip.Parent then entry.grip.C0 = entry.originalC0 end
 	if entry.light.Parent then entry.light.Enabled = false end
+	if entry.spill and entry.spill.Parent then entry.spill.Enabled = false end
+	if entry.fill and entry.fill.Parent then entry.fill.Enabled = false end
 	if entry.beam.Parent then entry.beam.Enabled = false end
 	entries[tool] = nil
 end
@@ -19,12 +20,16 @@ local function get(tool: Tool): any
 	local emitter = handle and handle:FindFirstChild("FlashlightEmitter")
 	local endpoint = handle and handle:FindFirstChild("FlashlightEnd")
 	local light = emitter and emitter:FindFirstChild("LanternaLuz")
+	local spill = emitter and emitter:FindFirstChild("LanternaSpill")
+	local fill = emitter and emitter:FindFirstChild("LanternaFill")
 	local beam = emitter and emitter:FindFirstChild("FlashlightBeam")
 	if not handle or not handle:IsA("BasePart") or not origin or not emitter or not endpoint or not light or not beam then return nil end
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	local entry = { handle = handle, origin = origin, emitter = emitter, endpoint = endpoint,
-		light = light, beam = beam, rayAt = 0, distance = 0, blocked = false, params = params }
+		light = light, spill = spill, fill = fill, beam = beam, rayAt = 0, distance = 0,
+		blocked = false, params = params,
+		flickerSeed = (#tool.Name * 7 + math.floor(handle.Size.Magnitude * 10)) }
 	entries[tool] = entry
 	return entry
 end
@@ -39,23 +44,11 @@ function Visuals.Update(tool: Tool, direction: Vector3, enabled: boolean, dt: nu
 		Visuals.Remove(tool)
 		return
 	end
-	-- Aim the held object through RightGrip only; body animation joints stay
-	-- owned by the movement pack. Every viewer applies the same replicated aim.
-	if not entry.grip then
-		local grip = character:FindFirstChild("RightGrip", true)
-		if grip and grip:IsA("JointInstance") and grip.Part1 == entry.handle then
-			entry.grip, entry.originalC0 = grip, grip.C0
-		end
-	end
-	entry.direction = if entry.direction then entry.direction:Lerp(direction, 1 - math.exp(-20 * dt)) else direction
-	if entry.direction.Magnitude < 0.01 then entry.direction = direction end
-	local aim = entry.direction.Unit
-	local grip = entry.grip
-	if grip and grip.Part0 then
-		local rotation = CFrame.lookAt(Vector3.zero, aim).Rotation * entry.origin.CFrame.Rotation:Inverse()
-		grip.C0 = CFrame.new(entry.originalC0.Position) * grip.Part0.CFrame.Rotation:Inverse() * rotation * grip.C1.Rotation
-	end
+	-- Keep the real SpotLights and the visible Beam on the exact same axis.
+	-- The hand animation already supplies motion; adding independent sway here
+	-- makes the beam look loose or crooked relative to the flashlight.
 	local position = entry.origin.WorldPosition
+	local aim = if direction.Magnitude > 0.01 then direction.Unit else entry.origin.WorldCFrame.LookVector
 	entry.emitter.CFrame = entry.handle.CFrame:ToObjectSpace(CFrame.lookAt(position, position + aim))
 	local now = os.clock()
 	if now >= entry.rayAt then
@@ -69,7 +62,18 @@ function Visuals.Update(tool: Tool, direction: Vector3, enabled: boolean, dt: nu
 	end
 	entry.endpoint.CFrame = entry.handle.CFrame:ToObjectSpace(CFrame.new(position + aim * entry.distance))
 	entry.beam.Width1 = math.min(4, entry.distance * 0.16)
-	entry.light.Enabled, entry.beam.Enabled = not entry.blocked, not entry.blocked and entry.distance > 0.2
+	local battery = tool:GetAttribute("Battery")
+	local low = if type(battery) == "number"
+		then 1 - math.clamp(battery / Config.LowBatteryThreshold, 0, 1) else 0
+	local flicker = 1 - low * Config.LowBatteryFlicker
+		* (0.5 + 0.5 * math.abs(math.sin(now * 31 + entry.flickerSeed)))
+	entry.light.Brightness = Config.Brightness * flicker
+	if entry.spill then entry.spill.Brightness = Config.SpillBrightness * flicker end
+	if entry.fill then entry.fill.Brightness = Config.FillBrightness * flicker end
+	local visible = not entry.blocked
+	entry.light.Enabled, entry.beam.Enabled = visible, visible and entry.distance > 0.2
+	if entry.spill then entry.spill.Enabled = visible end
+	if entry.fill then entry.fill.Enabled = visible end
 end
 
 return Visuals

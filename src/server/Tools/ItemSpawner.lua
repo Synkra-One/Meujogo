@@ -45,6 +45,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local ItemRegistry = require(ReplicatedStorage.Modules.ItemRegistry)
 local ToolFactory = require(ReplicatedStorage.Modules.ToolFactory)
+local DropItemSystem = require(script.Parent.Parent.DropItemSystem)
 local IslandLayout = require(script.Parent.IslandLayout)
 
 local ItemSpawner = {}
@@ -194,24 +195,20 @@ local function spawnMaterialPart(itemId: string, category: string, position: Vec
 end
 
 local function spawnToolPickup(itemId: string, displayName: string, position: Vector3, parent: Instance)
-	local anchor = newPickupAnchor(itemId .. "_Pickup", position, parent)
-	anchor.Color = Color3.fromRGB(130, 210, 255)
+	local tool = ToolFactory.Create(itemId)
+	if not tool then
+		warn(string.format("[ItemSpawner] Nao foi possivel criar '%s' para colocar no mapa.", itemId))
+		return
+	end
 
-	local prompt = Instance.new("ProximityPrompt")
-	prompt.ActionText = "Pegar"
-	prompt.ObjectText = displayName
-	prompt.Parent = anchor
+	tool:SetAttribute("WorldItemId", itemId)
+	DropItemSystem.PlaceInWorld(tool, CFrame.new(position) * CFrame.Angles(0, math.rad(90), 0), parent, nil)
 
-	prompt.Triggered:Connect(function(player: Player)
-		local tool = ToolFactory.Create(itemId)
-		if not tool then
-			return
-		end
-
-		local backpack = player:FindFirstChildOfClass("Backpack")
-		tool.Parent = backpack or player
-		anchor:Destroy()
-	end)
+	local handle = tool:FindFirstChild("Handle")
+	local prompt = handle and handle:FindFirstChild("PegarPrompt")
+	if prompt and prompt:IsA("ProximityPrompt") then
+		prompt.ObjectText = displayName
+	end
 end
 
 --------------------------------------------------------------------------------

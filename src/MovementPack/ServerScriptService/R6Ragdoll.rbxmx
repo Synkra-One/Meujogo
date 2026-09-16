@@ -2,7 +2,6 @@
 <roblox version="4"><Item class="Script" referent="77">
           <Properties>
             <string name="Name">R6Ragdoll</string>
-            <BinaryString name="AttributesSerialize" />
             <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
             <bool name="Disabled">false</bool>
             <ContentId name="LinkedSource">
@@ -19,6 +18,29 @@ local CollectionService = game:GetService("CollectionService")
 local module = require(script.ModuleScript)
 local ragParts = script.RagdollParts:GetChildren()
 local r6Client = script.R6RagdollClient
+
+local ATTACHMENT_PARENT = {
+	LA0 = "Torso",
+	LL0 = "Torso",
+	N0 = "Torso",
+	RA0 = "Torso",
+	RL0 = "Torso",
+	RL1 = "Right Leg",
+	RA1 = "Right Arm",
+	LL1 = "Left Leg",
+	LA1 = "Left Arm",
+	N1 = "Head",
+}
+
+local function attachmentParentName(attachmentName)
+	return ATTACHMENT_PARENT[attachmentName]
+end
+
+local function constraintAttachmentName(constraintName, index)
+	local base = constraintName:match("^(%a+)S$")
+	if not base then return nil end
+	return base .. tostring(index)
+end
 
 
 PhysicsService:RegisterCollisionGroup("Ragdoll")
@@ -40,10 +62,12 @@ local function SetupRagdoll(char)
 		folder1.Name = "RagdollConstraints"
 		for _, v in pairs(clones) do
 			if v:IsA("Attachment") then
-				v.Parent = char[v:GetAttribute("Parent")]
+				local parentName = v:GetAttribute("Parent") or attachmentParentName(v.Name)
+				local parentPart = parentName and char:FindFirstChild(parentName)
+				if parentPart then v.Parent = parentPart end
 			elseif v:IsA("BallSocketConstraint") then
-				v.Attachment0 = clones[v:GetAttribute("0")]
-				v.Attachment1 = clones[v:GetAttribute("1")]
+				v.Attachment0 = clones[v:GetAttribute("0") or constraintAttachmentName(v.Name, 0)]
+				v.Attachment1 = clones[v:GetAttribute("1") or constraintAttachmentName(v.Name, 1)]
 				v.Parent = folder1
 			end
 		end
@@ -100,12 +124,10 @@ workspace.DescendantAdded:Connect(function(part)
 end)
 </string>
             <int64 name="SourceAssetId">9292864894</int64>
-            <BinaryString name="Tags" />
           </Properties>
           <Item class="ModuleScript" referent="78">
             <Properties>
               <string name="Name">ModuleScript</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <ContentId name="LinkedSource">
                 <null>
@@ -118,6 +140,29 @@ local Players = game:GetService("Players")
 
 local PhysicsService = game:GetService("PhysicsService")
 local ragParts = script.Parent.RagdollParts:GetChildren()
+
+local ATTACHMENT_PARENT = {
+	LA0 = "Torso",
+	LL0 = "Torso",
+	N0 = "Torso",
+	RA0 = "Torso",
+	RL0 = "Torso",
+	RL1 = "Right Leg",
+	RA1 = "Right Arm",
+	LL1 = "Left Leg",
+	LA1 = "Left Arm",
+	N1 = "Head",
+}
+
+local function attachmentParentName(attachmentName)
+	return ATTACHMENT_PARENT[attachmentName]
+end
+
+local function constraintAttachmentName(constraintName, index)
+	local base = constraintName:match("^(%a+)S$")
+	if not base then return nil end
+	return base .. tostring(index)
+end
 
 function module:Setup(char: Model)
 	assert(
@@ -145,10 +190,12 @@ function module:Setup(char: Model)
 	folder1.Name = "RagdollConstraints"
 	for _, v in pairs(clones) do
 		if v:IsA("Attachment") then
-			v.Parent = char[v:GetAttribute("Parent")]
+			local parentName = v:GetAttribute("Parent") or attachmentParentName(v.Name)
+			local parentPart = parentName and char:FindFirstChild(parentName)
+			if parentPart then v.Parent = parentPart end
 		elseif v:IsA("BallSocketConstraint") then
-			v.Attachment0 = clones[v:GetAttribute("0")]
-			v.Attachment1 = clones[v:GetAttribute("1")]
+			v.Attachment0 = clones[v:GetAttribute("0") or constraintAttachmentName(v.Name, 0)]
+			v.Attachment1 = clones[v:GetAttribute("1") or constraintAttachmentName(v.Name, 1)]
 			v.Parent = folder1
 		end
 	end
@@ -217,13 +264,11 @@ end
 return module
 </string>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
             </Properties>
           </Item>
           <Item class="LocalScript" referent="79">
             <Properties>
               <string name="Name">R6RagdollClient</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="Disabled">false</bool>
               <ContentId name="LinkedSource">
@@ -257,13 +302,11 @@ char.ChildRemoved:Connect(function(bool)
 	end
 end)</string>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
             </Properties>
           </Item>
           <Item class="Script" referent="80">
             <Properties>
               <string name="Name">R6NPCRagdoll</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <bool name="Disabled">true</bool>
               <ContentId name="LinkedSource">
@@ -275,14 +318,12 @@ end)</string>
               <string name="ScriptGuid">{7ED581E2-6F52-46A0-94E4-4A72417B6C62}</string>
               <string name="Source">require(game.ServerScriptService.R6Ragdoll.ModuleScript):Setup(script.Parent)</string>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
             </Properties>
           </Item>
           <Item class="Part" referent="81">
             <Properties>
               <string name="Name">RagdollParts</string>
               <bool name="Anchored">true</bool>
-              <BinaryString name="AttributesSerialize" />
               <bool name="AudioCanCollide">true</bool>
               <float name="BackParamA">-0.5</float>
               <float name="BackParamB">0.5</float>
@@ -364,7 +405,6 @@ end)</string>
                 <Z>2</Z>
               </Vector3>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
               <float name="TopParamA">-0.5</float>
               <float name="TopParamB">0.5</float>
               <token name="TopSurface">0</token>
@@ -379,7 +419,6 @@ end)</string>
             <Item class="Attachment" referent="82">
               <Properties>
                 <string name="Name">LA0</string>
-                <BinaryString name="AttributesSerialize">AQAAAAYAAABQYXJlbnQCBQAAAFRvcnNv</BinaryString>
                 <CoordinateFrame name="CFrame">
                   <X>-1</X>
                   <Y>1</Y>
@@ -397,7 +436,6 @@ end)</string>
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
                 <bool name="Visible">false</bool>
               </Properties>
             </Item>
@@ -406,7 +444,6 @@ end)</string>
                 <string name="Name">LAS</string>
                 <Ref name="Attachment0">null</Ref>
                 <Ref name="Attachment1">null</Ref>
-                <BinaryString name="AttributesSerialize">AgAAAAEAAAAwAgMAAABMQTABAAAAMQIDAAAATEEx</BinaryString>
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <int name="Color">1009</int>
                 <bool name="Enabled">true</bool>
@@ -416,7 +453,6 @@ end)</string>
                 <float name="Restitution">0</float>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
                 <bool name="TwistLimitsEnabled">true</bool>
                 <float name="TwistLowerAngle">-90</float>
                 <float name="TwistUpperAngle">90</float>
@@ -427,7 +463,6 @@ end)</string>
             <Item class="Attachment" referent="84">
               <Properties>
                 <string name="Name">LL0</string>
-                <BinaryString name="AttributesSerialize">AQAAAAYAAABQYXJlbnQCBQAAAFRvcnNv</BinaryString>
                 <CoordinateFrame name="CFrame">
                   <X>-0.5</X>
                   <Y>-1</Y>
@@ -445,7 +480,6 @@ end)</string>
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
                 <bool name="Visible">false</bool>
               </Properties>
             </Item>
@@ -454,7 +488,6 @@ end)</string>
                 <string name="Name">LLS</string>
                 <Ref name="Attachment0">null</Ref>
                 <Ref name="Attachment1">null</Ref>
-                <BinaryString name="AttributesSerialize">AgAAAAEAAAAwAgMAAABMTDABAAAAMQIDAAAATEwx</BinaryString>
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <int name="Color">1009</int>
                 <bool name="Enabled">true</bool>
@@ -464,7 +497,6 @@ end)</string>
                 <float name="Restitution">0</float>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
                 <bool name="TwistLimitsEnabled">true</bool>
                 <float name="TwistLowerAngle">-45</float>
                 <float name="TwistUpperAngle">45</float>
@@ -475,7 +507,6 @@ end)</string>
             <Item class="Attachment" referent="86">
               <Properties>
                 <string name="Name">N0</string>
-                <BinaryString name="AttributesSerialize">AQAAAAYAAABQYXJlbnQCBQAAAFRvcnNv</BinaryString>
                 <CoordinateFrame name="CFrame">
                   <X>0</X>
                   <Y>1</Y>
@@ -493,7 +524,6 @@ end)</string>
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
                 <bool name="Visible">false</bool>
               </Properties>
             </Item>
@@ -502,7 +532,6 @@ end)</string>
                 <string name="Name">NS</string>
                 <Ref name="Attachment0">null</Ref>
                 <Ref name="Attachment1">null</Ref>
-                <BinaryString name="AttributesSerialize">AgAAAAEAAAAwAgIAAABOMAEAAAAxAgIAAABOMQ==</BinaryString>
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <int name="Color">1009</int>
                 <bool name="Enabled">true</bool>
@@ -512,7 +541,6 @@ end)</string>
                 <float name="Restitution">0</float>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
                 <bool name="TwistLimitsEnabled">true</bool>
                 <float name="TwistLowerAngle">-45</float>
                 <float name="TwistUpperAngle">45</float>
@@ -523,7 +551,6 @@ end)</string>
             <Item class="Attachment" referent="88">
               <Properties>
                 <string name="Name">RA0</string>
-                <BinaryString name="AttributesSerialize">AQAAAAYAAABQYXJlbnQCBQAAAFRvcnNv</BinaryString>
                 <CoordinateFrame name="CFrame">
                   <X>1</X>
                   <Y>1</Y>
@@ -541,7 +568,6 @@ end)</string>
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
                 <bool name="Visible">false</bool>
               </Properties>
             </Item>
@@ -550,7 +576,6 @@ end)</string>
                 <string name="Name">RAS</string>
                 <Ref name="Attachment0">null</Ref>
                 <Ref name="Attachment1">null</Ref>
-                <BinaryString name="AttributesSerialize">AgAAAAEAAAAwAgMAAABSQTABAAAAMQIDAAAAUkEx</BinaryString>
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <int name="Color">1009</int>
                 <bool name="Enabled">true</bool>
@@ -560,7 +585,6 @@ end)</string>
                 <float name="Restitution">0</float>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
                 <bool name="TwistLimitsEnabled">true</bool>
                 <float name="TwistLowerAngle">-90</float>
                 <float name="TwistUpperAngle">90</float>
@@ -571,7 +595,6 @@ end)</string>
             <Item class="Attachment" referent="90">
               <Properties>
                 <string name="Name">RL0</string>
-                <BinaryString name="AttributesSerialize">AQAAAAYAAABQYXJlbnQCBQAAAFRvcnNv</BinaryString>
                 <CoordinateFrame name="CFrame">
                   <X>0.5</X>
                   <Y>-1</Y>
@@ -589,7 +612,6 @@ end)</string>
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
                 <bool name="Visible">false</bool>
               </Properties>
             </Item>
@@ -598,7 +620,6 @@ end)</string>
                 <string name="Name">RLS</string>
                 <Ref name="Attachment0">null</Ref>
                 <Ref name="Attachment1">null</Ref>
-                <BinaryString name="AttributesSerialize">AgAAAAEAAAAwAgMAAABSTDABAAAAMQIDAAAAUkwx</BinaryString>
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <int name="Color">1009</int>
                 <bool name="Enabled">true</bool>
@@ -608,7 +629,6 @@ end)</string>
                 <float name="Restitution">0</float>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
                 <bool name="TwistLimitsEnabled">true</bool>
                 <float name="TwistLowerAngle">-45</float>
                 <float name="TwistUpperAngle">45</float>
@@ -619,7 +639,6 @@ end)</string>
             <Item class="Attachment" referent="92">
               <Properties>
                 <string name="Name">RL1</string>
-                <BinaryString name="AttributesSerialize">AQAAAAYAAABQYXJlbnQCCQAAAFJpZ2h0IExlZw==</BinaryString>
                 <CoordinateFrame name="CFrame">
                   <X>0</X>
                   <Y>1</Y>
@@ -637,14 +656,12 @@ end)</string>
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
                 <bool name="Visible">false</bool>
               </Properties>
             </Item>
             <Item class="Attachment" referent="93">
               <Properties>
                 <string name="Name">RA1</string>
-                <BinaryString name="AttributesSerialize">AQAAAAYAAABQYXJlbnQCCQAAAFJpZ2h0IEFybQ==</BinaryString>
                 <CoordinateFrame name="CFrame">
                   <X>-0.5</X>
                   <Y>1</Y>
@@ -662,14 +679,12 @@ end)</string>
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
                 <bool name="Visible">false</bool>
               </Properties>
             </Item>
             <Item class="Attachment" referent="94">
               <Properties>
                 <string name="Name">LL1</string>
-                <BinaryString name="AttributesSerialize">AQAAAAYAAABQYXJlbnQCCAAAAExlZnQgTGVn</BinaryString>
                 <CoordinateFrame name="CFrame">
                   <X>0</X>
                   <Y>1</Y>
@@ -687,14 +702,12 @@ end)</string>
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
                 <bool name="Visible">false</bool>
               </Properties>
             </Item>
             <Item class="Attachment" referent="95">
               <Properties>
                 <string name="Name">LA1</string>
-                <BinaryString name="AttributesSerialize">AQAAAAYAAABQYXJlbnQCCAAAAExlZnQgQXJt</BinaryString>
                 <CoordinateFrame name="CFrame">
                   <X>0.5</X>
                   <Y>1</Y>
@@ -712,14 +725,12 @@ end)</string>
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
                 <bool name="Visible">false</bool>
               </Properties>
             </Item>
             <Item class="Attachment" referent="96">
               <Properties>
                 <string name="Name">N1</string>
-                <BinaryString name="AttributesSerialize">AQAAAAYAAABQYXJlbnQCBAAAAEhlYWQ=</BinaryString>
                 <CoordinateFrame name="CFrame">
                   <X>0</X>
                   <Y>-0.5</Y>
@@ -737,7 +748,6 @@ end)</string>
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
                 <bool name="Visible">false</bool>
               </Properties>
             </Item>

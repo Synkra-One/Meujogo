@@ -19,7 +19,10 @@ local V, vectorMeta = {}, {}
 function V.new(x, y, z) return setmetatable({ X = x or 0, Y = y or 0, Z = z or 0, _kind = "Vector3" }, vectorMeta) end
 vectorMeta.__add = function(a, b) return V.new(a.X + b.X, a.Y + b.Y, a.Z + b.Z) end
 vectorMeta.__sub = function(a, b) return V.new(a.X - b.X, a.Y - b.Y, a.Z - b.Z) end
-vectorMeta.__mul = function(a, b) return V.new(a.X * b, a.Y * b, a.Z * b) end
+vectorMeta.__mul = function(a, b)
+	if type(b) == "table" then return V.new(a.X * b.X, a.Y * b.Y, a.Z * b.Z) end
+	return V.new(a.X * b, a.Y * b, a.Z * b)
+end
 vectorMeta.__div = function(a, b) return a * (1 / b) end
 vectorMeta.__index = function(a, key)
 	if key == "Magnitude" then return math.sqrt(a.X ^ 2 + a.Y ^ 2 + a.Z ^ 2) end
@@ -29,11 +32,26 @@ end
 
 local function object(class, name)
 	local self = { ClassName = class, Name = name or class, _kind = "Instance", attributes = {}, children = {} }
-	for _, key in { "ChildAdded", "ChildRemoved", "CharacterAdded", "CharacterRemoving", "AncestryChanged", "Unequipped", "Destroying" } do self[key] = signal() end
+	if class == "Part" then
+		self.Position = V.new()
+		self.AssemblyLinearVelocity = V.new()
+	end
+	for _, key in { "ChildAdded", "ChildRemoved", "DescendantAdded", "CharacterAdded", "CharacterRemoving", "AncestryChanged", "Unequipped", "Destroying" } do self[key] = signal() end
 	function self:IsA(kind) return kind == self.ClassName or kind == "Instance" or (kind == "BasePart" and class == "Part") end
 	function self:FindFirstChild(key) for _, child in self.children do if child.Name == key then return child end end; return nil end
 	function self:FindFirstChildOfClass(kind) for _, child in self.children do if child:IsA(kind) then return child end end; return nil end
 	function self:GetChildren() return table.clone(self.children) end
+	function self:GetDescendants()
+		local descendants = {}
+		local function collect(item)
+			for _, child in item.children do
+				table.insert(descendants, child)
+				collect(child)
+			end
+		end
+		collect(self)
+		return descendants
+	end
 	function self:GetAttribute(key) return self.attributes[key] end
 	function self:SetAttribute(key, value) self.attributes[key] = value end
 	function self:TakeDamage(amount) self.Health = math.max(0, self.Health - amount) end
@@ -49,7 +67,15 @@ local function move(item, parent)
 	if old then table.remove(old.children, assert(table.find(old.children, item))) end
 	item.Parent = parent
 	if old then old.ChildRemoved:Fire(item) end
-	if parent then table.insert(parent.children, item); parent.ChildAdded:Fire(item) end
+	if parent then
+		table.insert(parent.children, item)
+		parent.ChildAdded:Fire(item)
+		local ancestor = parent
+		while ancestor do
+			if ancestor.DescendantAdded then ancestor.DescendantAdded:Fire(item) end
+			ancestor = ancestor.Parent
+		end
+	end
 	item.AncestryChanged:Fire(item, parent)
 	return item
 end
@@ -71,7 +97,19 @@ local roundActive = true
 local round = { RoundEnded = { Event = signal() }, RoundPrepared = { Event = signal() }, IsRoundActive = function() return roundActive end }
 local damageCalls = {}
 local modules = {
-	GameConfig = { Roles = { Survivor = "Sobrevivente", Monster = "Monstro" } },
+	GameConfig = {
+		Roles = { Survivor = "Sobrevivente", Monster = "Monstro" },
+		Health = {
+			HurtIdleAnimationId = "",
+			HurtWalkAnimationId = "",
+			DeathAnimationId = "",
+			HurtAnimationDuration = 0.55,
+			RegenPerSecond = 0,
+			RegenDelayAfterDamage = 6,
+			DisableRobloxDefaultRegen = false,
+		},
+	},
+	ItemRegistry = { Items = { Lanterna = { AssetId = 6715358554 } } },
 	Remotes = { Flashlight = remote }, RoundManager = round,
 	FlashlightRig = { Prepare = function(tool) return tool:FindFirstChild("Handle"):FindFirstChild("FlashlightOrigin") end },
 	DamageSystem = { Apply = function(target, amount, info)
@@ -79,10 +117,20 @@ local modules = {
 	end },
 }
 local names = setmetatable({}, { __index = function(_, key) return key end })
-local services = { Players = players, RunService = { Heartbeat = heartbeat }, Workspace = workspace, ReplicatedStorage = { Modules = names } }
+local services = {
+	Players = players,
+	RunService = { Heartbeat = heartbeat, IsStudio = function() return false end },
+	StarterPack = object("StarterPack", "StarterPack"),
+	Workspace = workspace,
+	ReplicatedStorage = { Modules = names },
+}
 local env = setmetatable({ game = { GetService = function(_, key) return assert(services[key], key) end },
 	script = { Parent = names }, Vector3 = V, os = { clock = function() return now end },
-	Enum = { RaycastFilterType = { Exclude = "Exclude" } }, RaycastParams = { new = function() return {} end },
+	Enum = {
+		AnimationPriority = { Action2 = "Action2", Action4 = "Action4" },
+		RaycastFilterType = { Exclude = "Exclude" },
+	},
+	RaycastParams = { new = function() return {} end },
 	typeof = function(v) return if type(v) == "table" then v._kind or "table" else type(v) end,
 }, { __index = getfenv() })
 local function loadModule(name)
@@ -177,6 +225,7 @@ end
 local function lamp(owner)
 	local tool = object("Tool", "Lanterna")
 	tool:SetAttribute("Lanterna", true)
+	tool:SetAttribute("FlashlightModelAssetId", 6715358554)
 	local handle = move(object("Part", "Handle"), tool)
 	move(object("Attachment", "FlashlightOrigin"), handle).WorldPosition = V.new(0.5, 2, -1)
 	move(tool, owner.Character)

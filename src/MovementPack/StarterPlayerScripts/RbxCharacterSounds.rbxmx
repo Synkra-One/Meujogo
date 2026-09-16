@@ -2,7 +2,6 @@
 <roblox version="4"><Item class="LocalScript" referent="168">
           <Properties>
             <string name="Name">RbxCharacterSounds</string>
-            <BinaryString name="AttributesSerialize" />
             <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
             <bool name="Disabled">false</bool>
             <ContentId name="LinkedSource">
@@ -466,12 +465,10 @@ Players.PlayerAdded:Connect(playerAdded)
 Players.PlayerRemoving:Connect(playerRemoving)
 </string>
             <int64 name="SourceAssetId">-1</int64>
-            <BinaryString name="Tags" />
           </Properties>
           <Item class="ModuleScript" referent="169">
             <Properties>
               <string name="Name">AtomicBinding</string>
-              <BinaryString name="AttributesSerialize" />
               <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
               <ContentId name="LinkedSource">
                 <null>
@@ -757,7 +754,6 @@ end
 return AtomicBinding
 </string>
               <int64 name="SourceAssetId">-1</int64>
-              <BinaryString name="Tags" />
             </Properties>
           </Item>
         </Item>

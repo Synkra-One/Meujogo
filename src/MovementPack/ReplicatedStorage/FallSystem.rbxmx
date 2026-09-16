@@ -2,17 +2,14 @@
 <roblox version="4"><Item class="Folder" referent="71">
           <Properties>
             <string name="Name">FallSystem</string>
-            <BinaryString name="AttributesSerialize" />
             <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
             <bool name="DefinesCapabilities">false</bool>
             <int64 name="SourceAssetId">16448085437</int64>
-            <BinaryString name="Tags" />
           </Properties>
           <Item class="Part" referent="72">
             <Properties>
               <string name="Name">Dust</string>
               <bool name="Anchored">true</bool>
-              <BinaryString name="AttributesSerialize" />
               <bool name="AudioCanCollide">true</bool>
               <float name="BackParamA">-0.5</float>
               <float name="BackParamB">0.5</float>
@@ -94,7 +91,6 @@
                 <Z>1</Z>
               </Vector3>
               <int64 name="SourceAssetId">10867457309</int64>
-              <BinaryString name="Tags" />
               <float name="TopParamA">-0.5</float>
               <float name="TopParamB">0.5</float>
               <token name="TopSurface">0</token>
@@ -109,7 +105,6 @@
             <Item class="Attachment" referent="73">
               <Properties>
                 <string name="Name">Attachment</string>
-                <BinaryString name="AttributesSerialize" />
                 <CoordinateFrame name="CFrame">
                   <X>-0.000019073486</X>
                   <Y>-2.4998856</Y>
@@ -127,7 +122,6 @@
                 <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                 <bool name="DefinesCapabilities">false</bool>
                 <int64 name="SourceAssetId">-1</int64>
-                <BinaryString name="Tags" />
                 <bool name="Visible">false</bool>
               </Properties>
               <Item class="ParticleEmitter" referent="74">
@@ -138,7 +132,6 @@
                     <Y>1</Y>
                     <Z>0</Z>
                   </Vector3>
-                  <BinaryString name="AttributesSerialize">AQAAAAkAAABFbWl0Q291bnQGAAAAAAAAJEA=</BinaryString>
                   <float name="Brightness">1</float>
                   <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
                   <ColorSequence name="Color">0 1 1 1 0 1 1 1 1 0 </ColorSequence>
@@ -174,7 +167,6 @@
                     <Y>40</Y>
                   </Vector2>
                   <NumberSequence name="Squash">0 0 0 1 0 0 </NumberSequence>
-                  <BinaryString name="Tags" />
                   <Content name="TextureContent">
                     <uri>rbxassetid://122434532</uri>
                   </Content>

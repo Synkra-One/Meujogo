@@ -47,12 +47,10 @@
 					<R22>1</R22>
 				</CFrame>
 			</OptionalCoordinateFrame>
-			<BinaryString name="AttributesSerialize" />
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 			<bool name="DefinesCapabilities">false</bool>
 			<string name="Name">R6 Monster</string>
 			<int64 name="SourceAssetId">-1</int64>
-			<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 		</Properties>
 		<Item class="Part" referent="RBX7aceeb879e8a44ff92f253e0d80a5837">
 			<Properties>
@@ -145,12 +143,10 @@
 					<Y>2.4</Y>
 					<Z>1.2</Z>
 				</Vector3>
-				<BinaryString name="AttributesSerialize" />
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 				<bool name="DefinesCapabilities">false</bool>
 				<string name="Name">Right Arm</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 			<Item class="Attachment" referent="RBX07650decfcf0402aa53b5e6f22f8076b">
 				<Properties>
@@ -169,12 +165,10 @@
 						<R22>1</R22>
 					</CoordinateFrame>
 					<bool name="Visible">false</bool>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">RightGripAttachment</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 			<Item class="Attachment" referent="RBX0e683d71235d4c079d116040c653b7d1">
@@ -194,12 +188,10 @@
 						<R22>1</R22>
 					</CoordinateFrame>
 					<bool name="Visible">false</bool>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">RightShoulderAttachment</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 			</Item>
@@ -233,12 +225,10 @@
 				<token name="RigType">0</token>
 				<bool name="UseJumpPower">true</bool>
 				<float name="WalkSpeed">16</float>
-				<BinaryString name="AttributesSerialize" />
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 				<bool name="DefinesCapabilities">false</bool>
 				<string name="Name">Humanoid</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 			<Item class="HumanoidDescription" referent="RBXe19d1af3d8244598acd3f3052da29aba">
 				<Properties>
@@ -264,12 +254,10 @@
 					<bool name="UseAvatarSettings">false</bool>
 					<int64 name="WalkAnimation">0</int64>
 					<float name="WidthScale">1</float>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">HumanoidDescription</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 				<Item class="BodyPartDescription" referent="RBX84e518f9b5e14b1388cc9c6f143f4f89">
 					<Properties>
@@ -282,12 +270,10 @@
 						</Color3>
 						<string name="HeadShape" />
 						<Ref name="Instance">null</Ref>
-						<BinaryString name="AttributesSerialize" />
 						<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 						<bool name="DefinesCapabilities">false</bool>
 						<string name="Name">BodyPartDescription</string>
 						<int64 name="SourceAssetId">-1</int64>
-						<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 					</Properties>
 				</Item>
 				<Item class="BodyPartDescription" referent="RBXe441d89e3f3e471eaf32d6f55217ba76">
@@ -301,12 +287,10 @@
 						</Color3>
 						<string name="HeadShape" />
 						<Ref name="Instance">null</Ref>
-						<BinaryString name="AttributesSerialize" />
 						<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 						<bool name="DefinesCapabilities">false</bool>
 						<string name="Name">BodyPartDescription</string>
 						<int64 name="SourceAssetId">-1</int64>
-						<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 					</Properties>
 				</Item>
 				<Item class="BodyPartDescription" referent="RBX645f4b31c315434ebf97641b36b6fbd3">
@@ -320,12 +304,10 @@
 						</Color3>
 						<string name="HeadShape" />
 						<Ref name="Instance">null</Ref>
-						<BinaryString name="AttributesSerialize" />
 						<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 						<bool name="DefinesCapabilities">false</bool>
 						<string name="Name">BodyPartDescription</string>
 						<int64 name="SourceAssetId">-1</int64>
-						<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 					</Properties>
 				</Item>
 				<Item class="BodyPartDescription" referent="RBXe16538d5dbf84283b571af171e7f1b5f">
@@ -339,12 +321,10 @@
 						</Color3>
 						<string name="HeadShape" />
 						<Ref name="Instance">null</Ref>
-						<BinaryString name="AttributesSerialize" />
 						<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 						<bool name="DefinesCapabilities">false</bool>
 						<string name="Name">BodyPartDescription</string>
 						<int64 name="SourceAssetId">-1</int64>
-						<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 					</Properties>
 				</Item>
 				<Item class="BodyPartDescription" referent="RBX81114add79bb43a0be1eec6e2eef0142">
@@ -358,12 +338,10 @@
 						</Color3>
 						<string name="HeadShape" />
 						<Ref name="Instance">null</Ref>
-						<BinaryString name="AttributesSerialize" />
 						<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 						<bool name="DefinesCapabilities">false</bool>
 						<string name="Name">BodyPartDescription</string>
 						<int64 name="SourceAssetId">-1</int64>
-						<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 					</Properties>
 				</Item>
 				<Item class="BodyPartDescription" referent="RBXe48b5c82aa77460da5bf1fa37524840f">
@@ -377,12 +355,10 @@
 						</Color3>
 						<string name="HeadShape" />
 						<Ref name="Instance">null</Ref>
-						<BinaryString name="AttributesSerialize" />
 						<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 						<bool name="DefinesCapabilities">false</bool>
 						<string name="Name">BodyPartDescription</string>
 						<int64 name="SourceAssetId">-1</int64>
-						<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 					</Properties>
 				</Item>
 			</Item>
@@ -478,12 +454,10 @@
 					<Y>2.4</Y>
 					<Z>1.2</Z>
 				</Vector3>
-				<BinaryString name="AttributesSerialize" />
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 				<bool name="DefinesCapabilities">false</bool>
 				<string name="Name">Torso</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 			<Item class="Attachment" referent="RBX64888d0d0ebf40488673f817f9341ede">
 				<Properties>
@@ -502,12 +476,10 @@
 						<R22>1</R22>
 					</CoordinateFrame>
 					<bool name="Visible">false</bool>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">BodyBackAttachment</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 			<Item class="Motor6D" referent="RBX946adb57b9fd4041bad15e44d7dc7021">
@@ -545,12 +517,10 @@
 					<bool name="Enabled">true</bool>
 					<Ref name="Part0">RBX20a95e62f2734b45af900726983cfd7c</Ref>
 					<Ref name="Part1">RBX7aceeb879e8a44ff92f253e0d80a5837</Ref>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">Right Shoulder</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 			<Item class="Attachment" referent="RBX226ec16d027f49a5851f22de7ab440c9">
@@ -570,12 +540,10 @@
 						<R22>1</R22>
 					</CoordinateFrame>
 					<bool name="Visible">false</bool>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">WaistFrontAttachment</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 			<Item class="Attachment" referent="RBXb703089504ef48cf82db77895f73efe0">
@@ -595,12 +563,10 @@
 						<R22>1</R22>
 					</CoordinateFrame>
 					<bool name="Visible">false</bool>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">BodyFrontAttachment</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 			<Item class="Attachment" referent="RBXa59790cf1fdc415db19a6a6398bd7f5e">
@@ -620,12 +586,10 @@
 						<R22>1</R22>
 					</CoordinateFrame>
 					<bool name="Visible">false</bool>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">LeftCollarAttachment</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 			<Item class="Attachment" referent="RBXd5ff746d23bb41d68ec78a9966147a74">
@@ -645,12 +609,10 @@
 						<R22>1</R22>
 					</CoordinateFrame>
 					<bool name="Visible">false</bool>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">RightCollarAttachment</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 			<Item class="Attachment" referent="RBXc58b9e8f3c55456b98909aee13d21108">
@@ -670,12 +632,10 @@
 						<R22>1</R22>
 					</CoordinateFrame>
 					<bool name="Visible">false</bool>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">WaistCenterAttachment</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 			<Item class="Attachment" referent="RBX65bf5fb4f54a48c88f46ef2890d70434">
@@ -695,12 +655,10 @@
 						<R22>1</R22>
 					</CoordinateFrame>
 					<bool name="Visible">false</bool>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">NeckAttachment</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 			<Item class="Attachment" referent="RBX314bf803e5b64dc4b05221a33780b1f3">
@@ -720,12 +678,10 @@
 						<R22>1</R22>
 					</CoordinateFrame>
 					<bool name="Visible">false</bool>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">WaistBackAttachment</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 			<Item class="Motor6D" referent="RBX2ce01a2d65e04f239a84e3bd227a63f5">
@@ -763,12 +719,10 @@
 					<bool name="Enabled">true</bool>
 					<Ref name="Part0">RBX20a95e62f2734b45af900726983cfd7c</Ref>
 					<Ref name="Part1">RBXc1eebd6d6b964fc493fc3ef08b36f941</Ref>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">Right Hip</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 			<Item class="Motor6D" referent="RBXe146c3db1eb24108af7991fdaaa388ae">
@@ -806,12 +760,10 @@
 					<bool name="Enabled">true</bool>
 					<Ref name="Part0">RBX20a95e62f2734b45af900726983cfd7c</Ref>
 					<Ref name="Part1">RBX2c4dcb9ef7b84f50ba224b5aaff9bee5</Ref>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">Left Hip</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 			<Item class="Motor6D" referent="RBX0b5b16557c56434a9bedd5639b73d3db">
@@ -849,12 +801,10 @@
 					<bool name="Enabled">true</bool>
 					<Ref name="Part0">RBX20a95e62f2734b45af900726983cfd7c</Ref>
 					<Ref name="Part1">RBXf8e7fd7da9b64af2a654a9aacae9ddd7</Ref>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">Left Shoulder</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 			<Item class="Motor6D" referent="RBX666f74ac0b364ed88a009edf6501e24e">
@@ -892,12 +842,10 @@
 					<bool name="Enabled">true</bool>
 					<Ref name="Part0">RBX20a95e62f2734b45af900726983cfd7c</Ref>
 					<Ref name="Part1">RBXb8d682e1cc944db8bba8ec46fe9f12dc</Ref>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">Neck</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 		</Item>
@@ -992,12 +940,10 @@
 					<Y>2.4</Y>
 					<Z>1.2</Z>
 				</Vector3>
-				<BinaryString name="AttributesSerialize" />
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 				<bool name="DefinesCapabilities">false</bool>
 				<string name="Name">HumanoidRootPart</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 			<Item class="Motor6D" referent="RBXb4aaa860e2c947fabc92ae8e0dd6031d">
 				<Properties>
@@ -1034,12 +980,10 @@
 					<bool name="Enabled">true</bool>
 					<Ref name="Part0">RBXfd69874b0e2d47afb0cdd5fcc2a98e02</Ref>
 					<Ref name="Part1">RBX20a95e62f2734b45af900726983cfd7c</Ref>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">RootJoint</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 			<Item class="Attachment" referent="RBX0961ae4518824c66b27fabb7f9c6c90d">
@@ -1059,12 +1003,10 @@
 						<R22>1</R22>
 					</CoordinateFrame>
 					<bool name="Visible">false</bool>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">RootAttachment</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 		</Item>
@@ -1159,12 +1101,10 @@
 					<Y>2.4</Y>
 					<Z>1.2</Z>
 				</Vector3>
-				<BinaryString name="AttributesSerialize" />
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 				<bool name="DefinesCapabilities">false</bool>
 				<string name="Name">Right Leg</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 			<Item class="Attachment" referent="RBX098a275045c44f3ab7f4f7ee859fdedd">
 				<Properties>
@@ -1183,12 +1123,10 @@
 						<R22>1</R22>
 					</CoordinateFrame>
 					<bool name="Visible">false</bool>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">RightFootAttachment</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 			</Item>
@@ -1283,12 +1221,10 @@
 					<Y>2.4</Y>
 					<Z>1.2</Z>
 				</Vector3>
-				<BinaryString name="AttributesSerialize" />
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 				<bool name="DefinesCapabilities">false</bool>
 				<string name="Name">Left Leg</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 			<Item class="Attachment" referent="RBX216b9c11bf414ad28b02ed5e4f876bf1">
 				<Properties>
@@ -1307,12 +1243,10 @@
 						<R22>1</R22>
 					</CoordinateFrame>
 					<bool name="Visible">false</bool>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">LeftFootAttachment</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 			</Item>
@@ -1407,12 +1341,10 @@
 					<Y>2.4</Y>
 					<Z>1.2</Z>
 				</Vector3>
-				<BinaryString name="AttributesSerialize" />
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 				<bool name="DefinesCapabilities">false</bool>
 				<string name="Name">Left Arm</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 			<Item class="Attachment" referent="RBXfc31d40fb0e344839a8d05995701696f">
 				<Properties>
@@ -1431,12 +1363,10 @@
 						<R22>1</R22>
 					</CoordinateFrame>
 					<bool name="Visible">false</bool>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">LeftShoulderAttachment</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 			<Item class="Attachment" referent="RBX022388d0a59f45f2b773b13fd218c4de">
@@ -1456,12 +1386,10 @@
 						<R22>1</R22>
 					</CoordinateFrame>
 					<bool name="Visible">false</bool>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">LeftGripAttachment</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 		</Item>
@@ -1556,12 +1484,10 @@
 					<Y>1.2</Y>
 					<Z>1.2</Z>
 				</Vector3>
-				<BinaryString name="AttributesSerialize" />
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 				<bool name="DefinesCapabilities">false</bool>
 				<string name="Name">Head</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 			<Item class="Attachment" referent="RBX466a075c635941a89267b7b56972021c">
 				<Properties>
@@ -1580,12 +1506,10 @@
 						<R22>1</R22>
 					</CoordinateFrame>
 					<bool name="Visible">false</bool>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">HatAttachment</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 			<Item class="SpecialMesh" referent="RBX519a20a6c0b34936a46b10f3518dace5">
@@ -1608,12 +1532,10 @@
 						<Y>1</Y>
 						<Z>1</Z>
 					</Vector3>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">Mesh</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 			<Item class="Decal" referent="RBXb4ac671f45544aa4a6b6dc5e80906914">
@@ -1651,12 +1573,10 @@
 					</Vector2>
 					<int name="ZIndex">1</int>
 					<token name="Face">5</token>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">face</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 			<Item class="Attachment" referent="RBX54710fe6dad2493f8877a08268997ec5">
@@ -1676,12 +1596,10 @@
 						<R22>1</R22>
 					</CoordinateFrame>
 					<bool name="Visible">false</bool>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">FaceFrontAttachment</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 			<Item class="Attachment" referent="RBX43076c2142c4414a80ea2960fa66cfa9">
@@ -1701,12 +1619,10 @@
 						<R22>1</R22>
 					</CoordinateFrame>
 					<bool name="Visible">false</bool>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">FaceCenterAttachment</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 			<Item class="Attachment" referent="RBX01ccf839ef9d4e81bb12b4165540417d">
@@ -1726,12 +1642,10 @@
 						<R22>1</R22>
 					</CoordinateFrame>
 					<bool name="Visible">false</bool>
-					<BinaryString name="AttributesSerialize" />
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
 					<string name="Name">HairAttachment</string>
 					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
 		</Item>

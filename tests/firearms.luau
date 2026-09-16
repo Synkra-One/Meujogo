@@ -65,6 +65,14 @@ local function object(class, name, parent)
 		for _, child in children do if child:IsA(kind) then return child end end
 		return nil
 	end
+	function methods:IsDescendantOf(ancestor)
+		local current = props.Parent
+		while current do
+			if current == ancestor then return true end
+			current = current.Parent
+		end
+		return false
+	end
 	function methods:GetAttribute(key) return attributes[key] end
 	function methods:SetAttribute(key, value)
 		attributes[key] = value
@@ -174,10 +182,12 @@ local remotes = setmetatable({}, { __index = function(t, key)
 end })
 local modules = {
 	Remotes = remotes,
+	ItemRegistry = { Items = {} },
+	ToolFactory = { Create = function() return nil end },
 	-- Status behavior is exercised against the real module in survivor_powers.luau.
 	SurvivorPowerStatus = { BeginAttack = function() return false end, BlockAttack = function() return false end,
 		Active = function() return false end, Stun = function() return false end, Emit = function() end },
-	WeaponEffects = { CreateTracer = function() traces += 1 end, CreateImpact = function() end },
+	OTSEffects = { CreateTracer = function() traces += 1 end, CreateImpact = function() end },
 	DamageSystem = {
 		IsDamageable = function(model) return model:FindFirstChildOfClass("Humanoid").Health > 0 end,
 		Apply = function(humanoid, damage)
@@ -227,6 +237,10 @@ local settings = object("Folder", "Settings", template)
 local config = object("Folder", "Config", settings)
 object("NumberValue", "Ammo", config).Value = 17
 object("NumberValue", "MaxAmmo", config).Value = 17
+object("NumberValue", "Delay", config).Value = 0.06
+object("NumberValue", "Spread", config).Value = 3
+object("NumberValue", "Recoil", config).Value = 0.4
+object("NumberValue", "AimFOV", config).Value = 62
 object("BoolValue", "Reloading", config).Value = false
 local components = object("Folder", "Components", template)
 object("Part", "Muzzle", components).Position = V.new(0, 2, -1)
@@ -249,13 +263,16 @@ local function player(name)
 	return p
 end
 local alice, bob = player("Alice"), player("Bob")
-local ammoSystem, drop, server = loadModule("AmmoSystem"), loadModule("DropItemSystem"), loadModule("FirearmServer")
+local ammoSystem, drop, server = loadModule("AmmoSystem"), loadModule("DropItemSystem"), loadModule("OTSFirearmService")
 ammoSystem.Init(); drop.Init(); server.Init(); server.Init()
-local rules = loadModule("FirearmRules")
+local rules = loadModule("OTSRules")
+assert(rules.ShotInterval(template) == 0.06 and rules.Spread(template) == 3
+	and rules.Recoil(template) == 0.4 and rules.AimFOV(template) == 62,
+	"OTS settings must come from the Glock17 Tool")
 local pistol = template:Clone(); pistol.Parent = alice.Character
 local mag = pistol.Settings.Config.Ammo
 local function shoot(target)
-	remotes.FirearmShoot.OnServerEvent:Fire(alice, pistol, target or V.new(0, 2, -80), false, 1)
+	remotes.FirearmShoot.OnServerEvent:Fire(alice, pistol, target or V.new(0, 2, -80), true, 1)
 end
 
 local target = object("Model", "Target", workspace)
@@ -270,9 +287,8 @@ advance(0.2)
 shoot(V.new(0/0, 0, 0)); shoot(V.new(math.huge, 0, 0)); shoot(V.new(0, 0, -9000))
 assert(mag.Value == 16 and hits == 1, "Reject nonfinite/out-of-range aim points")
 remotes.FirearmDamage.OnServerEvent:Fire(alice, targetHead)
-remotes.FirearmHit.OnServerEvent:Fire(alice, targetHead.Position, targetHead, V.new(0, 0, 1))
-assert(hits == 1 and traces == 1, "Legacy remotes cannot forge damage or effects")
-remotes.FirearmShoot.OnServerEvent:Fire(bob, pistol, targetHead.Position, false, 1)
+assert(hits == 1 and traces == 1, "Server-to-client feedback remote cannot forge damage")
+remotes.FirearmShoot.OnServerEvent:Fire(bob, pistol, targetHead.Position, true, 1)
 assert(mag.Value == 16, "Cannot fire another player's gun")
 pistol.Parent = alice.Backpack; shoot(); assert(mag.Value == 16, "Cannot shoot an unequipped gun")
 pistol.Parent = alice.Character
@@ -294,7 +310,14 @@ pistol:SetAttribute("LobbyTestWeapon", true)
 alice:SetAttribute("InRound", true); bob:SetAttribute("InRound", true)
 shoot(); assert(bob.Character.Humanoid.Health == 100, "Test weapon cannot damage a player even in round")
 advance(0.2)
+pistol.Parent = alice.Character
+rayResult.Instance = targetHead
+alice:SetAttribute("InWaitingRoom", true)
+shoot(); assert(hits == 2, "Lobby test weapon must fire at its training target")
+alice:SetAttribute("InWaitingRoom", nil)
+advance(0.2)
 pistol:SetAttribute("LobbyTestWeapon", nil); bob:SetAttribute("InRound", nil)
+rayResult.Instance = bob.Character.Head
 shoot(); assert(bob.Character.Humanoid.Health == 100, "Lobby player must be protected from live weapons")
 advance(0.2); bob:SetAttribute("InRound", true); shoot()
 assert(bob.Character.Humanoid.Health < 100, "Live weapon should work in round")

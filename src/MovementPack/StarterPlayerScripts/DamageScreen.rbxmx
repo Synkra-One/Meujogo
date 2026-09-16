@@ -2,7 +2,6 @@
 <roblox version="4"><Item class="LocalScript" referent="176">
           <Properties>
             <string name="Name">DamageScreen</string>
-            <BinaryString name="AttributesSerialize" />
             <SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
             <bool name="Disabled">true</bool>
             <ContentId name="LinkedSource">
@@ -146,7 +145,6 @@ if Player.Character then
 end
 Player.CharacterAdded:Connect(onCharacterAdded)</string>
             <int64 name="SourceAssetId">-1</int64>
-            <BinaryString name="Tags" />
           </Properties>
         </Item>
       <SharedStrings>

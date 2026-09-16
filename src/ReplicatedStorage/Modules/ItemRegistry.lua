@@ -138,7 +138,7 @@ ItemRegistry.Items = {
 		AttributeName = "Lanterna",
 		Rarity = "Media",
 		Zones = { Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta, Zone.Construcoes, Zone.Construcoes },
-		AssetId = 117648733552528,
+		AssetId = 6715358554, -- modelo unico da lanterna: "Flashlight", por MikesDSL
 		Function = "Feixe direcional com bateria de 60s. Exposicao continua incomoda e desacelera o Monstro, com dano leve e resistencia temporaria.",
 	},
 	Chocolate = {

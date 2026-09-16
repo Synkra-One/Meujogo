@@ -12,6 +12,7 @@ local autoButton = toolbar:CreateButton("AutoProtect", "Ligar/desligar backups a
 local backupRigsButton = toolbar:CreateButton("BackupRigs", "Guardar uma copia limpa dos rigs", "")
 local resetRigsButton = toolbar:CreateButton("ResetRigs", "Restaurar a pose dos rigs a partir da copia limpa", "")
 local poseButton = toolbar:CreateButton("PoseSnapshot", "Guardar a pose atual dos rigs", "")
+local attachFlashlightButton = toolbar:CreateButton("AttachFlashlight", "Prender [Ungroup] Flashlight ao Right Arm para animar no Moon", "")
 
 local RIG_NAMES = { "monstro", "bolha" }
 local MOON_FOLDER_NAME = "MoonAnimator2Saves"
@@ -447,11 +448,34 @@ local function createPoseSnapshot()
 	print("MoonBackupSeguro: pose salva", snapshot.Name)
 end
 
+local function attachFlashlightToRightArm()
+	local backupFolder = ServerStorage:FindFirstChild("AnimationBackup")
+	local helperModule = backupFolder and backupFolder:FindFirstChild("FlashlightRigHelper")
+	if not helperModule or not helperModule:IsA("ModuleScript") then
+		warn("MoonBackupSeguro: FlashlightRigHelper nao encontrado em ServerStorage.AnimationBackup. Sincronize o Rojo e tente de novo.")
+		return
+	end
+
+	local ok, helper = pcall(require, helperModule)
+	if not ok then
+		warn("MoonBackupSeguro: falha ao carregar FlashlightRigHelper", helper)
+		return
+	end
+
+	local attached, message = helper.Attach()
+	if attached then
+		print("MoonBackupSeguro:", message)
+	else
+		warn("MoonBackupSeguro:", message)
+	end
+end
+
 protectButton.Click:Connect(function() createMoonSnapshot(true) end)
 recoverButton.Click:Connect(recoverLatestHealthy)
 backupRigsButton.Click:Connect(createRigBackups)
 resetRigsButton.Click:Connect(resetRigs)
 poseButton.Click:Connect(createPoseSnapshot)
+attachFlashlightButton.Click:Connect(attachFlashlightToRightArm)
 autoButton.Click:Connect(function()
 	autosaveEnabled = not autosaveEnabled
 	plugin:SetSetting(AUTO_SETTING, autosaveEnabled)

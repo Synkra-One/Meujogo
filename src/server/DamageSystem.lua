@@ -8,14 +8,14 @@
 	atraso de regeneração) ficam num lugar só.
 
 	HOJE quem usa:
-	  - FirearmServer.lua  (dano das armas de fogo -- a armadura continua lá,
+	  - OTSFirearmService.lua  (dano da Glock17 -- a armadura continua lá,
 	    só o TakeDamage final + a morte passam por aqui)
 	  - WeaponSystem.lua   (Faca/Lança/Pedra: só se GameConfig.Weapons.*Damage
 	    for > 0 -- por padrão continuam sendo só empurrão)
 	  - UtilityItemSystem.lua (Chocolate cura pelo Heal)
 
 	MORTE: quando Health chega a 0, o character ganha um BoolValue "Dead"
-	(mesmo marcador que o FirearmServer já usava), e se for um Player:
+	(mesmo marcador que o sistema OTS usa), e se for um Player:
 	Elimination.Eliminate + Remotes.PlayerKilled:FireAllClients(vítima, autor,
 	causa). Apply devolve (danoAplicado, morreuAgora) pra quem chamou poder
 	disparar o feedback específico da arma (kill feed etc).
@@ -32,7 +32,7 @@
 	regenera GameConfig.Health.RegenPerSecond por segundo, mas só depois de
 	RegenDelayAfterDamage segundos sem tomar dano.
 
-	Uso (uma vez no boot do servidor, ANTES de FirearmServer/WeaponSystem):
+	Uso (uma vez no boot do servidor, ANTES de OTSFirearmService/WeaponSystem):
 		local DamageSystem = require(script.DamageSystem)
 		DamageSystem.Init()
 ]]
@@ -59,35 +59,63 @@ export type DamageInfo = {
 -- character -> os.clock() do último dano tomado (gate da regeneração).
 local lastDamageAt: { [Model]: number } = {}
 
+type FallState = {
+	player: Player,
+	humanoid: Humanoid,
+	root: BasePart,
+	active: boolean,
+	startY: number,
+	peakY: number,
+	startedAt: number,
+	lastAppliedAt: number,
+}
+
+local fallStates: { [Model]: FallState } = {}
+
 -- Uma única reação autoritativa por character. Animações iniciadas no
 -- servidor replicam para vítima e atacante; isso evita cada tela decidir um
 -- estado diferente a partir do próprio HealthChanged.
 local reactionTracks: { [Model]: AnimationTrack } = {}
+local reactionAnimationIds: { [Model]: string } = {}
 local hurtHealthConnections: { [Model]: RBXScriptConnection } = {}
+local hurtMovingStates: { [Model]: boolean } = {}
 
-local function stopReaction(model: Model, fadeTime: number)
+local function stopReactionTrack(model: Model, fadeTime: number)
 	local previous = reactionTracks[model]
-	local healthConnection = hurtHealthConnections[model]
-	if healthConnection then
-		hurtHealthConnections[model] = nil
-		healthConnection:Disconnect()
-	end
+	reactionTracks[model] = nil
+	reactionAnimationIds[model] = nil
 	if not previous then
 		return
 	end
-	reactionTracks[model] = nil
 	pcall(function()
 		previous:Stop(fadeTime)
 		previous:Destroy()
 	end)
 end
 
-local function playReaction(model: Model, humanoid: Humanoid, animationId: string, priority: Enum.AnimationPriority, looped: boolean?)
+local function stopReaction(model: Model, fadeTime: number)
+	local healthConnection = hurtHealthConnections[model]
+	if healthConnection then
+		hurtHealthConnections[model] = nil
+		healthConnection:Disconnect()
+	end
+	hurtMovingStates[model] = nil
+	stopReactionTrack(model, fadeTime)
+end
+
+local function playReaction(model: Model, humanoid: Humanoid, animationId: string, priority: Enum.AnimationPriority, looped: boolean?): boolean
 	if animationId == "" or animationId == "rbxassetid://0" then
-		return
+		return false
 	end
 
-	stopReaction(model, 0.05)
+	local current = reactionTracks[model]
+	if current and reactionAnimationIds[model] == animationId and current.IsPlaying then
+		return true
+	end
+
+	-- Trocar HurtIdle por HurtWalk nao pode desconectar o observador de vida.
+	-- So a trilha e substituida; o estado Hurt continua ativo.
+	stopReactionTrack(model, 0.08)
 
 	local animator = humanoid:FindFirstChildOfClass("Animator")
 	if not animator then
@@ -103,48 +131,77 @@ local function playReaction(model: Model, humanoid: Humanoid, animationId: strin
 	animation:Destroy()
 	if not ok or not loaded then
 		warn("[DamageSystem] Não foi possível carregar a animação de combate " .. animationId)
-		return
+		return false
 	end
 
 	local track = loaded :: AnimationTrack
 	track.Priority = priority
 	track.Looped = looped == true
 	reactionTracks[model] = track
+	reactionAnimationIds[model] = animationId
 	track.Stopped:Once(function()
 		if reactionTracks[model] == track then
 			reactionTracks[model] = nil
+			reactionAnimationIds[model] = nil
 		end
 		track:Destroy()
 	end)
 	track:Play(0.06)
+	return true
 end
 
-local function playHurtReaction(model: Model, humanoid: Humanoid)
+local function isHurtMoving(model: Model, wasMoving: boolean?): boolean
 	local root = model:FindFirstChild("HumanoidRootPart")
 	local speed = if root and root:IsA("BasePart")
 		then (root.AssemblyLinearVelocity * Vector3.new(1, 0, 1)).Magnitude
 		else 0
-	local animationId = if speed > 0.5
+	-- Histerese evita piscar entre Idle/Walk quando o corpo termina de frear
+	-- ou escorrega alguns centimetros numa encosta.
+	return speed > (if wasMoving == true then 0.75 else 1.5)
+end
+
+local function playHurtReaction(model: Model, humanoid: Humanoid)
+	local moving = isHurtMoving(model, hurtMovingStates[model])
+	local animationId = if moving
 		then GameConfig.Health.HurtWalkAnimationId
 		else GameConfig.Health.HurtIdleAnimationId
-	playReaction(model, humanoid, animationId, Enum.AnimationPriority.Action2, true)
-	if reactionTracks[model] then
+	if playReaction(model, humanoid, animationId, Enum.AnimationPriority.Action2, true) then
+		hurtMovingStates[model] = moving
 		model:SetAttribute("CombatAnimationState", "Hurt")
-		hurtHealthConnections[model] = humanoid.HealthChanged:Connect(function(newHealth: number)
-			if newHealth <= 0 then
-				return
-			end
-			if newHealth >= humanoid.MaxHealth - 0.01 then
-				model:SetAttribute("CombatAnimationState", nil)
-				stopReaction(model, 0.08)
-			end
-		end)
+		if not hurtHealthConnections[model] then
+			hurtHealthConnections[model] = humanoid.HealthChanged:Connect(function(newHealth: number)
+				if newHealth <= 0 then
+					return
+				end
+				if newHealth >= humanoid.MaxHealth - 0.01 then
+					model:SetAttribute("CombatAnimationState", nil)
+					stopReaction(model, 0.08)
+				end
+			end)
+		end
 	end
 end
 
 local function playDeathReaction(model: Model, humanoid: Humanoid)
+	stopReaction(model, 0.05)
 	model:SetAttribute("CombatAnimationState", "Death")
 	playReaction(model, humanoid, GameConfig.Health.DeathAnimationId, Enum.AnimationPriority.Action4)
+end
+
+local function refreshHurtReactions()
+	for model, wasMoving in hurtMovingStates do
+		local humanoid = model:FindFirstChildOfClass("Humanoid")
+		if not model.Parent or not humanoid or humanoid.Health <= 0
+			or model:GetAttribute("CombatAnimationState") ~= "Hurt" then
+			stopReaction(model, 0.05)
+			continue
+		end
+
+		local moving = isHurtMoving(model, wasMoving)
+		if moving ~= wasMoving or not reactionTracks[model] then
+			playHurtReaction(model, humanoid)
+		end
+	end
 end
 
 --------------------------------------------------------------------------------
@@ -314,6 +371,7 @@ function DamageSystem.Apply(target: unknown, amount: number, info: DamageInfo?):
 		-- Proteção para qualquer sistema externo que tenha impedido o dano
 		-- letal depois da nossa previsão.
 		model:SetAttribute("CombatAnimationState", nil)
+		stopReaction(model, 0.05)
 	end
 	playHurtReaction(model, humanoid)
 
@@ -377,6 +435,98 @@ local function disableDefaultRegen(character: Model)
 	end)
 end
 
+--------------------------------------------------------------------------------
+-- Dano de queda
+--------------------------------------------------------------------------------
+
+local FALL_MIN_HEIGHT = 4 -- studs de queda sem dano nenhum no calculo original
+local FALL_DAMAGE_START_HEIGHT = 15 -- o cliente tambem so manda dano acima disso
+local FALL_DAMAGE_PER_STUD = 1.5
+local FALL_MAX_REPORTED = 500 -- acima disso é cliente mentindo, ignora
+local FALL_DUPLICATE_WINDOW = 0.45 -- evita client + server aplicarem o mesmo pouso
+
+local function applyFallDamage(player: Player, fallDistance: number)
+	local character = player.Character
+	if not character or type(fallDistance) ~= "number" or fallDistance <= FALL_DAMAGE_START_HEIGHT
+		or fallDistance > FALL_MAX_REPORTED then
+		return
+	end
+
+	local state = fallStates[character]
+	local now = os.clock()
+	if state and now - state.lastAppliedAt < FALL_DUPLICATE_WINDOW then
+		return
+	end
+
+	local damage = math.floor((fallDistance - FALL_MIN_HEIGHT) * FALL_DAMAGE_PER_STUD)
+	if damage <= 0 then
+		return
+	end
+
+	local applied = DamageSystem.Apply(player, damage, { Cause = "Queda" })
+	if applied > 0 and state then
+		state.lastAppliedAt = now
+	end
+end
+
+local function startFall(state: FallState)
+	if state.active then
+		state.peakY = math.max(state.peakY, state.root.Position.Y)
+		return
+	end
+	state.active = true
+	state.startedAt = os.clock()
+	state.startY = state.root.Position.Y
+	state.peakY = state.startY
+end
+
+local function finishFall(state: FallState)
+	if not state.active or state.humanoid.FloorMaterial == Enum.Material.Air then
+		return
+	end
+
+	state.active = false
+	local fallDistance = math.max(state.startY, state.peakY) - state.root.Position.Y
+	applyFallDamage(state.player, fallDistance)
+end
+
+local function monitorFall(player: Player, character: Model, humanoid: Humanoid)
+	local root = character:FindFirstChild("HumanoidRootPart") or character:WaitForChild("HumanoidRootPart", 10)
+	if not root or not root:IsA("BasePart") then
+		return
+	end
+
+	local state: FallState = {
+		player = player,
+		humanoid = humanoid,
+		root = root,
+		active = false,
+		startY = 0,
+		peakY = 0,
+		startedAt = 0,
+		lastAppliedAt = 0,
+	}
+	fallStates[character] = state
+
+	humanoid.StateChanged:Connect(function(_, newState)
+		if fallStates[character] ~= state or humanoid.Health <= 0 then
+			return
+		end
+		if newState == Enum.HumanoidStateType.Freefall then
+			startFall(state)
+		elseif newState == Enum.HumanoidStateType.Landed
+			or newState == Enum.HumanoidStateType.Running
+			or newState == Enum.HumanoidStateType.RunningNoPhysics
+			or newState == Enum.HumanoidStateType.GettingUp then
+			task.defer(function()
+				if fallStates[character] == state then
+					finishFall(state)
+				end
+			end)
+		end
+	end)
+end
+
 local function onCharacterAdded(character: Model)
 	local humanoid = character:FindFirstChildOfClass("Humanoid") or character:WaitForChild("Humanoid", 10)
 	if humanoid and humanoid:IsA("Humanoid") then
@@ -390,11 +540,15 @@ local function onCharacterAdded(character: Model)
 		local maxHealth = if owner then StatScaling.MaxHealth(owner) else GameConfig.Health.Max
 		humanoid.MaxHealth = maxHealth
 		humanoid.Health = maxHealth
+		if owner then
+			monitorFall(owner, character, humanoid)
+		end
 	end
 	disableDefaultRegen(character)
 
 	character.Destroying:Connect(function()
 		lastDamageAt[character] = nil
+		fallStates[character] = nil
 		stopReaction(character, 0)
 	end)
 end
@@ -430,43 +584,27 @@ local function regenStep(dt: number)
 end
 
 --------------------------------------------------------------------------------
--- Dano de queda (vem do pacote de movimento)
+-- Compatibilidade com o efeito de queda do cliente
 --------------------------------------------------------------------------------
--- O "Ultimate R6 Movement System" tem um LocalScript FallSystem que mede a
--- altura da queda e dispara ReplicatedStorage.FallDamageEvent. O
--- TrueHealthController que veio junto é só um TRECHO de código solto (começa
--- com "-- Add near the top of..."), e chamaria humanoid:TakeDamage direto,
--- furando as guardas daqui (invulnerável, já eliminado, ForceField). Então o
--- dano de queda é tratado AQUI, pela mesma porta de todo o resto.
---
--- O cliente manda a DISTÂNCIA, nunca o dano: o número final é calculado no
--- servidor, com o mesmo cálculo do pacote.
-
-local FALL_MIN_HEIGHT = 4 -- studs de queda sem dano nenhum
-local FALL_DAMAGE_PER_STUD = 1.5
-local FALL_MAX_REPORTED = 500 -- acima disso é cliente mentindo, ignora
+-- O servidor monitora a queda de forma autoritativa em fallStates. O RemoteEvent
+-- continua aceito como apoio para efeitos/scripts antigos, mas usa a mesma
+-- applyFallDamage com janela anti-duplicada.
 
 local function onFallDamage(player: Player, fallDistance: unknown)
-	if type(fallDistance) ~= "number" or fallDistance <= 0 or fallDistance > FALL_MAX_REPORTED then
+	if type(fallDistance) ~= "number" then
 		return
 	end
-	if fallDistance <= FALL_MIN_HEIGHT then
-		return
-	end
-
-	local damage = math.floor((fallDistance - FALL_MIN_HEIGHT) * FALL_DAMAGE_PER_STUD)
-	if damage > 0 then
-		DamageSystem.Apply(player, damage, { Cause = "Queda" })
-	end
+	applyFallDamage(player, fallDistance)
 end
 
 --[[
 	Init()
 	Aplica MaxHealth/regen-off nos characters, liga o loop de regeneração e o
-	dano de queda. Chame uma vez no boot, ANTES de FirearmServer/WeaponSystem.
+	dano de queda. Chame uma vez no boot, ANTES de OTSFirearmService/WeaponSystem.
 ]]
 function DamageSystem.Init()
 	local fallEvent = ReplicatedStorage:FindFirstChild("FallDamageEvent")
+		or ReplicatedStorage:WaitForChild("FallDamageEvent", 10)
 	if fallEvent and fallEvent:IsA("RemoteEvent") then
 		fallEvent.OnServerEvent:Connect(onFallDamage)
 	else
@@ -484,14 +622,40 @@ function DamageSystem.Init()
 		end
 	end)
 
-	local accumulator = 0
+	local regenAccumulator = 0
+	local hurtAccumulator = 0
 	RunService.Heartbeat:Connect(function(dt: number)
-		accumulator += dt
-		if accumulator < 0.25 then
-			return
+		hurtAccumulator += dt
+		if hurtAccumulator >= 0.1 then
+			refreshHurtReactions()
+			hurtAccumulator = 0
 		end
-		regenStep(accumulator)
-		accumulator = 0
+
+		for character, state in fallStates do
+			if not character.Parent or state.humanoid.Health <= 0 or state.root.Parent ~= character then
+				fallStates[character] = nil
+				continue
+			end
+
+			local floor = state.humanoid.FloorMaterial
+			local verticalSpeed = state.root.AssemblyLinearVelocity.Y
+			if floor == Enum.Material.Air and verticalSpeed < -8 then
+				startFall(state)
+			end
+			if state.active then
+				state.peakY = math.max(state.peakY, state.root.Position.Y)
+				if floor ~= Enum.Material.Air and floor ~= Enum.Material.Water
+					and state.humanoid:GetState() ~= Enum.HumanoidStateType.Freefall then
+					finishFall(state)
+				end
+			end
+		end
+
+		regenAccumulator += dt
+		if regenAccumulator >= 0.25 then
+			regenStep(regenAccumulator)
+			regenAccumulator = 0
+		end
 	end)
 end
 

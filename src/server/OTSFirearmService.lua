@@ -1,5 +1,5 @@
 --!strict
--- Glock17 do Digital's OTS: um pedido = um raycast no servidor.
+-- Digital's OTS Patch2 integrado: um pedido = um raycast no servidor.
 -- Nenhum remote aceita dano/impacto escolhido pelo cliente.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -8,20 +8,20 @@ local Debris = game:GetService("Debris")
 
 local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
-local Rules = require(ReplicatedStorage.Modules.FirearmRules)
-local Ammo = require(ReplicatedStorage.Modules.Ammo)
-local WeaponEffects = require(ReplicatedStorage.Modules.WeaponEffects)
+local Rules = require(ReplicatedStorage.Modules.OTSRules)
+local Ammo = require(ReplicatedStorage.Modules.OTSAmmo)
+local OTSEffects = require(ReplicatedStorage.Modules.OTSEffects)
 local DamageSystem = require(script.Parent.DamageSystem)
 local PowerStatus = require(script.Parent.SurvivorPowerStatus)
 local AmmoSystem = require(script.Parent.AmmoSystem)
 local assets = ReplicatedStorage:WaitForChild("WeaponAssets")
 local toolsFolder = assets:WaitForChild("Tools")
 local audios = assets:WaitForChild("Audios")
-local FirearmServer = {}
+local OTSFirearmService = {}
 local initialized = false
 local rng = Random.new()
 local lastShot: { [Player]: number } = {}
-type Reload = { tool: Tool, connections: { RBXScriptConnection } }
+type Reload = { tool: Tool, connections: { RBXScriptConnection }, stages: { [string]: boolean } }
 local reloads: { [Player]: Reload } = {}
 
 local function alive(player: Player): boolean
@@ -32,12 +32,12 @@ local function alive(player: Player): boolean
 		and character:GetAttribute("Amarrado") ~= true and player:GetAttribute("Eliminado") ~= true
 		and player:GetAttribute("Amarrado") ~= true
 		and character:GetAttribute("GrabLocked") ~= true
-		and player:GetAttribute("InWaitingRoom") ~= true
 end
 
 local function equipped(player: Player, candidate: unknown): Tool?
-	if typeof(candidate) ~= "Instance" or not Rules.IsPistol(candidate :: Instance) or not alive(player) then return nil end
+	if typeof(candidate) ~= "Instance" or not Rules.IsWeapon(candidate :: Instance) or not alive(player) then return nil end
 	local tool = candidate :: Tool
+	if player:GetAttribute("InWaitingRoom") == true and tool:GetAttribute("LobbyTestWeapon") ~= true then return nil end
 	return if tool.Parent == player.Character then tool else nil
 end
 
@@ -86,10 +86,34 @@ local function dropMagazine(tool: Tool)
 	magazineVisible(tool, false)
 end
 
-local function onReload(player: Player, candidate: unknown, action: unknown)
+local function runReloadStage(state: Reload, marker: string)
+	if state.stages[marker] then return end
+	state.stages[marker] = true
+	if marker == "MagOut" then
+		handleSound(state.tool, "MagOut")
+		dropMagazine(state.tool)
+	elseif marker == "MagIn" then
+		handleSound(state.tool, "MagIn")
+		magazineVisible(state.tool, true)
+	elseif marker == "BoltPull" then
+		handleSound(state.tool, "BoltIn")
+	elseif marker == "BoltRelease" then
+		handleSound(state.tool, "BoltOut")
+	end
+end
+
+local function onReload(player: Player, candidate: unknown, action: unknown, marker: unknown)
 	if action == "Cancel" then
 		local state = reloads[player]
 		if state and state.tool == candidate then finishReload(player, false) end
+		return
+	end
+	if action == "Marker" then
+		local state = reloads[player]
+		if not state or state.tool ~= candidate or type(marker) ~= "string" then return end
+		if marker == "MagOut" or marker == "MagIn" or marker == "BoltPull" or marker == "BoltRelease" then
+			runReloadStage(state, marker)
+		end
 		return
 	end
 	if player.Character and (player.Character:GetAttribute("ShadowRushBusy") == true
@@ -103,7 +127,7 @@ local function onReload(player: Player, candidate: unknown, action: unknown)
 		Remotes.FirearmReload:FireClient(player, tool, "Cancelled")
 		return
 	end
-	local state: Reload = { tool = tool, connections = {} }
+	local state: Reload = { tool = tool, connections = {}, stages = {} }
 	reloads[player] = state
 	setReloading(tool, true)
 	table.insert(state.connections, tool.AncestryChanged:Connect(function()
@@ -120,10 +144,12 @@ local function onReload(player: Player, candidate: unknown, action: unknown)
 		end)
 	end
 	-- Agenda autoritativa: animação privada/sem markers não prende a recarga.
-	stage(0.3, function() handleSound(tool, "MagOut"); dropMagazine(tool) end)
-	stage(1.25, function() handleSound(tool, "MagIn"); magazineVisible(tool, true) end)
-	stage(1.75, function() handleSound(tool, "BoltIn") end)
-	stage(1.95, function() handleSound(tool, "BoltOut") end)
+	-- Os Animation Markers originais antecipam cada etapa. Estes tempos são
+	-- fallback para assets sem permissão ou animações substituídas sem markers.
+	stage(0.3, function() runReloadStage(state, "MagOut") end)
+	stage(1.25, function() runReloadStage(state, "MagIn") end)
+	stage(1.75, function() runReloadStage(state, "BoltPull") end)
+	stage(1.95, function() runReloadStage(state, "BoltRelease") end)
 	stage(Rules.ReloadDuration, function()
 		local amount = Rules.ReloadAmount(ammo.Value, Ammo.GetMagazineMax(tool), Ammo.GetReserve(player, Ammo.TypeFor(tool)))
 		ammo.Value += AmmoSystem.TakeReserve(player, Ammo.TypeFor(tool), amount)
@@ -198,7 +224,9 @@ local function onShoot(player: Player, candidate: unknown, target: unknown, aime
 	if not ammo or not (ammo:IsA("NumberValue") or ammo:IsA("IntValue")) or not muzzle
 		or not root or not root:IsA("BasePart") or not head or not head:IsA("BasePart") then return end
 	local now = os.clock()
-	local valid = Rules.CanShoot(now, lastShot[player], ammo.Value, reloads[player] ~= nil)
+	-- O Framework original só dispara enquanto mira. O servidor também valida.
+	if aimed ~= true then return end
+	local valid = Rules.CanShoot(now, lastShot[player], ammo.Value, reloads[player] ~= nil, tool)
 	local delta = point - muzzle.Position
 	valid = valid and delta.Magnitude > 0.01 and delta.Magnitude <= Rules.Range + 40
 		and (muzzle.Position - root.Position).Magnitude <= 8
@@ -219,7 +247,7 @@ local function onShoot(player: Player, candidate: unknown, target: unknown, aime
 	params.IgnoreWater = true
 	-- Parede entre o corpo e o cano também bloqueia o tiro.
 	local obstruction = Workspace:Raycast(head.Position, muzzle.Position - head.Position, params)
-	local spread = if aimed then Rules.AimSpread else Rules.HipSpread
+	local spread = Rules.Spread(tool)
 	local direction = (CFrame.lookAt(Vector3.zero, delta.Unit)
 		* CFrame.Angles(math.rad(rng:NextNumber(-spread, spread)), math.rad(rng:NextNumber(-spread, spread)), 0)).LookVector
 	local result = obstruction or Workspace:Raycast(muzzle.Position, direction * Rules.Range, params)
@@ -227,10 +255,10 @@ local function onShoot(player: Player, candidate: unknown, target: unknown, aime
 	if result then damageHit(player, tool, result.Instance, empowered) end
 	local ok, err = pcall(function()
 		shotEffects(tool, muzzle)
-		WeaponEffects.CreateTracer(muzzle.CFrame, endpoint)
-		if result then WeaponEffects.CreateImpact(result.Position, result.Instance, result.Normal) end
+		OTSEffects.CreateTracer(muzzle.CFrame, endpoint)
+		if result then OTSEffects.CreateImpact(result.Position, result.Instance, result.Normal) end
 	end)
-	if not ok then warn("[FirearmServer] Efeito OTS indisponível: " .. tostring(err)) end
+	if not ok then warn("[OTSFirearmService] Efeito OTS indisponível: " .. tostring(err)) end
 end
 
 local function giveTestWeapons(player: Player)
@@ -238,16 +266,16 @@ local function giveTestWeapons(player: Player)
 	if not backpack then return end
 	for _, name in GameConfig.Testing.GiveTestWeapons do
 		local template = toolsFolder:FindFirstChild(name)
-		if template and Rules.IsPistol(template) and not backpack:FindFirstChild(name) then template:Clone().Parent = backpack end
+		if template and Rules.IsWeapon(template) and not backpack:FindFirstChild(name) then template:Clone().Parent = backpack end
 	end
 end
 
-function FirearmServer.Init()
+function OTSFirearmService.Init()
 	if initialized then return end
 	initialized = true
 	-- Mantém meshes, welds e grip originais; a pistola não pesa no R6.
 	for _, template in toolsFolder:GetChildren() do
-		if Rules.IsPistol(template) then
+		if Rules.IsWeapon(template) then
 			(template :: Tool).CanBeDropped = false -- G usa o pickup validado; Backspace não perde a Tool.
 			for _, part in template:GetDescendants() do
 				if part:IsA("BasePart") then
@@ -259,7 +287,7 @@ function FirearmServer.Init()
 	end
 	Remotes.FirearmShoot.OnServerEvent:Connect(onShoot)
 	Remotes.FirearmReload.OnServerEvent:Connect(onReload)
-	-- FirearmHit/FirearmDamage deliberadamente sem listeners OnServerEvent.
+	-- FirearmDamage é somente feedback Server -> Client e não tem listener OnServerEvent.
 	local function watchPlayer(player: Player)
 		player.CharacterRemoving:Connect(function() finishReload(player, false) end)
 		player.CharacterAdded:Connect(function()
@@ -276,4 +304,4 @@ function FirearmServer.Init()
 	end)
 end
 
-return FirearmServer
+return OTSFirearmService
