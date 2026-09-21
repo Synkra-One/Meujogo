@@ -21,6 +21,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ContextActionService = game:GetService("ContextActionService")
 
 local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
+local FearRules = require(ReplicatedStorage.Modules.FearPresentationRules)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local DiscoveredItemsStore = require(script.Parent.DiscoveredItemsStore)
 
@@ -82,8 +83,22 @@ local function openMap()
 	end)
 end
 
+--[[
+	panicking()
+	Em Fear alto o mapa grande não abre -- e fecha se já estiver aberto. Lê o
+	Attribute "Fear" replicado pelo servidor e o MESMO limiar que apaga o
+	minimapa (FearPresentationRules.HudFade). Não altera o mapa nem os itens
+	descobertos: passado o pânico, M volta a funcionar normalmente.
+]]
+local function panicking(): boolean
+	local raw = LocalPlayer:GetAttribute("Fear")
+	local fear = if type(raw) == "number" and raw == raw
+		then math.clamp(raw, 0, GameConfig.Fear.MaxFear) else 0
+	return FearRules.HudFade(fear, GameConfig.Fear).FullMapBlocked
+end
+
 local function toggleMap()
-	if not isEligible then
+	if not isEligible or panicking() then
 		return
 	end
 	if mapUI and mapUI:IsOpen() then
@@ -142,6 +157,13 @@ local function refreshRole()
 end
 
 LocalPlayer:GetAttributeChangedSignal("Role"):Connect(refreshRole)
+-- Uma conexão só, por evento: o Fear já replica como Attribute, então não
+-- existe loop de polling aqui.
+LocalPlayer:GetAttributeChangedSignal("Fear"):Connect(function()
+	if panicking() then
+		closeMap()
+	end
+end)
 LocalPlayer.CharacterAdded:Connect(function(char)
 	closeMap()
 	character = char

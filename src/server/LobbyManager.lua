@@ -1,7 +1,7 @@
 --!strict
 --[[
 	LobbyManager
-	Cuida do lobby e dos teleportes: Lobby -> Sala de espera -> Ilha -> Lobby.
+	Cuida do lobby e dos teleportes: Lobby -> Ilha -> Lobby.
 
 	SPAWN INICIAL: "LobbySpawn" é a ÚNICA SpawnLocation do jogo -- os pontos
 	da ilha (IlhaSpawns) são Parts comuns, não SpawnLocations. O próprio
@@ -26,12 +26,13 @@
 	FLUXO
 	  1) Jogador interage com o Part "IniciarPartida" (ProximityPrompt).
 	  2) WaitingRoomManager valida a fase e as vagas para qualquer jogador;
-	     teleporta apenas quem interagiu para a sala de espera.
-	  3) Na sala, cada participante escolhe skin/perk e marca Pronto. Com o
-	     mínimo e todos prontos, inicia a contagem. Só os membros da sala são
-	     enviados a RoundManager.StartRound(participants). O personagem humano
-	     é escolhido depois do sorteio do papel; Monstro recebe Jason.
-	  4) RoundManager aguarda o spawn handler depois do LoadCharacter de
+	     a fila permanece no lobby, sem criar uma sala física.
+	  3) Cada participante escolhe skin/perk e marca Pronto. Com o mínimo e
+	     todos prontos, os papéis são sorteados e abre a seleção autoritativa
+	     de 30s. Humanos escolhem um sobrevivente; Monstro recebe Jason. Todos
+	     confirmando encerra a etapa antes do prazo.
+	  4) Só depois da seleção RoundManager cria os corpos e aguarda o spawn
+	     handler depois do LoadCharacter de
 	     todo mundo, antes de emitir RoundPrepared e iniciar as fases.
 	     Teleportamos: Monstro pro marcador
 	     MonstroSpawn dentro da Caverna, todo o resto pra um ponto de praia
@@ -69,7 +70,7 @@ local initialized = false
 -- Fica longe da área que o IslandGenerator escreve terreno (IslandLayout
 -- AreaHalf = 960 -> terreno até z = -960) e do raio máximo da ilha, pra nada
 -- da geração encostar no Lobby. Precisa bater com default.project.json e
--- com a sala de espera (WaitingRoomManager.origin).
+-- com uma sala de espera separada (que não existe mais).
 local LOBBY_ORIGIN = Vector3.new(0, 40, -1500)
 
 -- Acha a instância pelo nome (recriando com a classe certa se existir com
@@ -127,7 +128,7 @@ local function ensureLobbyExists()
 		prompt.Parent = startPart
 	end
 	local prompt = startPart:FindFirstChildOfClass("ProximityPrompt") :: ProximityPrompt
-	prompt.ActionText = "Entrar na sala"
+	prompt.ActionText = "Iniciar partida"
 	prompt.ObjectText = "Preparação da partida"
 	prompt.Enabled = true
 	prompt.MaxActivationDistance = 10
@@ -396,7 +397,7 @@ end
 
 -- Registra no carregamento do módulo. Assim o transporte já existe mesmo se
 -- alguma etapa visual do Init do lobby falhar; StartRound nunca troca o corpo
--- e o deixa abandonado na sala de espera.
+-- e o deixa abandonado na fila.
 RoundManager.SetSpawnHandler(teleportToIsland)
 
 --------------------------------------------------------------------------------

@@ -77,6 +77,9 @@ local function object(class)
 	table.insert(made,self); return self
 end
 local function vec(x,y,z) return {X=x,Y=y,Z=z,Magnitude=math.sqrt(x*x+y*y+z*z)} end
+local cframeMeta={}
+cframeMeta.__mul=function(a,b) return a end
+local function cframe() return setmetatable({},cframeMeta) end
 local function bindable() local s=signal(); return {Event=s,Fire=function(_,...) s:Fire(...) end} end
 local world,storage,soundService=object("Workspace"),object("ReplicatedStorage"),object("SoundService")
 world.CurrentCamera=object("Camera"); world.CurrentCamera.FieldOfView=77
@@ -110,12 +113,14 @@ local modules={Remotes=remotes,RoundManager=round,FearSystem=fear,LoadoutData={G
 	AssetRegistry={Sounds={PhaseMusic={}}}}
 local env=setmetatable({
 	game={GetService=function(_,name) return assert(services[name],name) end},script={Parent=names},
-	Instance={new=object}, Vector3={new=vec}, Color3={new=function(...) return {...} end},
+	Instance={new=object}, Vector3={new=vec}, Color3={new=function(...) return {...} end,fromRGB=function(...) return {...} end},
+	CFrame={new=cframe,Angles=cframe},
 	UDim2={fromScale=function(...) return {...} end},NumberSequence={new=function(...) return {...} end},
 	NumberSequenceKeypoint={new=function(...) return {...} end},
 	Enum={AnimationPriority={Core="Core",Movement="Movement",Action="Action",Action2="Action2",Action3="Action3",Action4="Action4"},
 		Material={Air="Air",Water="Water"},HumanoidStateType={Running="Running",RunningNoPhysics="RunningNoPhysics"},
-		RollOffMode={InverseTapered="InverseTapered"}},
+		RollOffMode={InverseTapered="InverseTapered"},
+		KeyCode={E="E",X="X",ButtonX="ButtonX",ButtonB="ButtonB"}},
 	Random={new=function() return {NextNumber=function() return 0 end,NextInteger=function(_,a) return a end} end},
 	task={delay=function(_,f) table.insert(delayed,f) end},
 	print=function(message) table.insert(logs,message) end,warn=function(message) table.insert(logs,message) end,
@@ -148,6 +153,51 @@ end
 local smoothed=0; for _=1,20 do smoothed=rules.Smooth(smoothed,100,0.05,0.35) end
 near(smoothed,rules.Smooth(0,100,1,0.35))
 
+-- ESCURECIMENTO ANIMADO: desligado em calma, respira em pânico, nunca apaga
+-- a tela. Rules.Darken é puro, então o pulso é reproduzível.
+local ceiling=math.clamp(cfg.DarkenMaxOpacity,0,0.6)
+near(rules.Darken(0,0,cfg),0)
+near(rules.Darken(cfg.DarkenStartFear,0,cfg),0,"comeca exatamente no limiar")
+near(rules.Darken(cfg.DarkenStartFear-1,12.34,cfg),0,"abaixo do limiar a camada fica desligada")
+local lowest,highest=math.huge,-math.huge
+for step=0,400 do
+	local value=rules.Darken(cfg.MaxFear,step/40,cfg)
+	assert(value>0 and value<=ceiling,"nunca passa do teto nem apaga a tela")
+	lowest=math.min(lowest,value); highest=math.max(highest,value)
+end
+assert(highest-lowest>0.01,"a camada respira em vez de ficar estatica")
+assert(highest<=ceiling+1e-9 and lowest>=ceiling*(1-math.clamp(cfg.DarkenPulseAmount,0,0.5))-1e-9)
+local previousDark=-1
+for value=cfg.DarkenStartFear,cfg.MaxFear,0.5 do
+	-- No mesmo instante do pulso, mais medo nunca escurece menos.
+	local now=rules.Darken(value,0.25,cfg)
+	assert(now>=previousDark-1e-9,"monotonico no Fear")
+	previousDark=now
+end
+
+-- HUD SUMINDO: proporcoes 0..1, sem pular de estado e sem esconder em calma.
+local calm=rules.HudFade(0,cfg)
+assert(calm.Vitals==0 and calm.Hotbar==0 and not calm.FullMapBlocked,"HUD inteiro em calma")
+local panic=rules.HudFade(cfg.MaxFear,cfg)
+assert(panic.Vitals==1 and panic.Hotbar==1 and panic.FullMapBlocked,"HUD some no topo")
+assert(cfg.HudFadeStartFear<cfg.HudFadeFullFear and cfg.HotbarFadeStartFear<cfg.HotbarFadeFullFear,
+	"limiares crescentes")
+assert(cfg.HudFadeStartFear>=cfg.FearStates.Panicked-10,"so some em panico, nao em tensao normal")
+near(rules.HudFade(cfg.HudFadeStartFear,cfg).Vitals,0)
+near(rules.HudFade(cfg.HotbarFadeStartFear,cfg).Hotbar,0)
+assert(not rules.HudFade(cfg.FullMapBlockFear-0.001,cfg).FullMapBlocked)
+assert(rules.HudFade(cfg.FullMapBlockFear,cfg).FullMapBlocked)
+local previousVitals,previousHotbar=-1,-1
+for value=0,cfg.MaxFear,0.25 do
+	local hud=rules.HudFade(value,cfg)
+	assert(hud.Vitals>=previousVitals-1e-9 and hud.Hotbar>=previousHotbar-1e-9,"so esconde, nunca revela")
+	assert(hud.Vitals>=0 and hud.Vitals<=1 and hud.Hotbar>=0 and hud.Hotbar<=1)
+	previousVitals,previousHotbar=hud.Vitals,hud.Hotbar
+end
+-- O inventario e o ultimo a sair: o jogador perde a leitura calma da tela
+-- antes de perder a barra de itens.
+assert(cfg.HotbarFadeStartFear>=cfg.HudFadeStartFear,"mapa/folego somem antes do inventario")
+
 local presentation=loadModule("FearPresentation")
 presentation.Init(); presentation.Init()
 assert(heartbeat:Count()==1 and remote.OnClientEvent:Count()==1)
@@ -162,6 +212,14 @@ storage:SetAttribute("MatchState","Playing"); p:SetAttribute("Fear",100); p:SetA
 local count=#made
 tick(60)
 assert(gui.Enabled and blur.Size>3.9 and blur.Size<=4)
+-- Camada de escurecimento: existe, esta atras da vinheta e reage ao Fear.
+local darken=gui:FindFirstChild("FearDarken")
+assert(darken and darken.ZIndex==0,"camada de escurecimento por baixo da vinheta")
+assert(darken.BackgroundTransparency<1,"escurece em panico")
+local darkAt100=darken.BackgroundTransparency
+p:SetAttribute("Fear",0); tick(120)
+assert(darken.BackgroundTransparency>darkAt100,"clareia junto com o Fear")
+p:SetAttribute("Fear",100); tick(120)
 assert(heart.plays==0 and breath.plays==0 and animator.loads==0,"blank assets never load/play")
 assert(#made==count,"effects reused across updates")
 near(world.CurrentCamera.FieldOfView,77); near(otherBlur.Size,9)
@@ -179,6 +237,7 @@ for _,attribute in {"InRound","CharacterSelectOpen","Eliminado"} do
 	p:SetAttribute(attribute,if attribute=="InRound" then true else nil); tick(40)
 end
 remotes.RoundEnded.OnClientEvent:Fire(); assert(not gui.Enabled and blur.Size==0)
+assert(darken.BackgroundTransparency==1,"nada de escurecimento residual no reset")
 tick(5); assert(not gui.Enabled,"no lingering frame after RoundEnded")
 storage:SetAttribute("MatchState","Intermission"); storage:SetAttribute("MatchState","Playing")
 tick(40); assert(gui.Enabled)

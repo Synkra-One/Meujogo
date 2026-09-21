@@ -29,11 +29,8 @@
 	  SabotageSystem.lua e LethalAbility.lua). Solta sozinho depois de
 	  GameConfig.Effects.AmarradoDuration (90s).
 
-	  CORDA: a amarração só se completa se pelo menos UM dos ajudantes ativos
-	  tiver Corda no estoque pessoal (RaftObjective.GetMaterialCount/
-	  ConsumeMaterial -- mesmo estoque usado pra entregar na Jangada). Só 1
-	  Corda é gasta no total, de qualquer um dos dois. Sem Corda disponível,
-	  a tentativa falha mesmo com 2 jogadores presentes o tempo todo.
+	  A amarração depende da cooperação dos ajudantes ativos; materiais da
+	  objetivos antigos não fazem mais parte desse fluxo.
 
 	PARTE 3 -- EXECUTAR (Tool "ArmaRara" = Lança Ancestral, ver ItemRegistry)
 	  Cliente dispara ConfrontKill:FireServer(target). Com a arma equipada e
@@ -75,7 +72,6 @@ local SafeAttribute = require(ReplicatedStorage.Modules.SafeAttribute)
 local Elimination = require(script.Parent.Elimination)
 local DamageSystem = require(script.Parent.DamageSystem)
 local SoundManager = require(script.Parent.SoundManager)
-local RaftObjective = require(script.Parent.RaftObjective)
 local MonsterLightWeakness = require(script.Parent.MonsterLightWeakness)
 
 local ConfrontSystem = {}
@@ -293,20 +289,6 @@ local function onAmarrarTriggered(target: Player, helper: Player)
 
 		if countActiveHelpers(attempt, target) < GameConfig.Confront.TieHelpersRequired then
 			print(string.format("[ConfrontSystem] Amarração de %s falhou: ajuda insuficiente.", target.Name))
-			return
-		end
-
-		-- Precisa de 1 Corda no estoque de QUALQUER ajudante ainda ativo.
-		local hasRope = false
-		for helper in attempt.helpers do
-			if RaftObjective.ConsumeMaterial(helper, "Corda", 1) then
-				hasRope = true
-				break
-			end
-		end
-
-		if not hasRope then
-			print(string.format("[ConfrontSystem] Amarração de %s falhou: ninguém tinha Corda.", target.Name))
 			return
 		end
 

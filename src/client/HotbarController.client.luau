@@ -33,10 +33,13 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local StarterGui = game:GetService("StarterGui")
 
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
+local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
+local FearRules = require(ReplicatedStorage.Modules.FearPresentationRules)
 local ItemIcons = require(ReplicatedStorage.Modules.ItemIcons)
 
 local SLOT_COUNT = 3
@@ -373,12 +376,34 @@ local function paintSlot(slot: Slot, tool: Tool?)
 	end
 end
 
+--------------------------------------------------------------------------------
+-- Pânico: a barra de itens desliza pra fora da tela
+--
+-- Em Fear alto o Sobrevivente perde a leitura calma do inventário. A Tool
+-- continua equipada, as teclas 1/2/3 e G continuam funcionando -- isto é só
+-- apresentação. O medo vem do Attribute "Fear" que o servidor replica; este
+-- arquivo não calcula nada de medo.
+--------------------------------------------------------------------------------
+
+local hasTools = false
+local hotbarHidden = 0
+
+local function applyVisibility()
+	local offset = math.floor(hotbarHidden * GameConfig.Fear.HotbarSlideOffset + 0.5)
+	holder.Position = UDim2.new(0, 14, 1, -14 + offset)
+	-- Enquanto a tela inicial (ReplicatedFirst/MenuBoot) estiver aberta, a
+	-- barra de itens não pode aparecer por baixo dela.
+	local introMenuOpen = LocalPlayer:GetAttribute("IntroMenuOpen") == true
+	gui.Enabled = hasTools and hotbarHidden < 0.999 and not introMenuOpen
+end
+
 local function refresh()
 	local tools = collectTools()
 	for i = 1, SLOT_COUNT do
 		paintSlot(slots[i], tools[i])
 	end
-	gui.Enabled = #tools > 0
+	hasTools = #tools > 0
+	applyVisibility()
 end
 
 --------------------------------------------------------------------------------
@@ -487,6 +512,20 @@ task.spawn(function()
 		task.wait(1)
 		refresh()
 	end
+end)
+
+-- ÚNICA conexão de render deste arquivo, e ela só move/oculta a barra.
+RunService.RenderStepped:Connect(function(dt: number)
+	local raw = LocalPlayer:GetAttribute("Fear")
+	local fear = if type(raw) == "number" and raw == raw
+		then math.clamp(raw, 0, GameConfig.Fear.MaxFear) else 0
+	local target = FearRules.HudFade(fear, GameConfig.Fear).Hotbar
+	if math.abs(target - hotbarHidden) < 0.001 then
+		hotbarHidden = target
+	else
+		hotbarHidden = FearRules.Smooth(hotbarHidden, target, dt, 0.25)
+	end
+	applyVisibility()
 end)
 
 refresh()

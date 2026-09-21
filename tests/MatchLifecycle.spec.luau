@@ -27,11 +27,19 @@ local function fixture()
 	end
 	local function signal()
 		local listeners = {}
-		return {
-			Connect = function(_, callback)
-				table.insert(listeners, callback)
-				return { Disconnect = function() end }
-			end,
+	return {
+		Connect = function(_, callback)
+			table.insert(listeners, callback)
+			return { Disconnect = function() end }
+		end,
+		Once = function(_, callback)
+			local connection
+			connection = { Connected = true, Disconnect = function(self) self.Connected = false end }
+			table.insert(listeners, function(...)
+				if connection.Connected then connection:Disconnect(); callback(...) end
+			end)
+			return connection
+		end,
 			Fire = function(_, ...)
 				for _, callback in table.clone(listeners) do scheduler.spawn(callback, ...) end
 			end,
@@ -55,8 +63,12 @@ local function fixture()
 		p.CharacterAdded = signal()
 		function p:LoadCharacter()
 			self.Character = object()
+			self.Character.Destroying = signal()
 			self.Character.PivotTo = function() end
 			local humanoid = { Died = signal() }
+			self.Character.FindFirstChildOfClass = function(_, name)
+				return if name == "Humanoid" then humanoid else nil
+			end
 			self.Character.WaitForChild = function(_, name)
 				return if name == "Humanoid" then humanoid else object()
 			end
@@ -71,7 +83,7 @@ local function fixture()
 		Players = { Min = 2, Max = 10 },
 		Testing = { SoloStart = false, DevRoleChooser = true, DevRoleUserIds = { 1 } },
 		Roles = { Survivor = "Sobrevivente", Monster = "Monstro", Spy = "Espiao" },
-		Round = { MonsterWinsAtSurvivorsAlive = 0, WinCheckInterval = 0.1, WaitingCountdown = 2 },
+		Round = { MonsterWinsAtSurvivorsAlive = 0, WinCheckInterval = 0.1 },
 		PhaseOrder = { "Queda" }, Phases = { Queda = { Default = 100 } },
 	}
 	local Remotes = setmetatable({}, { __index = function(t, key)
@@ -85,7 +97,42 @@ local function fixture()
 	RS.Modules = setmetatable({}, { __index = function(_, name) return name end })
 	local workspace = object()
 	function workspace:GetServerTimeNow() return now end
+	local RunService = { IsStudio = function() return false end }
+	local ServerScriptService = {}
+	function ServerScriptService:WaitForChild(name)
+		return if name == "Server" then self else name
+	end
 	local vector = setmetatable({}, { __add = function(a) return a end })
+	local selectionChanged = { Event = signal() }
+	local selectionStub = {
+		ClearChoice = function(p) p:SetAttribute("CharacterSelectionConfirmed", nil) end,
+		GetChoice = function() return nil end,
+		GetRoster = function() return {} end,
+		IsConfirmed = function(p) return p:GetAttribute("CharacterSelectionConfirmed") == true end,
+		SelectionChanged = selectionChanged,
+		BeginSelection = function(list)
+			for _, p in list do p:SetAttribute("CharacterSelectOpen", true) end
+			return true
+		end,
+		EveryoneConfirmed = function(list)
+			for _, p in list do if p:GetAttribute("CharacterSelectionConfirmed") ~= true then return false end end
+			return true
+		end,
+		FinishSelection = function(list)
+			for _, p in list do
+				p:SetAttribute("CharacterSelectionConfirmed", true)
+				p:SetAttribute("CharacterSelectOpen", nil)
+			end
+			return true
+		end,
+		CancelSelection = function(list)
+			for _, p in list or {} do
+				p:SetAttribute("CharacterSelectionConfirmed", nil)
+				p:SetAttribute("CharacterSelectOpen", nil)
+			end
+		end,
+		RemoveParticipant = function(p) p:SetAttribute("CharacterSelectOpen", nil) end,
+	}
 	local modules = {
 		GameConfig = Config, Remotes = Remotes,
 		Elimination = {
@@ -93,17 +140,24 @@ local function fixture()
 			Reset = function(p) p:SetAttribute("Eliminado", nil) end,
 		},
 		RadioObjective = { Reset = function() end, RescueCountdownStarted = { Event = signal() } },
-		RaftObjective = { Reset = function() end, RaftEscaped = { Event = signal() } },
+		RadioSiteSystem = { Reset = function() end },
+		ExtractionSystem = { Reset = function() end, Begin = function() return true end, SurvivorsExtracted = { Event = signal() } },
 		CharacterData = { Characters = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 } },
+		SurvivorSelectionConfig = { Duration = 30, GetSelectableCharacters = function() return { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 } end },
 		LoadoutData = {},
-		CharacterStatsApplier = {
-			ClearChoice = function() end, GetChoice = function() end,
-			GetRoster = function() return {} end, SelectionChanged = { Event = signal() },
+		CharacterStatsApplier = selectionStub,
+		CharacterPresentation = {
+			SpawnGameCharacter = function(p) p:LoadCharacter(); return p.Character end,
+			AwaitGameCharacterReady = function() end,
+			SpawnLobbyAvatar = function(p) p:LoadCharacter() end,
 		},
 	}
 	local env = setmetatable({
 		game = { GetService = function(_, name)
-			return ({ Players = Players, ReplicatedStorage = RS, Workspace = workspace })[name]
+			return ({
+				Players = Players, ReplicatedStorage = RS, Workspace = workspace,
+				RunService = RunService, ServerScriptService = ServerScriptService,
+			})[name]
 		end },
 		script = { Parent = setmetatable({}, { __index = function(_, name) return name end }) },
 		task = scheduler, os = { clock = function() return now end, time = function() return now end },
@@ -212,7 +266,6 @@ test("old rescue timer cannot end the next round", function()
 	local roster = { f.player(1), f.player(2) }
 	f.task.spawn(function() f.round.StartRound(roster) end)
 	f.modules.RadioObjective.RescueCountdownStarted.Event:Fire(5)
-	f.modules.RaftObjective.RaftEscaped.Event:Fire({ roster[1] })
 	f.advance(0.3)
 	f.task.spawn(function() f.round.StartRound(roster) end)
 	f.advance(6)
@@ -242,6 +295,9 @@ test("any account opens the room; two ready members start one round", function()
 	assert(not f.round.IsRoundActive(), "Started without the second player")
 	room.Join(b)
 	f.remotes.WaitingRoom.OnServerEvent:Fire(b, "Ready")
+	a:SetAttribute("CharacterSelectionConfirmed", true)
+	b:SetAttribute("CharacterSelectionConfirmed", true)
+	f.modules.CharacterStatsApplier.SelectionChanged.Event:Fire(a, "Confirmed")
 	f.advance(3)
 	assert(f.round.IsRoundActive() and f.storage:GetAttribute("MatchState") == "Playing")
 	assert(a.loads == 2 and b.loads == 2, "Duplicate round or membership")
@@ -250,7 +306,7 @@ test("any account opens the room; two ready members start one round", function()
 	assert(late:GetAttribute("InWaitingRoom") ~= true)
 end)
 
-test("leaving during countdown cancels it", function()
+test("leaving during survivor selection cancels it", function()
 	local f = fixture()
 	local room = f.load("WaitingRoomManager")
 	room.Init()
@@ -259,7 +315,7 @@ test("leaving during countdown cancels it", function()
 	f.remotes.WaitingRoom.OnServerEvent:Fire(a, "Ready")
 	f.remotes.WaitingRoom.OnServerEvent:Fire(b, "Ready")
 	f.advance(0.2)
-	f.remotes.WaitingRoom.OnServerEvent:Fire(b, "Leave")
+	f.players.PlayerRemoving:Fire(b)
 	f.advance(3)
 	assert(not f.round.IsRoundActive())
 	assert(b:GetAttribute("InWaitingRoom") == nil)
@@ -274,6 +330,9 @@ test("room recovers after failed preparation and accepts a new round", function(
 	room.Join(a); room.Join(b)
 	f.remotes.WaitingRoom.OnServerEvent:Fire(a, "Ready")
 	f.remotes.WaitingRoom.OnServerEvent:Fire(b, "Ready")
+	a:SetAttribute("CharacterSelectionConfirmed", true)
+	b:SetAttribute("CharacterSelectionConfirmed", true)
+	f.modules.CharacterStatsApplier.SelectionChanged.Event:Fire(a, "Confirmed")
 	f.advance(3)
 	assert(f.storage:GetAttribute("MatchState") == "Lobby")
 	assert(a:GetAttribute("InRound") == nil and b:GetAttribute("InRound") == nil)
@@ -281,6 +340,9 @@ test("room recovers after failed preparation and accepts a new round", function(
 	room.Join(b); room.Join(a)
 	f.remotes.WaitingRoom.OnServerEvent:Fire(a, "Ready")
 	f.remotes.WaitingRoom.OnServerEvent:Fire(b, "Ready")
+	a:SetAttribute("CharacterSelectionConfirmed", true)
+	b:SetAttribute("CharacterSelectionConfirmed", true)
+	f.modules.CharacterStatsApplier.SelectionChanged.Event:Fire(a, "Confirmed")
 	f.advance(3)
 	assert(f.round.IsRoundActive())
 end)

@@ -2,7 +2,7 @@
 --[[
 	ObjectivesController
 	Preenche e atualiza a ObjectivesHUD (StarterGui/ObjectivesHUD.model.json)
-	a partir do RemoteEvent ObjectiveProgress (RadioObjective, RaftObjective).
+	a partir do RemoteEvent ObjectiveProgress (RadioObjective e ExtractionSystem).
 
 	objectiveId recebidos hoje (ver ReplicatedStorage/Modules/Remotes.lua):
 	  "RadioPecas"     -- current/max = peças coletadas / 3
@@ -15,14 +15,12 @@
 	  "ExtracaoPousou"   -- helicóptero no chão, embarque liberado
 	  "ExtracaoEmbarque" -- current = SEGUNDOS até decolar (1x/s)
 	  "ExtracaoConcluida" -- current = quantos foram resgatados, players = lista
-	  "JangadaProgresso" -- current/max = progresso % / 100
-	  "FugaJangada"    -- current = quantos escaparam, players = lista
 
 	ATENÇÃO: nos quatro "Extracao*", `current` vem em SEGUNDOS, não em
 	porcentagem -- eles alimentam um relógio (formatClock), não uma barra.
 
 	Não forço a barra pra "cheia" nos eventos de conclusão (RadioCompleto,
-	FugaJangada): pela ordem em que RadioObjective/RaftObjective disparam as
+	RadioCompleto): pela ordem em que RadioObjective/ExtractionSystem disparam as
 	coisas, o progresso já chega em 100% pelo evento anterior antes da
 	conclusão ser possível. Assim não preciso hardcodar "3" ou "100" aqui.
 ]]
@@ -43,11 +41,6 @@ local radioBarBackground = SafeWait.Child(radioFrame, "RadioBarBackground")
 local radioBarFill = SafeWait.Child(radioBarBackground, "RadioBarFill") :: Frame
 local radioBarText = SafeWait.Child(radioBarBackground, "RadioBarText") :: TextLabel
 local radioTowerText = SafeWait.Child(radioFrame, "RadioTowerText") :: TextLabel
-
-local raftFrame = SafeWait.Child(objectivesHUD, "RaftFrame")
-local raftBarBackground = SafeWait.Child(raftFrame, "RaftBarBackground")
-local raftBarFill = SafeWait.Child(raftBarBackground, "RaftBarFill") :: Frame
-local raftBarText = SafeWait.Child(raftBarBackground, "RaftBarText") :: TextLabel
 
 local notificationLabel = SafeWait.Child(objectivesHUD, "NotificationLabel") :: TextLabel
 
@@ -198,16 +191,5 @@ Remotes.ObjectiveProgress.OnClientEvent:Connect(function(objectiveId: string, cu
 		local names = getPlayerNames(players)
 		local who = (#names > 0) and table.concat(names, ", ") or "alguém"
 		showNotification(string.format("Helicóptero decolou! Resgatados: %s", who))
-	elseif objectiveId == "JangadaProgresso" then
-		setBarFill(raftBarFill, current, max)
-		raftBarText.Text = string.format("Jangada: %d%%", math.floor(current))
-	elseif objectiveId == "FugaJangada" then
-		if current > 0 then
-			local names = getPlayerNames(players)
-			local who = (#names > 0) and table.concat(names, ", ") or "alguém"
-			showNotification(string.format("Fuga na jangada! A bordo: %s", who))
-		else
-			showNotification("A jangada partiu... vazia.")
-		end
 	end
 end)

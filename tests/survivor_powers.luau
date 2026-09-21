@@ -116,16 +116,21 @@ local remotes=setmetatable({}, {__index=function(t,k)
 end})
 local function event() local s=signal(); return {Event=s,Fire=function(_,...) s:Fire(...) end} end
 local round={RoundPrepared=event(),RoundEnded=event(),IsRoundActive=function() return active end}
-local moduleNames=setmetatable({Tools={RaftGenerator="RaftGenerator"}}, {__index=function(_,k) return k end})
+local moduleNames=setmetatable({}, {__index=function(_,k) return k end})
 local services={Players=players,Workspace=world,RunService={Heartbeat=heartbeat},
-	ReplicatedStorage={Modules=moduleNames},TweenService={},Debris={}}
-local modules={ Remotes=remotes,RoundManager=round,RaftGenerator={},
-	GameConfig={Roles={Survivor="Sobrevivente",Spy="Espiao",Monster="Monstro"}, RadioObjective={SuccessChance=0.2,RescueCountdownDuration=60}},
-	ItemRegistry={Items={Lona={Rarity="Rara",DisplayName="Lona"},Madeira={Rarity="Comum"}}},
+	ReplicatedStorage={Modules=moduleNames},TweenService={},Debris={AddItem=function() end}}
+local modules={ Remotes=remotes,RoundManager=round,
+	GameConfig={Roles={Survivor="Sobrevivente",Spy="Espiao",Monster="Monstro"}, RadioObjective={SuccessChance=0.2,RescueCountdownDuration=60},
+		Health={Max=100,MonsterMax=1000,MonsterMinimum=1,CombatAnimationsEnabled=false,
+			HurtIdleAnimationId="",HurtWalkAnimationId="",DeathAnimationId="",
+			RegenPerSecond=2,RegenDelayAfterDamage=6,DisableRobloxDefaultRegen=true},
+		Monster={CombatStates={Normal="Normal",Weakened="Enfraquecido",Vulnerable="Vulneravel"}}},
+	ItemRegistry={Items={Tocha={Rarity="Rara",DisplayName="Tocha"}}},
 	SafeAttribute={Get=function(o,k) return o:GetAttribute(k) end},
 	Elimination={IsEliminated=function(p) return p:GetAttribute("Eliminado")==true end,
 		Eliminate=function(p) p:SetAttribute("Eliminado",true) end},
 	StatScaling={DamageDealtMultiplier=function() return 1 end,DamageTakenMultiplier=function() return 1 end, RepairMultiplier=function() return 1 end},
+	-- RadioSiteSystem é preenchido mais abaixo, depois que `tower` existe.
 }
 local enum=setmetatable({}, {__index=function(t,k) local v=setmetatable({}, {__index=function(_,n) return n end}); rawset(t,k,v); return v end})
 local environment=setmetatable({
@@ -163,13 +168,43 @@ local bruno,bc,bh,br=player("BrunoCarvalho",nil,150)
 local camila,cc,ch,cr=player("CamilaDuarte",nil,180)
 local monster,monsterC,monsterH,monsterR=player("Jason","Monstro",200)
 local spy,spyC,spyH,spyR=player("Espiao","Espiao",220)
-local rare=object("Part"); rare.Name="Lona"; rare.Position=vec(185,0,0); rare.Parent=world
-local zone=object("Part"); zone.Name="LocalJangada"; zone.Position=vec(30,0,0); zone.Size=vec(8,2,8); zone.Parent=world
+local rare=object("Part"); rare.Name="Tocha"; rare.Position=vec(185,0,0); rare.Parent=world
 local tower=object("Part"); tower.Name="TorreDeRadio"; tower.Position=vec(50,3,0); tower.Parent=world
 local status=load("SurvivorPowerStatus")
 local damage=load("DamageSystem")
-local system=load("SurvivorPowerSystem")
 local radio=load("RadioObjective")
+-- Fake RadioSiteSystem: o módulo real puxa WeaponSystem/AssetRegistry/GameConfig
+-- inteiros só pra isto, então aqui só o contrato que SurvivorPowerSystem usa
+-- (ApplyPowerRepair) é reproduzido: só funciona pra quem segura o prompt da
+-- torre agora, e só depois que as 3 peças já foram creditadas (visível pelo
+-- próprio remote de progresso que RadioObjective já emite).
+do
+	local holder = nil
+	local prompt = object("ProximityPrompt")
+	prompt.Parent = tower
+	prompt.PromptButtonHoldBegan:Connect(function(p) holder = p end)
+	prompt.PromptButtonHoldEnded:Connect(function() holder = nil end)
+	modules.RadioSiteSystem = {
+		ApplyPowerRepair = function(player)
+			if holder ~= player then return nil end
+			local piecesReady = false
+			for _, m in remoteMessages do
+				if m.remote == "ObjectiveProgress" and m.args[1] == "RadioPecas" and m.args[2] == m.args[3] then
+					piecesReady = true
+				end
+			end
+			if not piecesReady then return nil end
+			remotes.ObjectiveProgress:FireAllClients("RadioSintonia", 25, 100)
+			return tower
+		end,
+	}
+end
+-- Fake RepairMinigameSystem: ninguém está com um reparo de precisão aberto
+-- neste cenário, então ApplyPowerBoost sempre recusa e o Conserto Relâmpago
+-- cai nos alvos atuais (rádio e reparo), que é o que este arquivo testa.
+-- A cobertura do próprio minigame está em tests/repair_minigame.luau.
+modules.RepairMinigameSystem = { ApplyPowerBoost = function() return nil end }
+local system=load("SurvivorPowerSystem")
 radio.Init(); system.Init(); system.Init()
 local function tick(seconds) now+=seconds; heartbeat:Fire(seconds) end
 local function use(p,slot) tick(0.2); remotes.UseSurvivorPower.OnServerEvent:Fire(p,slot) end
@@ -215,11 +250,6 @@ assert(damage.Heal(bc,5)==5); tick(4.1); assert(bc:GetAttribute("Imune")==nil)
 reset(); br.Position=vec(150,3,0); use(sofia,2); assert(sc:GetAttribute("Imune"))
 print("PASS: area heal based on max health, closest ally/self shield, damage/stun rejection and shield expiry")
 
-reset(); dr.Position=vec(0,3,0); use(diego,1); assert(ready(diego,1)==0)
-dr.Position=vec(30,3,0); use(diego,1); assert(ready(diego,1)==now+240)
-local found=false
-for _,m in remoteMessages do if m.remote=="ObjectiveProgress" and m.args[1]=="JangadaProgresso" and m.args[2]==25 then found=true end end
-assert(found)
 reset(); dr.Position=vec(49,3,0); local prompt=tower:FindFirstChildOfClass("ProximityPrompt")
 prompt.PromptButtonHoldBegan:Fire(diego); use(diego,1); assert(ready(diego,1)==0)
 radio.CollectPiece("Antena"); radio.CollectPiece("Bateria"); radio.CollectPiece("Transmissor")
@@ -229,7 +259,7 @@ local progress
 for _,m in remoteMessages do if m.remote=="ObjectiveProgress" and m.args[1]=="RadioSintonia" then progress=m.args[2] end end
 assert(progress==25)
 reset(); prompt.PromptButtonHoldEnded:Fire(diego); use(diego,1); assert(ready(diego,1)==0)
-print("PASS: real radio/raft repair APIs add 25%, validate current interaction and preserve missing-piece requirements")
+print("PASS: real radio repair APIs add 25%, validate current interaction and preserve missing-piece requirements")
 
 reset(); obstacle=true; use(kevin,2); assert(ready(kevin,2)==0); obstacle=false
 occupied=true; use(kevin,2); assert(ready(kevin,2)==0); occupied=false

@@ -14,8 +14,7 @@
 
 	USO (Command Bar do Studio, em MODO DE EDIÇÃO, e salve depois):
 		local Radio = require(game.ServerScriptService.Server.Tools.RadioTowerGenerator)
-		Radio.Build()     -- apaga e refaz Workspace.Ilha.TorreDeRadio
-		Radio.Clear()
+		Radio.Build()     -- guarda backup e refaz Workspace.Ilha.TorreDeRadio
 
 	ASSETS (InsertService, só funciona em modo de edição -- em runtime cai no
 	fallback em Parts, que é completo e não depende de nada):
@@ -54,8 +53,18 @@ local Layout = require(script.Parent.IslandLayout)
 
 local RadioTowerGenerator = {}
 
-local part = S.Part
-local beam = S.Beam
+-- Detalhes visuais nao devem esconder os prompts do proprio equipamento.
+-- Paredes, portas, piso e vidro solido continuam consultaveis e colidiveis.
+local function part(parent: Instance, name: string, size: Vector3, cf: CFrame, material: Enum.Material, color: Color3, opts: any?): Part
+	local result = S.Part(parent, name, size, cf, material, color, opts)
+	if opts and opts.CanCollide == false then result.CanQuery = false end
+	return result
+end
+local function beam(parent: Instance, name: string, a: Vector3, b: Vector3, diameter: number, material: Enum.Material, color: Color3, collide: boolean?): Part?
+	local result = S.Beam(parent, name, a, b, diameter, material, color, collide)
+	if result and collide == false then result.CanQuery = false end
+	return result
+end
 
 local TAU = math.pi * 2
 
@@ -74,14 +83,12 @@ local CONFIG = {
 
 	-- Pátio cercado. X = largura (esquerda/direita), Z = profundidade
 	-- (o portão fica em -Z, virado pro centro da ilha).
-	-- 88x76: o pátio precisa de espaço pra CORRER. Na primeira versão era
-	-- 48x42 e tudo encostava em tudo -- sem distância entre as estações não
-	-- existe perseguição, só um corredor apertado.
-	Yard = { Width = 88, Depth = 76 },
+	-- 2,2 vezes a area anterior, com faixa de circulacao entre os setores.
+	Yard = { Width = 132, Depth = 112 },
 
-	Road = { Width = 12, Length = 60 },
+	Road = { Width = 16, Length = 72 },
 
-	Shelter = { Width = 20, Depth = 14, Height = 10 },
+	Shelter = { Width = 36, Depth = 26, Height = 13 },
 
 	Fence = {
 		-- 9 studs de barreira sólida: JumpHeight do StarterCharacter é 7,2,
@@ -90,7 +97,7 @@ local CONFIG = {
 		Height = 9,
 		PostSpacing = 8,
 		MeshSpacing = 2.2, -- espaçamento dos arames verticais (aparência)
-		GateWidth = 14,
+		GateWidth = 18,
 		-- Rasgo na lateral +X, em Z local: a rota alternativa.
 		GapFrom = -6,
 		GapTo = 8,
@@ -231,6 +238,7 @@ local assetCache: { [number]: Model? } = {}
 local assetFailed: { [number]: boolean } = {}
 
 local function loadAssetModel(assetId: number): Model?
+	if assetId <= 0 then return nil end -- opcao offline/validacao com as Parts
 	if assetCache[assetId] then
 		return assetCache[assetId]
 	end
@@ -338,8 +346,8 @@ end
 	(é de lá que a trilha de manutenção chega).
 
 	Usa o site "Radio" do IslandLayout quando ele existe. Num mapa salvo antes
-	desse site existir, cai ao lado da Torre de Vigia -- longe o bastante pra
-	o pátio de 48x42 não comer a clareira dela.
+	desse site existir, usa um ponto provisório afastado da Torre de Vigia.
+	Build() prioriza a posição da estação já salva, quando ela existe.
 ]]
 local function siteCFrame(): (CFrame, number)
 	Layout.Plan()
@@ -418,10 +426,11 @@ local function buildRoad(parent: Instance, cf: CFrame, padY: number, sculpt: boo
 end
 
 -- Árvores/arbustos/rochas geradas em cima do sítio saem: o pátio foi aberto.
-local function clearVegetation(cf: CFrame): number
+local function clearVegetation(cf: CFrame, backup: Folder?): number
 	local ilha = getIlha()
 	local center = cf.Position
-	local radius = math.max(CONFIG.Yard.Width, CONFIG.Yard.Depth) * 0.5 + 8
+	-- Diagonal: o raio antigo deixava arvores dentro dos cantos do patio.
+	local radius = Vector2.new(CONFIG.Yard.Width, CONFIG.Yard.Depth).Magnitude * 0.5 + 8
 	local roadEnd = (cf * CFrame.new(0, 0, -(CONFIG.Yard.Depth / 2 + CONFIG.Road.Length))).Position
 	local removed = 0
 
@@ -443,7 +452,17 @@ local function clearVegetation(cf: CFrame): number
 			if pivot then
 				local flat = Vector3.new(pivot.X - center.X, 0, pivot.Z - center.Z)
 				if flat.Magnitude < radius or nearRoad(pivot) then
-					obj:Destroy()
+					if backup then
+						local saved = backup:FindFirstChild(folderName)
+						if not saved then
+							saved = Instance.new("Folder")
+							saved.Name = folderName
+							saved.Parent = backup
+						end
+						obj.Parent = saved
+					else
+						obj:Destroy()
+					end
 					removed += 1
 				end
 			end
@@ -593,7 +612,7 @@ local function poweredLight(host: BasePart, color: Color3, brightness: number, r
 	light.Color = color
 	light.Brightness = brightness
 	light.Range = range
-	light.Shadows = false
+	light.Shadows = true
 	light.Enabled = false
 	light.Parent = host
 	return light
@@ -618,14 +637,17 @@ local function buildShelter(parent: Instance, cf: CFrame): { [string]: BasePart 
 	local floorCF = cf * CFrame.new(0, 0.8, 0)
 
 	-- Paredes (a da frente tem porta, a lateral tem janela).
-	local doorW, doorH = 4.2, 7
+	local doorW, doorH = 6, 8.5
 	S.WallWithOpenings(folder, floorCF * CFrame.new(0, 0, -D / 2), W, H, 0.7, { { x0 = -doorW / 2, x1 = doorW / 2, y0 = 0, y1 = doorH } }, Enum.Material.Concrete, COL.ShelterWall)
 	S.WallWithOpenings(folder, floorCF * CFrame.new(0, 0, D / 2), W, H, 0.7, {}, Enum.Material.Concrete, COL.ShelterWall)
 	S.WallWithOpenings(folder, floorCF * CFrame.new(-W / 2, 0, 0) * CFrame.Angles(0, math.pi / 2, 0), D, H, 0.7, {}, Enum.Material.Concrete, COL.ShelterWall)
-	S.WallWithOpenings(folder, floorCF * CFrame.new(W / 2, 0, 0) * CFrame.Angles(0, math.pi / 2, 0), D, H, 0.7, { { x0 = -1.6, x1 = 1.6, y0 = 4, y1 = 6.4 } }, Enum.Material.Concrete, COL.ShelterWall)
+	S.WallWithOpenings(folder, floorCF * CFrame.new(W / 2, 0, 0) * CFrame.Angles(0, math.pi / 2, 0), D, H, 0.7, {
+		{ x0 = 2, x1 = 8, y0 = 0, y1 = doorH }, -- saida lateral, z = -5
+		{ x0 = -9, x1 = -3, y0 = 5.5, y1 = 8.5 },
+	}, Enum.Material.Concrete, COL.ShelterWall)
 
 	-- Vidro sujo da janela.
-	local glass = part(folder, "Janela", Vector3.new(0.12, 2.4, 3.2), floorCF * CFrame.new(W / 2, 5.2, 0), Enum.Material.Glass, Color3.fromRGB(150, 170, 165), { CanCollide = false })
+	local glass = part(folder, "Janela", Vector3.new(0.22, 3, 6), floorCF * CFrame.new(W / 2, 7, 6), Enum.Material.Glass, Color3.fromRGB(150, 170, 165))
 	glass.Transparency = 0.55
 
 	-- Telhado metálico com caimento e beiral.
@@ -639,7 +661,43 @@ local function buildShelter(parent: Instance, cf: CFrame): { [string]: BasePart 
 	door:SetAttribute("PortaAberta", false)
 	door:SetAttribute("CFrameFechada", doorCF)
 	door:SetAttribute("LarguraPorta", doorW)
-	part(folder, "Macaneta", Vector3.new(0.22, 0.22, 0.6), doorCF * CFrame.new(doorW / 2 - 0.6, 0, -0.3), Enum.Material.Metal, COL.Galvanized, DECO)
+	-- A porta lateral usa o mesmo contrato do DoorSystem da entrada.
+	local sideCF = floorCF * CFrame.new(W / 2, doorH / 2, -5) * CFrame.Angles(0, math.pi / 2, 0)
+	local sideDoor = part(folder, "PortaServico", Vector3.new(doorW, doorH, 0.28), sideCF, Enum.Material.DiamondPlate, COL.SteelDark)
+	sideDoor:SetAttribute("Porta", true)
+	sideDoor:SetAttribute("PortaAberta", false)
+	sideDoor:SetAttribute("CFrameFechada", sideCF)
+	sideDoor:SetAttribute("LarguraPorta", doorW)
+	for _, leaf in { door, sideDoor } do
+		local handle = part(leaf, "Macaneta", Vector3.new(0.22, 0.22, 0.6), leaf.CFrame * CFrame.new(doorW / 2 - 0.6, 0, -0.3), Enum.Material.Metal, COL.Galvanized, DECO)
+		handle.Anchored = false
+		handle.Massless = true
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0 = leaf
+		weld.Part1 = handle
+		weld.Parent = handle
+	end
+
+	-- Marquise, patamar baixo e estrutura aparente da fachada.
+	part(folder, "PatamarEntrada", Vector3.new(13, 0.4, 7), cf * CFrame.new(0, 0.2, -D / 2 - 3.5), Enum.Material.Concrete, COL.Concrete)
+	part(folder, "Marquise", Vector3.new(14, 0.45, 7.5), floorCF * CFrame.new(0, 10.1, -D / 2 - 3.1), Enum.Material.Metal, COL.Roof)
+	for _, x in { -6, 6 } do
+		part(folder, "PilarMarquise", Vector3.new(0.45, 10.1, 0.45), floorCF * CFrame.new(x, 5.05, -D / 2 - 6), Enum.Material.Metal, COL.SteelDark)
+	end
+	part(folder, "PatamarServico", Vector3.new(5, 0.4, 8), cf * CFrame.new(W / 2 + 2.5, 0.2, -5), Enum.Material.Concrete, COL.Concrete)
+	for _, x in { -W / 2, W / 2 } do
+		for _, z in { -D / 2, D / 2 } do
+			part(folder, "Pilarete", Vector3.new(0.95, H, 0.95), floorCF * CFrame.new(x, H / 2, z), Enum.Material.Concrete, COL.ConcreteDark)
+		end
+	end
+	for _, z in { -D / 2 - 0.38, D / 2 + 0.38 } do
+		part(folder, "FaixaFachada", Vector3.new(W, 0.9, 0.12), floorCF * CFrame.new(0, 9.5, z), Enum.Material.Metal, Color3.fromRGB(46, 79, 80), DECO)
+		part(folder, "RodapeExterno", Vector3.new(W, 0.7, 0.12), floorCF * CFrame.new(0, 0.35, z), Enum.Material.Concrete, COL.ConcreteDark, DECO)
+	end
+	for x = -W / 2, W / 2, 3 do
+		part(folder, "JuntaTelhado", Vector3.new(0.12, 0.12, D + 3), floorCF * CFrame.new(x, H + 0.65, 0) * CFrame.Angles(math.rad(3), 0, 0), Enum.Material.Metal, COL.Galvanized, DECO)
+	end
+	warningSign(folder, "Identificacao", floorCF * CFrame.new(0, 11.5, -D / 2 - 0.5), 13, 1.6, "ESTAÇÃO DE RÁDIO", nil, Color3.fromRGB(198, 210, 202))
 
 	-- Luminária externa sobre a porta.
 	local lamp = part(folder, "LuminariaPorta", Vector3.new(1.6, 0.5, 1), floorCF * CFrame.new(0, doorH + 0.9, -D / 2 - 0.6), Enum.Material.Metal, COL.SteelDark, { CanCollide = false })
@@ -655,6 +713,14 @@ local function buildShelter(parent: Instance, cf: CFrame): { [string]: BasePart 
 	local inner = floorCF
 	local backZ = D / 2 - 1.4
 	local leftX = -W / 2 + 0.9
+	-- Piso legivel, faixas finas e corredor de 12 studs livre entre as tasks.
+	part(folder, "PisoTecnico", Vector3.new(W - 1, 0.08, D - 1), inner * CFrame.new(0, 0.04, 0), Enum.Material.SmoothPlastic, Color3.fromRGB(61, 70, 73), DECO)
+	for _, x in { -6, 6 } do
+		part(folder, "LinhaCirculacao", Vector3.new(0.12, 0.03, D - 3), inner * CFrame.new(x, 0.1, 0), Enum.Material.SmoothPlastic, COL.Hazard, DECO)
+	end
+	for z = -D / 2 + 4, D / 2 - 2, 4 do
+		part(folder, "JuntaPiso", Vector3.new(W - 1, 0.015, 0.035), inner * CFrame.new(0, 0.085, z), Enum.Material.SmoothPlastic, COL.Panel, DECO)
+	end
 
 	-- Rack do transmissor (onde as 3 peças são instaladas).
 	local rack = part(folder, "ConsoleInstalacao", Vector3.new(5.5, 7, 2), inner * CFrame.new(-W * 0.3, 3.5, backZ), Enum.Material.Metal, COL.Panel)
@@ -663,6 +729,7 @@ local function buildShelter(parent: Instance, cf: CFrame): { [string]: BasePart 
 		part(folder, "GavetaRack_" .. i, Vector3.new(4.8, 1.1, 0.3), inner * CFrame.new(-W * 0.3, 1.2 + i * 1.35, backZ - 1.05), Enum.Material.Metal, COL.SteelDark, DECO)
 	end
 	out.Rack = rack
+	warningSign(folder, "SetorInstalacao", inner * CFrame.new(-W * 0.3, 9.4, D / 2 - 0.5), 9, 1.6, "01 / TRANSMISSOR", "INSTALE AS TRÊS PEÇAS", Color3.fromRGB(192, 210, 202))
 
 	-- Painel de controle na parede lateral: disjuntores + voltímetro.
 	local panel = part(folder, "PainelControle", Vector3.new(0.9, 5.4, 4), inner * CFrame.new(leftX, 4.2, 0), Enum.Material.Metal, COL.Panel)
@@ -675,6 +742,7 @@ local function buildShelter(parent: Instance, cf: CFrame): { [string]: BasePart 
 	vu.Transparency = 0.25
 	vu:SetAttribute("LuzRadio", true)
 	out.Painel = panel
+	warningSign(folder, "SetorEnergia", inner * CFrame.new(leftX + 0.6, 8.4, 0) * CFrame.Angles(0, -math.pi / 2, 0), 7, 1.6, "02 / CONTROLE", "ENERGIA DA ESTAÇÃO", Color3.fromRGB(192, 210, 202))
 
 	-- Mesa do operador com o rádio, o microfone e o manual.
 	local deskX = W * 0.28
@@ -697,14 +765,15 @@ local function buildShelter(parent: Instance, cf: CFrame): { [string]: BasePart 
 	part(folder, "Microfone", Vector3.new(0.5, 0.5, 1.4), inner * CFrame.new(deskX + 2.4, 3.4, 1.4) * CFrame.Angles(math.rad(20), 0, 0), Enum.Material.SmoothPlastic, COL.HazardDark, DECO)
 	cableRun(folder, "CaboMicrofone", (inner * CFrame.new(deskX + 2.4, 3.3, 1.4)).Position, (inner * CFrame.new(deskX + 1.2, 3.6, 2.1)).Position, 0.5, 0.09, COL.Cable)
 	out.Console = console
+	warningSign(folder, "SetorTransmissao", inner * CFrame.new(deskX, 8.8, backZ), 10, 1.6, "03 / COMUNICAÇÕES", "ENVIE O PEDIDO DE SOCORRO", Color3.fromRGB(192, 210, 202))
 
 	-- Cadeira e prateleira (fundo à direita).
 	part(folder, "Cadeira", Vector3.new(1.8, 0.3, 1.8), inner * CFrame.new(deskX, 2.2, -1.2), Enum.Material.Metal, COL.SteelDark)
 	part(folder, "EncostoCadeira", Vector3.new(1.8, 2, 0.25), inner * CFrame.new(deskX, 3.2, -2), Enum.Material.Metal, COL.SteelDark, DECO)
-	part(folder, "Prateleira", Vector3.new(5.5, 0.25, 1.6), inner * CFrame.new(W * 0.25, 6.2, backZ + 0.4), Enum.Material.Metal, COL.SteelDark)
+	part(folder, "Prateleira", Vector3.new(7, 0.25, 2.2), inner * CFrame.new(W * 0.25, 3.4, backZ), Enum.Material.Metal, COL.SteelDark)
 
 	-- Fusível reserva na prateleira: é ele que vai pra caixa lá fora.
-	local fuse = part(folder, "FusivelReserva", Vector3.new(0.55, 0.55, 1.5), inner * CFrame.new(W * 0.25 - 1.2, 6.6, backZ + 0.4) * CFrame.Angles(0, 0, math.rad(90)), Enum.Material.Glass, COL.Copper, {
+	local fuse = part(folder, "FusivelReserva", Vector3.new(0.55, 0.55, 1.5), inner * CFrame.new(W * 0.25 - 1.2, 3.85, backZ - 0.35) * CFrame.Angles(0, 0, math.rad(90)), Enum.Material.Glass, COL.Copper, {
 		Shape = Enum.PartType.Cylinder,
 		CanCollide = false,
 	})
@@ -717,10 +786,21 @@ local function buildShelter(parent: Instance, cf: CFrame): { [string]: BasePart 
 	fuseGlow.Shadows = false
 	fuseGlow.Parent = fuse
 	out.Fusivel = fuse
+	warningSign(folder, "EtiquetaFusivel", inner * CFrame.new(W * 0.25, 5.3, backZ + 0.8), 6, 1.1, "FUSÍVEL RESERVA", nil, COL.Hazard)
 
 	-- Luminária interna + loot pros Sobreviventes que entrarem.
-	local ceiling = part(folder, "LuminariaTeto", Vector3.new(3, 0.3, 0.8), inner * CFrame.new(0, H - 0.6, 0), Enum.Material.Metal, COL.SteelDark, DECO)
-	poweredLight(ceiling, Color3.fromRGB(236, 240, 255), 2, 26)
+	for _, x in { -W * 0.25, W * 0.25 } do
+		local ceiling = part(folder, "LuminariaTeto", Vector3.new(5, 0.3, 1), inner * CFrame.new(x, H - 0.6, 0), Enum.Material.Metal, COL.SteelDark, DECO)
+		poweredLight(ceiling, Color3.fromRGB(236, 240, 255), 1.6, 24)
+	end
+	-- Bateria independente: permite ler as tasks antes de ligar o gerador.
+	local emergency = part(folder, "LuzEmergencia", Vector3.new(1.8, 0.4, 0.4), inner * CFrame.new(0, 8.9, -D / 2 + 0.7), Enum.Material.Neon, Color3.fromRGB(235, 170, 85), DECO)
+	local emergencyLight = Instance.new("PointLight")
+	emergencyLight.Color = emergency.Color
+	emergencyLight.Brightness = 0.8
+	emergencyLight.Range = 27
+	emergencyLight.Shadows = true
+	emergencyLight.Parent = emergency
 	S.LootPoint(folder, inner * CFrame.new(-W * 0.32, 1.2, -D * 0.25))
 	S.LootPoint(folder, inner * CFrame.new(W * 0.28, 3.4, 2.6))
 
@@ -1124,33 +1204,63 @@ end
 
 --[[
 	Build(seed?)
-	Apaga e refaz Workspace.Ilha.TorreDeRadio inteira. Roda em modo de edição
-	(usa os assets) ou em runtime (cai na versão em Parts).
+	Refaz Workspace.Ilha.TorreDeRadio inteira. Em edição guarda a versão
+	anterior, terreno e vegetação em ServerStorage.MapEditBackups.
+	Em runtime gera apenas as construções, sem modificar o terreno.
 ]]
 function RadioTowerGenerator.Build(seed: number?): Model
 	local ilha = getIlha()
 	local old = ilha:FindFirstChild("TorreDeRadio")
+	-- Regenerar um mapa salvo preserva a localizacao/rotacao da estacao.
+	local oldFloor = old and old:FindFirstChild("PisoPatio", true)
+	local savedCF = if oldFloor and oldFloor:IsA("BasePart") then oldFloor.CFrame * CFrame.new(0, -0.2, 0) else nil
+	local cf, padY = siteCFrame()
+	if savedCF then cf, padY = savedCF, savedCF.Position.Y end
+	local sculpt = RunService:IsEdit()
+	local backup: Folder? = nil
+	if sculpt then
+		game:GetService("ChangeHistoryService"):SetWaypoint("Antes de ampliar estacao de radio")
+		local storage = game:GetService("ServerStorage")
+		local backups = storage:FindFirstChild("MapEditBackups")
+		if not backups then
+			backups = Instance.new("Folder")
+			backups.Name = "MapEditBackups"
+			backups.Parent = storage
+		end
+		backup = Instance.new("Folder")
+		backup.Name = "Radio_" .. os.date("!%Y%m%d_%H%M%S") .. "_" .. (#backups:GetChildren() + 1)
+		backup.Parent = backups
+		-- Copia somente a regiao editada do terreno (inclui estrada rotacionada).
+		local reach = CONFIG.Yard.Depth / 2 + CONFIG.Road.Length + 12
+		local low = cf.Position - Vector3.new(reach, 64, reach)
+		local high = cf.Position + Vector3.new(reach, 128, reach)
+		local minCell = Vector3int16.new(math.floor(low.X / 4), math.floor(low.Y / 4), math.floor(low.Z / 4))
+		local maxCell = Vector3int16.new(math.ceil(high.X / 4), math.ceil(high.Y / 4), math.ceil(high.Z / 4))
+		local terrainCopy = Terrain:CopyRegion(Region3int16.new(minCell, maxCell))
+		terrainCopy.Name = "TerrenoAnterior"
+		terrainCopy:SetAttribute("MinCell", Vector3.new(minCell.X, minCell.Y, minCell.Z))
+		terrainCopy.Parent = backup
+	end
 	if old then
-		old:Destroy()
+		if backup then old.Parent = backup else old:Destroy() end
 	end
 
 	local rng = Random.new(seed or 20240917)
-	local cf, padY = siteCFrame()
 
 	local model = Instance.new("Model")
 	model.Name = "TorreDeRadio"
 	model:SetAttribute("Construcao", "Radio")
 	model:SetAttribute("EstacaoRadio", true)
+	model:SetAttribute("RadioLayoutVersion", 2)
 	model.Parent = ilha
 
 	-- Terreno e vegetação só em modo de edição: em runtime este Build é o
 	-- fallback do RadioInstallSystem, e um servidor ao vivo não pode sair
 	-- reescrevendo terreno nem apagando a floresta embaixo dos jogadores.
-	local sculpt = RunService:IsEdit()
 	local removed = 0
 	if sculpt then
 		levelYard(cf)
-		removed = clearVegetation(cf)
+		removed = clearVegetation(cf, backup)
 	end
 
 	-- Piso do pátio: laje de concreto na frente do abrigo + cascalho solto.
@@ -1177,27 +1287,35 @@ function RadioTowerGenerator.Build(seed: number?): Model
 	-- frente à esquerda, gerador no meio e combustível no canto oposto ao
 	-- abrigo. Ninguém fecha o objetivo sem atravessar o pátio aberto várias
 	-- vezes -- e agora com distância de verdade pra ser perseguido no meio.
-	local towerCF = cf * CFrame.new(22, 0, 18)
+	local towerCF = cf * CFrame.new(33, 0, 29)
 	buildTower(model, towerCF, rng)
 
-	local shelterCF = cf * CFrame.new(-24, 0, -8)
+	local shelterCF = cf * CFrame.new(-32, 0, -8)
 	local shelter = buildShelter(model, shelterCF)
 
-	local geradorCF = cf * CFrame.new(2, 0, -18)
+	local geradorCF = cf * CFrame.new(5, 0, -26)
 	local gerador = buildGenerator(model, geradorCF)
 
-	buildFuel(model, cf * CFrame.new(28, 0, -20), gerador.Corpo.Position)
+	buildFuel(model, cf * CFrame.new(43, 0, -29), gerador.Corpo.Position)
 
 	-- Caixa de fusíveis na parede da frente do abrigo, ao lado da porta, com
 	-- a bateria reserva no estrado logo embaixo.
-	local boxCF = cf * CFrame.new(-18, 4.8, -15.4)
-	local palletCF = cf * CFrame.new(-18, 0.55, -18.5)
+	local boxCF = shelterCF * CFrame.new(11, 4.8, -CONFIG.Shelter.Depth / 2 - 0.5)
+	local palletCF = shelterCF * CFrame.new(11, 0.55, -CONFIG.Shelter.Depth / 2 - 3.5)
 	buildPower(model, boxCF, palletCF, shelter, gerador, towerCF.Position)
 
 	-- Equipamento que ocupa o resto do pátio.
-	buildTransformer(model, cf * CFrame.new(12, 0, -4))
-	buildGroundDish(model, cf * CFrame.new(37, 0, -4))
-	buildStorageShed(model, cf * CFrame.new(-28, 0, 18), rng)
+	buildTransformer(model, cf * CFrame.new(10, 0, 0))
+	buildGroundDish(model, cf * CFrame.new(53, 0, 8))
+	buildStorageShed(model, cf * CFrame.new(-41, 0, 34), rng)
+
+	-- Caminho de pedestres ate a sala tecnica, sem degraus no meio da fuga.
+	part(yard, "AcessoAbrigo", Vector3.new(12, 0.1, 22), cf * CFrame.new(-32, 0.47, -37), Enum.Material.Concrete, COL.ConcreteDark, DECO)
+	part(yard, "AcessoPortao", Vector3.new(43, 0.1, 8), cf * CFrame.new(-16, 0.47, -48), Enum.Material.Concrete, COL.ConcreteDark, DECO)
+	for _, point in { Vector3.new(-22, 0, -40), Vector3.new(-8, 0, -40), Vector3.new(20, 0, -40) } do
+		local bollard = part(yard, "BalizadorPatio", Vector3.new(0.65, 2.6, 0.65), cf * CFrame.new(point + Vector3.new(0, 1.3, 0)), Enum.Material.Metal, COL.SteelDark)
+		poweredLight(bollard, Color3.fromRGB(255, 217, 158), 0.8, 13)
+	end
 
 	-- Prompt de instalação das peças: mesmo nome de sempre, agora no rack
 	-- dentro do abrigo (RadioInstallSystem procura por ele).
@@ -1206,7 +1324,7 @@ function RadioTowerGenerator.Build(seed: number?): Model
 	prompt.ActionText = "Instalar peça"
 	prompt.ObjectText = "Rack do transmissor"
 	prompt.Enabled = false
-	prompt.RequiresLineOfSight = false
+	prompt.RequiresLineOfSight = true
 	prompt.MaxActivationDistance = 10
 	prompt.HoldDuration = 0
 	prompt.KeyboardKeyCode = Enum.KeyCode.E
@@ -1217,8 +1335,9 @@ function RadioTowerGenerator.Build(seed: number?): Model
 	model.PrimaryPart = slab
 
 	if sculpt then
+		game:GetService("ChangeHistoryService"):SetWaypoint("Estacao de radio ampliada")
 		print(string.format(
-			"[RadioTowerGenerator] Estação de rádio montada em (%.0f, %.0f) -- torre de %d studs, %d objetos de vegetação removidos. Salve o lugar.",
+			"[RadioTowerGenerator] Estação de rádio montada em (%.0f, %.0f) -- torre de %d studs, %d objetos de vegetação movidos para ServerStorage.MapEditBackups. Salve o lugar.",
 			cf.Position.X, cf.Position.Z, CONFIG.TowerHeight, removed
 		))
 	else

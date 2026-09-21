@@ -36,6 +36,7 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local FlashlightRules = require(ReplicatedStorage.Modules.FlashlightRules)
 
 local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
@@ -46,6 +47,7 @@ local RoundManager = require(script.Parent.RoundManager)
 local MonsterLightWeakness = require(script.Parent.MonsterLightWeakness)
 
 local MonsterCombat = {}
+local initialized = false
 
 local CFG = GameConfig.Monster
 local ATK = CFG.Attack
@@ -86,7 +88,8 @@ end
 --------------------------------------------------------------------------------
 
 local function onAttackRequest(player: Player)
-	if not RoundManager.IsRoundActive() or not isMonster(player) then
+	if not RoundManager.IsRoundActive() or not isMonster(player)
+		or player:GetAttribute("InRound") ~= true or player:GetAttribute("InWaitingRoom") == true then
 		return
 	end
 	if player:GetAttribute("Amarrado") == true then
@@ -97,7 +100,7 @@ local function onAttackRequest(player: Player)
 	if not character or not monsterRoot then
 		return
 	end
-	if character:GetAttribute("PowerStunned") == true then return end
+	if FlashlightRules.PowerBlocked(character) then return end
 
 	-- Durante o teleporte (server/MonsterTeleport) o Monstro não ataca: está
 	-- abrindo/atravessando/saindo da fenda. TeleportBusy é Attribute do
@@ -121,9 +124,14 @@ local function onAttackRequest(player: Player)
 	local origin = monsterRoot.Position
 	local forward = monsterRoot.CFrame.LookVector
 	local candidates: { Candidate } = {}
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { character }
+	params.IgnoreWater = true
 
 	for _, other in Players:GetPlayers() do
-		if other == player or not isTarget(other) then
+		if other == player or not isTarget(other) or other:GetAttribute("InRound") ~= true
+			or other:GetAttribute("InWaitingRoom") == true then
 			continue
 		end
 		local _, _, otherRoot = livingCharacter(other)
@@ -138,6 +146,8 @@ local function onAttackRequest(player: Player)
 		if offset.Unit:Dot(forward) < ATK.ConeCos then
 			continue -- fora do cone: o Monstro precisa MIRAR
 		end
+		local hit = workspace:Raycast(origin, offset, params)
+		if hit and not hit.Instance:IsDescendantOf(other.Character :: Model) then continue end
 		table.insert(candidates, { player = other, root = otherRoot, dist = dist })
 	end
 
@@ -201,6 +211,8 @@ end
 --------------------------------------------------------------------------------
 
 function MonsterCombat.Init()
+	if initialized then return end
+	initialized = true
 	Remotes.MonsterAttack.OnServerEvent:Connect(onAttackRequest)
 
 	Players.PlayerRemoving:Connect(function(player)

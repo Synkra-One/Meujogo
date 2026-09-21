@@ -51,14 +51,14 @@
 |---|---|
 | `GameConfig.lua` | `GameConfig.MapDiscovery` (Enabled/Radius/ScanInterval). |
 | `Remotes.lua` | Contrato de `MapDiscovery`. |
-| `ItemIcons.lua` | Chaves vazias pra Madeira/Corda/Lona/Antena/Bateria/Transmissor/Bandagem (mesma convenção: cole o `rbxassetid` quando tiver o PNG). |
+| `ItemIcons.lua` | Chaves vazias pra Antena/Bateria/Transmissor/Bandagem (mesma convenção: cole o `rbxassetid` quando tiver o PNG). |
 | `client/MonsterTeleportController.client.luau` | `require` do módulo renomeado, passa `{ mode = "teleport", onPick = ... }`, alimenta `SetDiscoveredItems`/`AddDiscoveredItem`. |
 | `server/init.server.luau` | `safeInit("ItemDiscovery", ...)` depois de WeaponSpawner/LootCrateSystem. |
 
 ## O que conta como "item do mundo" hoje
 
-Faca/Lança/Pedra/Tocha/Lanterna/Chocolate/Bandagem (pickup no chão), Madeira/
-Corda/Lona, Antena/Bateria/Transmissor, caixa de munição, caixa de loot, arma
+Faca/Lança/Pedra/Tocha/Lanterna/Chocolate/Bandagem (pickup no chão), Antena/
+Bateria/Transmissor, caixa de munição, caixa de loot, arma
 de fogo (Glock17) e a Lança Ancestral. Ver o cabeçalho de `server/ItemDiscovery.lua`
 para os Attributes exatos de cada um -- todos já existentes em outros
 sistemas (`ItemSpawner`, `WeaponSpawner`, `DropItemSystem`, `AmmoSystem`,
@@ -72,14 +72,26 @@ verdade, cole o `rbxassetid` em `ItemIcons.Map[itemId]` (ex: `Glock17 =
 "rbxassetid://..."`) -- o marcador do mapa passa a usar a imagem sozinho, sem
 mudar nada em `IslandMapUI.lua` nem em `MapMarkers.lua`.
 
+## Pânico bloqueia o mapa
+
+Com Fear a partir de `GameConfig.Fear.FullMapBlockFear` (86), **M não abre** o
+mapa -- e ele fecha sozinho se já estiver aberto. É o mesmo limiar em que o
+minimapa apaga, pelo mesmo `FearPresentationRules.HudFade`; ver
+[Fear.md](Fear.md). O medo vem do Attribute replicado pelo servidor, então o
+cliente não decide nada. Quando o Fear cai, M volta a funcionar normalmente e
+os itens descobertos continuam todos lá.
+
 ## Verificação
 
 - `rojo build -o /tmp/Meujogo-check.rbxlx` valida a montagem do projeto.
 - No Studio, com a ilha gerada: Sobrevivente/Espião aperta **M** -- mapa
   abre sem travar o movimento, mostra POIs/trilhas e um ponto verde na sua
   posição, sem a Caverna. Aproxime-se (≤14 studs) de uma pistola, uma tocha,
-  um material de jangada e uma caixa de loot: cada um deve aparecer marcado
+  uma peça do rádio e uma caixa de loot: cada um deve aparecer marcado
   ao reabrir o mapa (até 0,5s de atraso), com cor/letra diferentes por
   categoria. Morra/reapareça e confira que as marcas continuam. O Monstro
   (Q) deve continuar funcionando exatamente como antes, agora também vendo
   os itens que ele mesmo descobriu.
+- Com o mapa aberto, deixe o Monstro te encurralar até o Fear passar de 86: o
+  mapa fecha sozinho e M para de responder. Fuja, espere o Fear cair e
+  confirme que M volta a abrir com as mesmas marcas.

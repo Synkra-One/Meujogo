@@ -46,18 +46,14 @@ ItemIcons.Map = {
 	FacaImprovisada = "",
 	LancaDeBambu = "",
 	PedraAfiada = "",
+	TacoBeisebol = "",
 	Tocha = "",
 	Lanterna = "",
 	Chocolate = "",
 	Bandagem = "",
 	Gasolina = "",
 	LancaAncestral = "",
-	-- Materiais (Jangada) e peças do Rádio: usados hoje pelo marcador de
-	-- item descoberto no mapa (Modules/MapMarkers.lua). Sem PNG, o marcador
-	-- cai no glifo por categoria -- ver MapMarkers.lua.
-	Madeira = "",
-	Corda = "",
-	Lona = "",
+	-- Peças do Rádio: usadas pelo marcador de item descoberto no mapa.
 	Antena = "",
 	Bateria = "",
 	Transmissor = "",

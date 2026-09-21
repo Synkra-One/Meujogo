@@ -9,7 +9,12 @@ Status.BeforeStun = Instance.new("BindableEvent")
 local timed: { [Model]: { [string]: { endsAt: number, previous: any, value: any } } } = {}
 local stuns: { [Model]: any } = {}
 local initialized = false
+local stunInterruptors: { (Model) -> () } = {}
 local rng = Random.new()
+
+function Status.RegisterStunInterruptor(callback: (Model) -> ())
+	table.insert(stunInterruptors, callback)
+end
 
 function Status.Active(character: Model?, name: string): boolean
 	local entries = character and timed[character]
@@ -58,24 +63,46 @@ local function endStun(character: Model)
 	end
 end
 
-function Status.Stun(character: Model, duration: number): boolean
+function Status.ClearStun(character: Model, source: string)
+	local state = stuns[character]
+	if not state then return end
+	state.sources[source] = nil
+	local now, latest = Workspace:GetServerTimeNow(), 0
+	for _, endsAt in state.sources do latest = math.max(latest, endsAt) end
+	if latest <= now then endStun(character)
+	else Status.Set(character, "PowerStunned", true, latest - now) end
+end
+
+function Status.Stun(character: Model, duration: number, source: string?): boolean
 	if Status.Active(character, "PowerStunImmune") or character:GetAttribute("Imune") == true
-		or character:GetAttribute("Invulneravel") == true or character:GetAttribute("ShadowRushBusy") == true
-		or character:GetAttribute("TeleportBusy") == true then return false end
+		or character:GetAttribute("Invulneravel") == true
+		or character:FindFirstChildOfClass("ForceField") then return false end
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	local root = character:FindFirstChild("HumanoidRootPart")
-	if not humanoid or humanoid.Health <= 0 or not root or not root:IsA("BasePart")
+	if not humanoid or humanoid.Health <= 0 or not root or not root:IsA("BasePart") then return false end
+	-- FlashBurst interrupts active monster sessions through their existing
+	-- cleanup paths before capturing speed, jump and network ownership.
+	if source == "FlashBurst" then
+		-- Synchronous callbacks: deferred BindableEvents must not restore a
+		-- cancelled movement session AFTER the stun has captured its state.
+		for _, interrupt in stunInterruptors do interrupt(character) end
+		Status.BeforeStun:Fire(character)
+	end
+	if character:GetAttribute("ShadowRushBusy") == true or character:GetAttribute("TeleportBusy") == true
 		or root.Anchored or not root:CanSetNetworkOwnership() then return false end
-	Status.BeforeStun:Fire(character) -- release a movement power's ownership before taking it
+	if source ~= "FlashBurst" then Status.BeforeStun:Fire(character) end
 	if not stuns[character] then
 		stuns[character] = { humanoid = humanoid, root = root, speed = humanoid.WalkSpeed,
 			jumpEnabled = humanoid:GetStateEnabled(Enum.HumanoidStateType.Jumping),
-			auto = root:GetNetworkOwnershipAuto(), owner = root:GetNetworkOwner() }
+			auto = root:GetNetworkOwnershipAuto(), owner = root:GetNetworkOwner(), sources = {} }
 		root:SetNetworkOwner(nil)
 	end
-	local entries = timed[character]
-	local old = entries and entries.PowerStunned
-	Status.Set(character, "PowerStunned", true, math.max(duration, if old then old.endsAt - Workspace:GetServerTimeNow() else 0))
+	local now, latest = Workspace:GetServerTimeNow(), 0
+	local sources = stuns[character].sources
+	local key = source or "Default"
+	sources[key] = math.max(sources[key] or 0, now + duration)
+	for _, endsAt in sources do latest = math.max(latest, endsAt) end
+	Status.Set(character, "PowerStunned", true, latest - now)
 	humanoid.WalkSpeed = 0
 	humanoid.Jump = false
 	humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)

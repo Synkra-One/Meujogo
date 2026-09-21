@@ -35,10 +35,30 @@ function HUD.new(parent: PlayerGui)
 	status.Parent = panel
 	local dot = frame(gui, UDim2.fromScale(0.5, 0.5), UDim2.fromOffset(3, 3), Color3.fromRGB(229, 237, 227))
 	dot.AnchorPoint = Vector2.new(0.5, 0.5)
-	return setmetatable({ Gui = gui, Count = count, Status = status, Fill = fill, Dot = dot }, HUD)
+	local burst = count:Clone()
+	burst.Name, burst.AnchorPoint, burst.Position = "BurstStatus", Vector2.new(0.5, 0), UDim2.fromScale(0.5, 0.61)
+	burst.Size, burst.TextSize, burst.TextXAlignment = UDim2.fromOffset(340, 24), 12, Enum.TextXAlignment.Center
+	burst.Parent = gui
+	local feedback = burst:Clone()
+	feedback.Name, feedback.Position, feedback.Parent = "BurstFeedback", UDim2.fromScale(0.5, 0.57), gui
+	feedback.Text = ""
+	local cooldown = frame(gui, UDim2.fromScale(0.5, 0.65), UDim2.fromOffset(150, 3), Color3.fromRGB(230, 239, 213))
+	cooldown.AnchorPoint = Vector2.new(0.5, 0)
+	return setmetatable({ Gui = gui, Count = count, Status = status, Fill = fill, Dot = dot,
+		Burst = burst, Feedback = feedback, Cooldown = cooldown, feedbackUntil = 0 }, HUD)
 end
 
-function HUD:Update(visible: boolean, battery: number, enabled: boolean, now: number)
+function HUD:BurstFeedback(result: string, accepted: boolean)
+	local text = { Hit = "ACERTOU · monstro ofuscado", Miss = "SEM ACERTO", Battery = "BATERIA INSUFICIENTE",
+		Cooldown = "CLARÃO RECARREGANDO", Range = "MONSTRO FORA DO ALCANCE", Blocked = "CLARÃO INDISPONÍVEL",
+		Aim = "AJUSTE A MIRA", Obstructed = "LANTERNA OBSTRUÍDA" }
+	self.Feedback.Text = (text :: any)[result] or "CLARÃO INDISPONÍVEL"
+	if accepted then self.Feedback.Text ..= string.format("  −%g%%", Config.FlashBurstCost) end
+	self.Feedback.TextColor3 = if result == "Hit" then Color3.fromRGB(237, 248, 205) else Color3.fromRGB(227, 173, 128)
+	self.feedbackUntil = os.clock() + 1.8
+end
+
+function HUD:Update(visible: boolean, battery: number, enabled: boolean, now: number, cooldown: number?)
 	self.Gui.Enabled = visible
 	if not visible then return end
 	local fraction = math.clamp(battery / Config.BatteryMax, 0, 1)
@@ -51,6 +71,16 @@ function HUD:Update(visible: boolean, battery: number, enabled: boolean, now: nu
 	self.Status.TextColor3 = if battery <= 0 then color else Color3.fromRGB(174, 184, 182)
 	self.Count.TextTransparency = if fraction > 0 and fraction <= 0.1 then 0.12 + 0.12 * math.sin(now * 4) else 0
 	self.Dot.Visible = enabled
+	local remaining = cooldown or 0
+	self.Burst.Text = if remaining > 0 then string.format("CLARÃO · %.1fs", remaining)
+		elseif battery < Config.FlashBurstCost then string.format("CLARÃO · precisa de %g%%", Config.FlashBurstCost)
+		else string.format("%s / %s / TOQUE · CLARÃO · %g%%", Config.FlashBurstKey,
+			string.gsub(Config.FlashBurstGamepadKey, "Button", ""), Config.FlashBurstCost)
+	self.Burst.TextColor3 = if remaining > 0 or battery < Config.FlashBurstCost
+		then Color3.fromRGB(160, 165, 167) else Color3.fromRGB(230, 239, 213)
+	self.Cooldown.Visible = remaining > 0
+	self.Cooldown.Size = UDim2.fromOffset(150 * (1 - math.clamp(remaining / Config.FlashBurstCooldown, 0, 1)), 3)
+	self.Feedback.Visible = now < self.feedbackUntil
 end
 
 return HUD

@@ -3,7 +3,7 @@
 	ItemSpawner (ferramenta de editor)
 	Espalha os itens coletáveis de ItemRegistry.lua pelas zonas já geradas
 	da ilha. Rode DEPOIS de IslandGenerator.Generate() e (se quiser
-	Antena/Bateria/Transmissor/Corda/Lona nos destroços) PlaneCrashGenerator.Generate().
+	Antena/Bateria/Transmissor nos destroços) PlaneCrashGenerator.Generate().
 
 	AUTO-BOOT: init.server.luau chama Generate() sozinho ao dar Play, por
 	último (depois de Ilha + Destroços), SE Workspace.Ilha ainda não existir
@@ -27,8 +27,6 @@
 	sem gerar destroços do avião), aquela tentativa é só pulada -- o resumo
 	final mostra quantos de cada item realmente couberam.
 
-	Madeira/Corda/Lona nascem como Parts com Attribute "MaterialJangada" +
-	"TipoMaterial" (RaftObjective.lua já sabe reconhecer, nada mudou lá).
 	Antena/Bateria/Transmissor são ignorados aqui porque RadioPieces.lua cria
 	as três cópias únicas nos POIs corretos. Faca/Lança de Bambu/Pedra
 	Afiada/Tocha nascem como uma Part com ProximityPrompt "Pegar" que entrega
@@ -185,13 +183,8 @@ local function spawnMaterialPart(itemId: string, category: string, position: Vec
 	local part = newPickupAnchor(itemId, position, parent)
 	part.Color = Color3.fromRGB(255, 195, 70)
 
-	if category == "MaterialJangada" then
-		part:SetAttribute("MaterialJangada", true)
-		part:SetAttribute("TipoMaterial", itemId)
-	else
-		part:SetAttribute("PecaRadio", true)
-		part:SetAttribute("TipoPeca", itemId)
-	end
+	part:SetAttribute("PecaRadio", true)
+	part:SetAttribute("TipoPeca", itemId)
 end
 
 local function spawnToolPickup(itemId: string, displayName: string, position: Vector3, parent: Instance)

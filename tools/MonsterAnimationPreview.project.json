@@ -1,0 +1,9 @@
+{
+  "name": "MonsterAnimationPreview",
+  "tree": {
+    "$className": "Model",
+    "MonsterAnimationPreview": {
+      "$path": "MonsterAnimationPreview.plugin.lua"
+    }
+  }
+}

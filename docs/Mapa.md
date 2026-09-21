@@ -11,14 +11,13 @@ atravessar; na prática mais, por causa do relevo e do mato.
 |---|---|
 | `Tools/IslandLayout.lua` | O plano: costa, relevo, biomas, **onde cai cada POI**, trilhas. Só matemática, fixo por seed. Exporta `Height/Material/WaterLevel` por coluna e `CoastRadiusMax()/AreaHalf()` pros sistemas de runtime. |
 | `Tools/IslandGenerator.lua` | Escreve o terreno por chunks a partir do layout; rochas, caverna, floresta, vegetação rasteira, ruínas; chama `PoiGenerator`. |
-| `Tools/AbyssStationGenerator.lua` | Estação Abismo: laboratório subterrâneo na floresta costeira, com túnel de evacuação até uma caverna no mar (ver [EstacaoAbismo.md](EstacaoAbismo.md)). |
+| `Tools/AbyssStationGenerator.lua` | Estação Abismo: laboratório subterrâneo na costa oposta à montanha, com entrada em uma pequena caverna, duas escadas curtas, salão de testes e saída seca na costa (ver [EstacaoAbismo.md](EstacaoAbismo.md)). |
 | `Tools/RadioTowerGenerator.lua` | Estação de Rádio: torre, abrigo, gerador, combustível, cerca e estrada (ver [Radio.md](Radio.md)). |
 | `Tools/CaveInterior.lua` | O covil do Monstro dentro da montanha: escava o terreno e monta os três níveis, o sangue e a luz (ver [Caverna.md](Caverna.md)). |
 | `Tools/Structures.lua` | Peças em `Part` primitiva: cabana, lodge, celeiro, casa de barcos, píer, barco, torre de vigia, farol, fogueira, mesa, lampião, alvo, fardo, secador, canoa, cabana nativa, totem, arbusto, tronco caído. |
 | `Tools/PoiGenerator.lua` | Monta cada POI no site do layout com as peças de `Structures`. |
 | `Tools/PlaneCrashGenerator.lua` | Queda de avião internacional (260 studs): fuselagem no impacto, peças próximas, destroços distantes e rastro do mar à floresta; desvia dos POIs. |
 | `Tools/ItemSpawner.lua` | Itens; zona nova `Construcoes` = marcadores `PontoLoot` dentro das construções. |
-| `Tools/RaftGenerator.lua` | Jangada — prefere a praia mais perto do Acampamento. |
 | `server/DoorSystem.lua` | Portas (`Porta` Attribute) com prompt Abrir/Fechar. |
 
 ## Pontos de interesse
@@ -34,10 +33,9 @@ atravessar; na prática mais, por causa do relevo e do mato.
 | **VilaNativa** | 5 moradias de 18×20 + casa comunal de 22×24, interiores mobiliados, janelas, varandas, telhados em camadas, totem, fogueira, preparo de carne, sangue e canoa | PontoLoot em cada casa e na mesa; SpawnPOI nas entradas |
 | **Ruinas** | Círculo de pedras + Lança Ancestral | SpawnPOI |
 | **Caverna** | Covil dentro da montanha (Peak 95, Radius 150): túnel em S descendo 9, salão de raio 40 com 56 de pé-direito, poço de sangue, galeria no meio, ponte de tábuas, laje de cima com o ninho, ossuário e despensa. Spawn do Monstro no ninho. Ver [Caverna.md](Caverna.md) | — |
-| **Radio** | Estação repetidora cercada (48x42): torre de 95 studs com baliza, abrigo técnico, gerador, tanque e galões, caixa de fusíveis, holofotes, portão e estrada de manutenção. É o objetivo de socorro — ver [Radio.md](Radio.md) | 2 PontoLoot no abrigo |
-| **Estação Abismo** | Escotilha escondida na floresta a ~178 studs do mar; poço de acesso, Nível -1 (eclusa), Nível -2 (laboratório, controle e ala clínica montados com modelos do Toolbox), câmara de bombas, túnel de evacuação alagado e saída numa caverna costeira. Interior todo vedado -- nenhuma superfície é terreno. Ver [EstacaoAbismo.md](EstacaoAbismo.md) | PontoLoot no lab, controle, clínica, átrio, bombas e vestiário |
-| **Trilhas** | Loop pelos POIs habitados (ordem angular) + ramais pra Torre, Farol, Ruínas e boca da Caverna; `Ground` rebaixado, `Mud` perto do lago; lampiões a cada ~60 studs (acesos só a ≤40 studs de um POI) | — |
-| **Jangada** | Praia mais perto do Acampamento | — |
+| **Radio** | Estação repetidora cercada (132x112): torre de 105 studs com baliza, abrigo técnico 36x26 com duas portas, gerador, tanque e galões, caixa de fusíveis, holofotes, portão e estrada de manutenção. É o objetivo de socorro — ver [Radio.md](Radio.md) | 2 PontoLoot no abrigo + 1 no depósito |
+| **Estação Abismo** | Caverna escondida na floresta **do lado oposto à montanha do Monstro**, porta industrial e escada curta. Recepção, área técnica, laboratório, arquivo, enfermaria, controle e o salão de testes de 76×76 com o **Frog Generator** (cápsula), celas de contenção e mesas de necropsia; 120 studs de corredor e outra escada até a saída seca na costa. Ver [EstacaoAbismo.md](EstacaoAbismo.md) | PontoLoot em cada sala e dois no salão de testes |
+| **Trilhas** | Loop pelos POIs habitados (ordem angular) + ramais pra Torre, Farol, Ruínas e boca da Caverna; `Ground` rebaixado, `Mud` perto do lago; postes de rua a cada ~120 studs e reforço nas entradas de vilas e torre | — |
 
 Tamanhos: árvores 30–56 studs (R6 ≈ 5), cabana 16×14 com pé-direito 8,5 e
 porta de 7, lodge 34×24, celeiro 28×40×13, torre com plataforma a 24, farol
@@ -82,7 +80,7 @@ Depois, um por vez:
 require(game.ServerScriptService.Server.Tools.PlaneCrashGenerator).Generate()
 require(game.ServerScriptService.Server.Tools.ItemSpawner).Generate()
 ```
-**Salve (Ctrl+S).** A jangada e o kit de teste o `RaftObjective` cria no boot.
+**Salve (Ctrl+S).** O rádio e a extração são inicializados no boot.
 
 Ao atualizar apenas o código do acidente, regenere a ilha antes do avião. O
 gerador remove os modelos antigos, mas o sulco anterior faz parte do Terrain e

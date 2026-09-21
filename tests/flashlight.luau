@@ -35,6 +35,7 @@ local function object(class, name)
 	if class == "Part" then
 		self.Position = V.new()
 		self.AssemblyLinearVelocity = V.new()
+		self.CFrame = { VectorToObjectSpace = function(_, direction) return direction end }
 	end
 	for _, key in { "ChildAdded", "ChildRemoved", "DescendantAdded", "CharacterAdded", "CharacterRemoving", "AncestryChanged", "Unequipped", "Destroying" } do self[key] = signal() end
 	function self:IsA(kind) return kind == self.ClassName or kind == "Instance" or (kind == "BasePart" and class == "Part") end
@@ -55,6 +56,13 @@ local function object(class, name)
 	function self:GetAttribute(key) return self.attributes[key] end
 	function self:SetAttribute(key, value) self.attributes[key] = value end
 	function self:TakeDamage(amount) self.Health = math.max(0, self.Health - amount) end
+	function self:CanSetNetworkOwnership() return not self.Anchored end
+	function self:GetNetworkOwnershipAuto() return self.autoOwner ~= false end
+	function self:GetNetworkOwner() return self.owner end
+	function self:SetNetworkOwner(owner) self.owner = owner; self.autoOwner = false end
+	function self:SetNetworkOwnershipAuto() self.autoOwner = true end
+	function self:GetStateEnabled() return self.jumpEnabled ~= false end
+	function self:SetStateEnabled(_, enabled) self.jumpEnabled = enabled end
 	function self:IsDescendantOf(ancestor)
 		local current = self.Parent
 		while current do if current == ancestor then return true end; current = current.Parent end
@@ -97,6 +105,8 @@ local roundActive = true
 local round = { RoundEnded = { Event = signal() }, RoundPrepared = { Event = signal() }, IsRoundActive = function() return roundActive end }
 local damageCalls = {}
 local modules = {
+	MonsterAnimationConfig = { AnimationIds = { Damage = "", Death = "" },
+		IsUsableAnimationId = function() return false end },
 	GameConfig = {
 		Roles = { Survivor = "Sobrevivente", Monster = "Monstro" },
 		Health = {
@@ -107,7 +117,12 @@ local modules = {
 			RegenPerSecond = 0,
 			RegenDelayAfterDamage = 6,
 			DisableRobloxDefaultRegen = false,
+			-- Piso de vida do Monstro: o DamageSystem real usa isto em
+			-- protectMonster() antes de aplicar qualquer dano.
+			MonsterMinimum = 1,
 		},
+		-- Estados de combate lidos por DamageSystem.GetMonsterState.
+		Monster = { CombatStates = { Normal = "Normal", Weakened = "Enfraquecido", Vulnerable = "Vulneravel" } },
 	},
 	ItemRegistry = { Items = { Lanterna = { AssetId = 6715358554 } } },
 	Remotes = { Flashlight = remote }, RoundManager = round,
@@ -123,14 +138,34 @@ local services = {
 	StarterPack = object("StarterPack", "StarterPack"),
 	Workspace = workspace,
 	ReplicatedStorage = { Modules = names },
+	-- O DamageSystem real (carregado no fim deste arquivo) agenda a limpeza
+	-- do flash de dano pelo Debris. Só precisa existir: nada aqui mede tempo.
+	Debris = { AddItem = function() end },
 }
 local env = setmetatable({ game = { GetService = function(_, key) return assert(services[key], key) end },
 	script = { Parent = names }, Vector3 = V, os = { clock = function() return now end },
+	Random = { new = function() return { NextNumber = function() return 0.75 end } end },
 	Enum = {
+		HumanoidStateType = { Jumping = "Jumping" },
 		AnimationPriority = { Action2 = "Action2", Action4 = "Action4" },
 		RaycastFilterType = { Exclude = "Exclude" },
+		-- Flash de acerto do DamageSystem real (Highlight + Debris). Só
+		-- precisa existir: este arquivo não verifica nada visual.
+		HighlightDepthMode = { Occluded = "Occluded", AlwaysOnTop = "AlwaysOnTop" },
 	},
+	Color3 = { fromRGB = function(...) return { ... } end, new = function(...) return { ... } end },
 	RaycastParams = { new = function() return {} end },
+	-- O DamageSystem publica DamageApplied/Healed (BindableEvent) pra quem
+	-- quiser OBSERVAR combate sem mexer no dano -- hoje o relatório de
+	-- partida. Estes testes não escutam nada disso, mas o módulo cria os dois
+	-- ao carregar, então o dublê precisa existir.
+	Instance = { new = function(class)
+		if class == "BindableEvent" then
+			local event = signal()
+			return { Event = event, Fire = function(_, ...) event:Fire(...) end }
+		end
+		return object(class, class)
+	end },
 	typeof = function(v) return if type(v) == "table" then v._kind or "table" else type(v) end,
 }, { __index = getfenv() })
 local function loadModule(name)
@@ -184,6 +219,7 @@ local function player(name, role)
 	p.Character = move(object("Model", name), workspace)
 	local humanoid = move(object("Humanoid", "Humanoid"), p.Character)
 	humanoid.Health = 100
+	humanoid.WalkSpeed = 16
 	for _, key in { "Head", "Torso", "HumanoidRootPart" } do
 		move(object("Part", key), p.Character).Position = V.new(0, 2, 0)
 	end

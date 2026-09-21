@@ -3,6 +3,7 @@
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local FlashlightRules = require(ReplicatedStorage.Modules.FlashlightRules)
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
@@ -60,7 +61,7 @@ local function onAction(_name: string, inputState: Enum.UserInputState): Enum.Co
 	end
 	local current = character
 	if not current or UserInputService:GetFocusedTextBox() or player:GetAttribute("MapaAberto") == true
-		or player:GetAttribute("CursorLivre") == true or current:GetAttribute("GrabLocked") == true
+		or player:GetAttribute("CursorLivre") == true or FlashlightRules.PowerBlocked(current) or current:GetAttribute("GrabLocked") == true
 		or current:GetAttribute("TeleportBusy") == true or current:GetAttribute("ShadowRushBusy") == true
 		or Workspace:GetServerTimeNow() < (player:GetAttribute("GrabReadyAt") or 0) then
 		return Enum.ContextActionResult.Sink

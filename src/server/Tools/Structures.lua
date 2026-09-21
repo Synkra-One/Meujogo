@@ -9,7 +9,8 @@
 
 	CONVENÇÃO DE ESPAÇO: toda função recebe `cf` = centro da construção NO
 	CHÃO, com LookVector = FRENTE (-Z local). +X = direita, +Y = cima.
-	Tudo Anchored. Nada aqui depende de asset -- roda em runtime.
+	Tudo Anchored. O poste de rua das trilhas é carregado por asset, mas tem
+	um fallback primitivo para o mapa continuar jogável se o asset falhar.
 
 	MARCADORES (Parts invisíveis com Attribute, lidos pelos sistemas):
 	  PontoLoot = true   -- ItemSpawner/LootCrateSystem: loot nasce aqui
@@ -22,6 +23,11 @@
 		local S = require(script.Parent.Structures)
 		S.Cabin(folder, CFrame.new(x, y, z), { Name = "Cabana_1" })
 ]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local AssetRegistry = require(ReplicatedStorage.Modules.AssetRegistry)
+local AssetLoader = require(ReplicatedStorage.Modules.AssetLoader)
 
 local Structures = {}
 
@@ -833,12 +839,65 @@ function Structures.PicnicTable(parent: Instance, cf: CFrame): Model
 	return model
 end
 
+local function streetLampAsset(parent: Instance, cf: CFrame, lit: boolean): Model?
+	local config = AssetRegistry.StreetLamp
+	local template = AssetLoader.Load(config.AssetId)
+	if not template then
+		return nil
+	end
+
+	local model = template:Clone()
+	model.Name = "PosteRua"
+	model:SetAttribute("LuzTrilhaPoste", true)
+	model.Parent = parent
+	-- Assets do Toolbox nem sempre salvam o Pivot no pé do modelo. Alinha a
+	-- parte mais baixa ao chão para não deixar o poste enterrado ou flutuando.
+	local box, size = model:GetBoundingBox()
+	local bottomOffset = box.Position.Y - size.Y * 0.5 - model:GetPivot().Position.Y
+	model:PivotTo(cf * CFrame.new(0, -bottomOffset, 0))
+
+	local highest: BasePart? = nil
+	for _, descendant in model:GetDescendants() do
+		if descendant:IsA("BasePart") then
+			descendant.Anchored = true
+			descendant.CanCollide = false
+			descendant.CanTouch = false
+			descendant.CanQuery = false
+			if not highest or descendant.Position.Y > highest.Position.Y then
+				highest = descendant
+			end
+		elseif descendant:IsA("Light") then
+			descendant.Enabled = lit
+			local host = descendant.Parent
+			if host and host:IsA("BasePart") then
+				host:SetAttribute("LuzTrilhaVisual", true)
+			end
+		end
+	end
+
+	-- Alguns free models vêm sem uma luz Roblox real. A luz própria garante
+	-- iluminação discreta e igual em todos os postes, sem depender do asset.
+	if highest and not highest:FindFirstChild("LuzTrilha") then
+		local light = pointLight(highest, config.LightColor, config.LightRange, config.LightBrightness, lit)
+		light.Name = "LuzTrilha"
+		highest:SetAttribute("LuzTrilhaVisual", true)
+	end
+	return model
+end
+
 function Structures.TrailLamp(parent: Instance, cf: CFrame, lit: boolean): Model
+	local assetModel = streetLampAsset(parent, cf, lit)
+	if assetModel then
+		return assetModel
+	end
+
 	local model = newModel(parent, "Lampiao")
+	model:SetAttribute("LuzTrilhaPoste", true)
 	part(model, "Poste", Vector3.new(0.4, 7, 0.4), cf * CFrame.new(0, 3.5, 0), Enum.Material.Wood, COL.LogDark)
 	part(model, "Braco", Vector3.new(0.3, 0.3, 1.6), cf * CFrame.new(0, 6.7, -0.7), Enum.Material.Wood, COL.LogDark, { CanCollide = false })
 	local lantern = part(model, "Caixa", Vector3.new(0.7, 1.0, 0.7), cf * CFrame.new(0, 5.9, -1.4), Enum.Material.Metal, COL.Metal, { CanCollide = false })
 	local glass = part(model, "Vidro", Vector3.new(0.45, 0.6, 0.45), cf * CFrame.new(0, 5.9, -1.4), if lit then Enum.Material.Neon else Enum.Material.Glass, if lit then Color3.fromRGB(255, 190, 110) else COL.Glass, { CanCollide = false })
+	glass:SetAttribute("LuzTrilhaVisual", true)
 	glass.Transparency = if lit then 0 else 0.35
 	pointLight(lantern, Color3.fromRGB(255, 175, 95), 22, 0.7, lit)
 	return model

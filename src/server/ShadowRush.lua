@@ -3,6 +3,8 @@
 -- keeps steering, gravity and collisions; the ability never anchors the body.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local PowerStatus = require(script.Parent.SurvivorPowerStatus)
+local FlashlightRules = require(ReplicatedStorage.Modules.FlashlightRules)
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local Config = require(ReplicatedStorage.Modules.GameConfig)
@@ -94,6 +96,7 @@ local function valid(s: Session): boolean
 		and s.player:GetAttribute("Role") == Config.Roles.Monster
 		and s.player:GetAttribute("InRound") == true
 		and s.player:GetAttribute("Amarrado") ~= true and s.character:GetAttribute("Amarrado") ~= true
+		and not FlashlightRules.PowerBlocked(s.character)
 		and s.character:GetAttribute("TeleportBusy") ~= true
 		and s.character:GetAttribute("GrabLocked") ~= true
 		and not s.character:FindFirstChild("Ragdoll") and not s.humanoid.Sit
@@ -148,7 +151,7 @@ local function tickSession(s: Session, dt: number)
 end
 
 local function start(player: Player)
-	if player.Character and player.Character:GetAttribute("PowerStunned") == true then return end
+	if FlashlightRules.PowerBlocked(player.Character) then return end
 	local char = player.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
 	local root = char and char:FindFirstChild("HumanoidRootPart")
@@ -208,6 +211,10 @@ end
 function ShadowRush.Init()
 	if initialized then return end
 	initialized = true
+	PowerStatus.RegisterStunInterruptor(function(character)
+		local owner = Players:GetPlayerFromCharacter(character)
+		if owner then ShadowRush.Cancel(owner) end
+	end)
 	assert(CFG.ShadowRushMaxSpeed > 0 and CFG.ShadowRushMaxSpeed <= 150
 		and CFG.ShadowRushAcceleration > 0 and CFG.ShadowRushEnterDuration > 0
 		and CFG.ShadowRushExitDeceleration > 0 and CFG.ServerInterval > 0

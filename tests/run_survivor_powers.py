@@ -11,11 +11,12 @@ import tempfile
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 MODULES = {
     "CharacterData": "src/ReplicatedStorage/Modules/CharacterData.lua",
+    "MonsterAnimationConfig": "src/ReplicatedStorage/Modules/MonsterAnimationConfig.lua",
+    "InteractionGuard": "src/server/InteractionGuard.lua",
     "SurvivorPowerStatus": "src/server/SurvivorPowerStatus.lua",
     "SurvivorPowerSystem": "src/server/SurvivorPowerSystem.lua",
     "DamageSystem": "src/server/DamageSystem.lua",
     "RadioObjective": "src/server/RadioObjective.lua",
-    "RaftObjective": "src/server/RaftObjective.lua",
 }
 sources = "local sources = {}\n" + "\n".join(
     f'sources["{name}"] = [====[\n{(ROOT / path).read_text()}\n]====]'

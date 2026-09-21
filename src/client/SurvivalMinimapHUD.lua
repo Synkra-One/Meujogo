@@ -2,9 +2,17 @@
 --[[
 	SurvivalMinimapHUD
 
-	Painel circular inspirado no HUD de sobrevivencia: o mapa real da ilha fica
-	no centro, vida e folego ocupam arcos independentes, e itens descobertos
-	permanecem marcados usando a mesma lista do mapa grande.
+	Painel circular no canto inferior direito, montado em três camadas que se
+	encaixam pelo ZIndex:
+
+	  3  disco do mapa da ilha
+	  6  arco de fôlego (StaminaRing) -- anel vermelho-vinho, cortado por
+	     UIGradient, que só encurta conforme o fôlego cai
+	 10  moldura do Figma ............. só decoração, por cima de tudo
+
+	A barra de vida e o gauge antigo de fôlego (arcos de 24 segmentos +
+	badges) saíram daqui: o arco é a única leitura de fôlego na tela, e ele só
+	desenha o valor que StaminaHUD.client.luau lê do Attribute "Stamina".
 ]]
 
 local HttpService = game:GetService("HttpService")
@@ -13,25 +21,36 @@ local UserInputService = game:GetService("UserInputService")
 
 local IslandMapData = require(ReplicatedStorage.Modules.IslandMapData)
 local MapMarkers = require(ReplicatedStorage.Modules.MapMarkers)
+local StaminaRing = require(script.Parent.StaminaRing)
 
 local SurvivalMinimapHUD = {}
 SurvivalMinimapHUD.__index = SurvivalMinimapHUD
 
 local WIDGET_SIZE = 320
-local MAP_SIZE = 214
-local MAP_CENTER = Vector2.new(177, 154)
+local MAP_SIZE = 168
+local MAP_CENTER = Vector2.new(160, 160)
 local MAP_RESOLUTION = 42
-local ARC_SEGMENTS = 24
+
+-- Geometria calibrada pixel a pixel em cima do export real do Figma
+-- (Imagens/Minimapa/3c71779a-444d-4931-be0d-12a0b3069dd0.png, 1254x1254): a
+-- trilha vermelha original ocupa a faixa de raio ~0.75..0.89 da metade da
+-- imagem, e é nela que o arco tem que cair.
+--
+-- O atlas do arco (StaminaRingAtlas.png) desenha o anel exatamente nessa
+-- faixa, então basta arco e moldura saírem no MESMO tamanho e centrados no
+-- mesmo ponto pra encaixarem -- tamanhos diferentes viram dois anéis
+-- concêntricos. RING_SIZE sai do tamanho do mapa pro anel encostar na borda
+-- dele sem folga.
+local RING_INNER_FRAC = 0.75
+local RING_SIZE = MAP_SIZE / RING_INNER_FRAC
+
+-- Camadas: mapa (3) < arco (6) < moldura do Figma (10). O arco tem furo
+-- próprio na textura, então passa por cima do mapa sem tapá-lo.
+local FILL_ZINDEX = 6
+local FRAME_ZINDEX = 10
 
 local COLORS = {
-	Shell = Color3.fromRGB(13, 15, 18),
-	ShellEdge = Color3.fromRGB(100, 103, 101),
 	MapEdge = Color3.fromRGB(194, 196, 188),
-	Health = Color3.fromRGB(239, 55, 48),
-	HealthLow = Color3.fromRGB(255, 104, 56),
-	Stamina = Color3.fromRGB(67, 196, 239),
-	StaminaLow = Color3.fromRGB(242, 177, 63),
-	Empty = Color3.fromRGB(46, 49, 52),
 	Text = Color3.fromRGB(238, 238, 226),
 	Poi = Color3.fromRGB(221, 214, 190),
 	Player = Color3.fromRGB(255, 255, 255),
@@ -151,36 +170,6 @@ local function buildReducedRects(payload: Payload): { IslandMapData.Rect }
 	return IslandMapData.MergeRects(reduced, MAP_RESOLUTION)
 end
 
-local function buildArc(parent: Instance, name: string, radius: number, thickness: number, zIndex: number): { Frame }
-	local result: { Frame } = {}
-	for index = 1, ARC_SEGMENTS do
-		local progress = (index - 1) / (ARC_SEGMENTS - 1)
-		local angle = math.rad(270 - progress * 180)
-		local segment = frame(parent, string.format("%s_%02d", name, index), COLORS.Empty, zIndex)
-		segment.AnchorPoint = Vector2.new(0.5, 0.5)
-		segment.Position = UDim2.fromOffset(
-			MAP_CENTER.X + math.cos(angle) * radius,
-			MAP_CENTER.Y + math.sin(angle) * radius
-		)
-		segment.Size = UDim2.fromOffset(thickness, 11)
-		segment.Rotation = math.deg(angle) + 90
-		local corner = Instance.new("UICorner")
-		corner.CornerRadius = UDim.new(0, 2)
-		corner.Parent = segment
-		result[index] = segment
-	end
-	return result
-end
-
-local function updateArc(segments: { Frame }, value: number, color: Color3)
-	local activeCount = math.floor(math.clamp(value, 0, 1) * #segments + 0.5)
-	for index, segment in segments do
-		local active = index <= activeCount
-		segment.BackgroundColor3 = if active then color else COLORS.Empty
-		segment.BackgroundTransparency = if active then 0.04 else 0.38
-	end
-end
-
 function SurvivalMinimapHUD.new(parent: Instance)
 	local self = setmetatable({}, SurvivalMinimapHUD)
 	self.payload = nil
@@ -189,7 +178,6 @@ function SurvivalMinimapHUD.new(parent: Instance)
 	self.pending = {}
 	self.queued = {}
 	self.healthShown = 1
-	self.staminaShown = 1
 
 	local root = Instance.new("CanvasGroup")
 	root.Name = "VitalsMinimap"
@@ -204,21 +192,13 @@ function SurvivalMinimapHUD.new(parent: Instance)
 	scale.Scale = if UserInputService.TouchEnabled then 0.8 else 1
 	scale.Parent = root
 
-	local shadow = circle(root, "Shadow", 250, Color3.new(0, 0, 0), 1)
-	shadow.Position = UDim2.fromOffset(MAP_CENTER.X + 4, MAP_CENTER.Y + 5)
-	shadow.BackgroundTransparency = 0.35
-
-	local shell = circle(root, "Shell", 238, COLORS.Shell, 2)
-	shell.Position = UDim2.fromOffset(MAP_CENTER.X, MAP_CENTER.Y)
-	stroke(shell, COLORS.ShellEdge, 5, 0.34)
-
-	self.healthSegments = buildArc(root, "Health", 148, 12, 4)
-	self.staminaSegments = buildArc(root, "Stamina", 127, 10, 4)
-
+	-- Aqui existia um círculo preto de sombra com raio MAIOR que o anel: ele
+	-- vazava por fora e virava um halo escuro em volta do HUD. Removido. O
+	-- único fundo que sobra é o disco do próprio mapa, dentro do anel.
 	local mapClip = circle(root, "MapClip", MAP_SIZE, Color3.fromRGB(8, 12, 12), 3)
 	mapClip.Position = UDim2.fromOffset(MAP_CENTER.X, MAP_CENTER.Y)
 	mapClip.ClipsDescendants = true
-	stroke(mapClip, COLORS.MapEdge, 3, 0.26)
+	stroke(mapClip, COLORS.MapEdge, 2, 0.3)
 	self.mapClip = mapClip
 
 	local terrain = frame(mapClip, "Terrain", nil, 3)
@@ -261,42 +241,32 @@ function SurvivalMinimapHUD.new(parent: Instance)
 		label.Size = UDim2.fromOffset(18, 16)
 	end
 
-	local healthBadge = circle(root, "HealthBadge", 49, Color3.fromRGB(10, 11, 13), 10)
-	healthBadge.Position = UDim2.fromOffset(78, 20)
-	stroke(healthBadge, COLORS.Health, 3, 0.05)
-	local heart = textLabel(healthBadge, "Heart", "♥", 27, 11)
-	heart.Size = UDim2.fromScale(1, 1)
-	heart.TextColor3 = COLORS.Health
-
-	local staminaBadge = circle(root, "StaminaBadge", 43, Color3.fromRGB(10, 11, 13), 10)
-	staminaBadge.Position = UDim2.fromOffset(121, 43)
-	stroke(staminaBadge, COLORS.Stamina, 3, 0.05)
-	local runner = textLabel(staminaBadge, "Runner", "⚡", 25, 11)
-	runner.Size = UDim2.fromScale(1, 1)
-	runner.TextColor3 = COLORS.Stamina
-
-	local healthValue = textLabel(root, "HealthValue", "100", 13, 11)
-	healthValue.Position = UDim2.fromOffset(34, 45)
-	healthValue.Size = UDim2.fromOffset(44, 18)
-	healthValue.TextXAlignment = Enum.TextXAlignment.Right
-	healthValue.TextColor3 = COLORS.Health
-	self.healthValue = healthValue
-
-	local staminaValue = textLabel(root, "StaminaValue", "100", 13, 11)
-	staminaValue.Position = UDim2.fromOffset(82, 64)
-	staminaValue.Size = UDim2.fromOffset(42, 18)
-	staminaValue.TextXAlignment = Enum.TextXAlignment.Right
-	staminaValue.TextColor3 = COLORS.Stamina
-	self.staminaValue = staminaValue
-
 	local loading = textLabel(mapClip, "Loading", "CARREGANDO MAPA", 11, 9)
 	loading.Size = UDim2.fromScale(1, 1)
 	loading.TextColor3 = Color3.fromRGB(155, 159, 151)
 	self.loading = loading
 
+	-- Mapa carrega independente do anel: se o anel falhar por algum motivo,
+	-- o resto do HUD (mapa, bússola) não pode travar junto de novo.
 	task.spawn(function()
 		self:_prepare()
 	end)
+
+	-- Arco de fôlego: o preenchimento entra ABAIXO do mapa (o mapa é o que faz
+	-- o furo do anel) e a moldura do Figma por cima de tudo.
+	local ok, staminaRing = pcall(StaminaRing.new, root, {
+		center = MAP_CENTER,
+		ringSize = RING_SIZE,
+		frameSize = RING_SIZE, -- tem que ser igual a ringSize: mesma imagem, só escalada por esse tamanho
+		fillZIndex = FILL_ZINDEX,
+		frameZIndex = FRAME_ZINDEX,
+	})
+	if ok then
+		self.staminaRing = staminaRing
+	else
+		warn("SurvivalMinimapHUD: StaminaRing falhou ao construir, HUD segue sem o anel -- " .. tostring(staminaRing))
+	end
+
 	return self
 end
 
@@ -401,30 +371,34 @@ function SurvivalMinimapHUD:SetDiscoveredItems(entries: { DiscoveredEntry })
 	end
 end
 
-function SurvivalMinimapHUD:Update(dt: number, health: number, stamina: number, exhausted: boolean, holding: boolean)
+-- health entra só pra decidir o fade de "tudo cheio e parado" (não vira gauge
+-- nenhum aqui); stamina é o fôlego real 0..1 -- StaminaRing cuida da
+-- suavização visual sozinho, sem timer próprio.
+--[[
+	Update(..., fearHidden)
+	fearHidden (0..1) vem de FearPresentationRules.HudFade: em pânico o painel
+	inteiro -- mapa E arco de fôlego, que moram no mesmo CanvasGroup -- apaga.
+	É só leitura: o Attribute "Stamina" e o mapa continuam intactos por baixo.
+]]
+function SurvivalMinimapHUD:Update(dt: number, health: number, stamina: number, exhausted: boolean, holding: boolean, fearHidden: number?)
 	self.healthShown += (math.clamp(health, 0, 1) - self.healthShown) * math.min(1, dt * 12)
-	-- `stamina` já é suavemente amostrada pelo servidor a 20 Hz. Não aplicar
-	-- outra interpolação aqui: ela atrasava o arco em relação ao momento real
-	-- em que o sprint acabava ou era liberado novamente.
-	self.staminaShown = math.clamp(stamina, 0, 1)
-
-	local healthColor = if self.healthShown < 0.3 then COLORS.HealthLow else COLORS.Health
-	local staminaColor = if exhausted
-		then COLORS.Health
-		elseif self.staminaShown < 0.3 then COLORS.StaminaLow
-		else COLORS.Stamina
-	updateArc(self.healthSegments, self.healthShown, healthColor)
-	updateArc(self.staminaSegments, self.staminaShown, staminaColor)
-	self.healthValue.Text = tostring(math.floor(math.clamp(health, 0, 1) * 100 + 0.5))
-	self.healthValue.TextColor3 = healthColor
-	self.staminaValue.Text = tostring(math.floor(math.clamp(stamina, 0, 1) * 100 + 0.5))
-	self.staminaValue.TextColor3 = staminaColor
+	local staminaFraction = math.clamp(stamina, 0, 1)
+	if self.staminaRing then
+		-- `stamina` já chega normalizado (StaminaHUD divide o Attribute 0..100
+		-- por 100). NÃO dividir de novo aqui.
+		self.staminaRing:SetProgress(staminaFraction)
+		self.staminaRing:Update(dt)
+	end
 
 	local pulse = (math.sin(os.clock() * 8) + 1) * 0.5
-	self.root.GroupTransparency = if self.staminaShown >= 0.995 and self.healthShown >= 0.995 and not holding
+	local idle = if staminaFraction >= 0.995 and self.healthShown >= 0.995 and not holding
 		then 0.08
 		elseif exhausted then pulse * 0.08
 		else 0
+	-- O medo só pode ESCONDER mais, nunca revelar: o maior dos dois ganha.
+	local hidden = math.clamp(if type(fearHidden) == "number" and fearHidden == fearHidden then fearHidden else 0, 0, 1)
+	self.root.GroupTransparency = math.max(idle, hidden)
+	self.root.Visible = hidden < 0.999
 end
 
 function SurvivalMinimapHUD:UpdatePlayer(position: Vector3?, heading: number?)

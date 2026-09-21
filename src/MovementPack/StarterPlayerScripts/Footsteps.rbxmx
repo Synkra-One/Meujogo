@@ -212,12 +212,18 @@ local function OnCharacterAdded(Character:Model)
 	end
 
 	local function CanFootstep()
+		local shadowState = Character:GetAttribute("ShadowRushState")
+		if shadowState == "EnteringShadow" or shadowState == "ShadowRush" then
+			return false -- a forma sombria desliza no ar; nenhum passo deve tocar
+		end
 		return IsFooted() and Velocity.Magnitude &gt; .1 and MovingCheck()
 	end
 
 	local function StateChanged(old,new)
 		HumanoidState = new
 		FloorMaterial = Humanoid.FloorMaterial
+		local shadowState = Character:GetAttribute("ShadowRushState")
+		if shadowState == "EnteringShadow" or shadowState == "ShadowRush" then return end
 
 		if IsWithinRange() then
 

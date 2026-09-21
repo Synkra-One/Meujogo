@@ -13,15 +13,32 @@ local Elimination = require(script.Parent.Elimination)
 local Damage = require(script.Parent.DamageSystem)
 local Status = require(script.Parent.SurvivorPowerStatus)
 local RadioSite = require(script.Parent.RadioSiteSystem)
-local Raft = require(script.Parent.RaftObjective)
+local RepairMinigame = require(script.Parent.RepairMinigameSystem)
 local System = {}
 local initialized = false
+
+-- O registro é opcional aqui para manter o módulo testável fora do Roblox
+-- (os testes não precisam baixar assets). Em runtime ele fornece o modelo e
+-- a animação da armadilha do Diego.
+local PowerAssets: any = {}
+pcall(function()
+	local registry = require(ReplicatedStorage.Modules.AssetRegistry)
+	PowerAssets = registry.SurvivorPowers or {}
+end)
+
 local cooldowns: { [Player]: { number } } = {}
 local requests: { [Player]: number } = {}
 local motions: { [Player]: any } = {}
 local senses: { [Player]: any } = {}
 local traps: { [Part]: any } = {}
 local rareItems: { [Instance]: boolean } = {}
+local trapVisualTemplate: any = nil
+local trapVisualLoadAttempted = false
+local trapVisualFolder: Folder? = nil
+-- A animação começa no evento Activate; a armadilha só passa a existir no
+-- meio dela. Assim nem o gatilho invisível nem o modelo aparecem antes da
+-- ação de colocar a armadilha.
+local TRAP_PLACEMENT_DELAY = 0.55
 
 local function living(player: Player): (Model?, Humanoid?, BasePart?)
 	local character = player.Character
@@ -131,6 +148,145 @@ local function teleport(character: Model, humanoid: Humanoid, root: BasePart): b
 	return true
 end
 
+local function loadTrapVisualTemplate(): any
+	if trapVisualLoadAttempted then return trapVisualTemplate end
+	trapVisualLoadAttempted = true
+
+	local function findNamed(container: Instance): any
+		for _, name in { "Bear Trap", "BearTrap", "Bear_Trap" } do
+			local ok, found = pcall(function() return container:FindFirstChild(name, true) end)
+			if ok and found and (found:IsA("Model") or found:IsA("BasePart")) then
+				return found
+			end
+		end
+		return nil
+	end
+
+	-- Primeiro aproveita o modelo que já esteja no Explorer. Isso evita baixar
+	-- o mesmo asset quando o criador já o colocou em ServerStorage/ReplicatedStorage.
+	local okServerStorage, serverStorage = pcall(function()
+		return game:GetService("ServerStorage")
+	end)
+	if okServerStorage and serverStorage then
+		trapVisualTemplate = findNamed(serverStorage :: Instance)
+	end
+	if not trapVisualTemplate then
+		trapVisualTemplate = findNamed(ReplicatedStorage)
+	end
+	if not trapVisualTemplate then
+		trapVisualTemplate = findNamed(Workspace)
+	end
+
+	-- Em um lugar publicado, carregue o asset uma única vez pelo AssetLoader.
+	-- O pcall mantém o poder funcional (com o gatilho invisível) se o asset for
+	-- privado, moderado ou se o ambiente de teste não tiver InsertService.
+	if not trapVisualTemplate then
+		local okLoader, loader = pcall(function()
+			return require(ReplicatedStorage.Modules.AssetLoader)
+		end)
+		local asset = PowerAssets.ArmadilhaImprovisada
+		local assetId = if asset and type(asset.ModelAssetId) == "number" then asset.ModelAssetId else 9615431080
+		if okLoader and type(loader) == "table" and type(loader.Load) == "function" then
+			local okLoad, loaded = pcall(loader.Load, assetId)
+			if okLoad then trapVisualTemplate = loaded end
+		end
+	end
+
+	if not trapVisualTemplate then
+		if warn then
+			warn("[SurvivorPowerSystem] Bear Trap 9615431080 não carregou; mantendo o gatilho invisível.")
+		end
+	end
+	return trapVisualTemplate
+end
+
+local function trapVisualParent(): Folder
+	if trapVisualFolder and trapVisualFolder.Parent then return trapVisualFolder end
+	local existing = Workspace:FindFirstChild("SurvivorPowerVisuals")
+	if existing and existing:IsA("Folder") then
+		trapVisualFolder = existing
+	else
+		trapVisualFolder = Instance.new("Folder")
+		trapVisualFolder.Name = "SurvivorPowerVisuals"
+		trapVisualFolder.Parent = Workspace
+	end
+	return trapVisualFolder
+end
+
+local function spawnTrapVisual(trap: Part): any
+	local template = loadTrapVisualTemplate()
+	if not template then return nil end
+	local ok, visual = pcall(function() return template:Clone() end)
+	if not ok or not visual then return nil end
+
+	local model: Model
+	if visual:IsA("Model") then
+		model = visual
+	else
+		model = Instance.new("Model")
+		visual.Parent = model
+		model.PrimaryPart = visual :: BasePart
+	end
+	model.Name = "BearTrapVisual"
+	for _, descendant in model:GetDescendants() do
+		if descendant:IsA("LuaSourceContainer") or descendant:IsA("ProximityPrompt")
+			or descendant:IsA("ClickDetector") then
+			descendant:Destroy()
+		elseif descendant:IsA("BasePart") then
+			descendant.Anchored = true
+			descendant.CanCollide = false
+			descendant.CanTouch = false
+			descendant.CanQuery = false
+		end
+	end
+	if not model.PrimaryPart then
+		model.PrimaryPart = model:FindFirstChildWhichIsA("BasePart", true)
+	end
+	if not model.PrimaryPart then
+		model:Destroy()
+		return nil
+	end
+
+	model.Parent = trapVisualParent()
+	local yaw = math.atan2(trap.CFrame.LookVector.X, trap.CFrame.LookVector.Z)
+	model:PivotTo(CFrame.new(trap.Position) * CFrame.Angles(0, yaw, 0))
+	local boundsCFrame, boundsSize = model:GetBoundingBox()
+	local desiredGroundY = trap.Position.Y - trap.Size.Y * 0.5
+	local lowestY = boundsCFrame.Position.Y - boundsSize.Y * 0.5
+	model:PivotTo(model:GetPivot() + Vector3.new(0, desiredGroundY - lowestY, 0))
+	return model
+end
+
+local function placeTrap(player: Player, character: Model, ground: RaycastResult, direction: Vector3)
+	local liveCharacter, liveHumanoid, liveRoot = living(player)
+	if liveCharacter ~= character or not liveHumanoid or not liveRoot or not Round.IsRoundActive() then
+		return
+	end
+
+	local position = ground.Position + Vector3.new(0, 0.5, 0)
+	local trap = Instance.new("Part")
+	trap.Name = "ArmadilhaImprovisada"
+	trap.Size = Vector3.new(5, 1, 5)
+	trap.CFrame = CFrame.lookAt(position, position + direction)
+	trap.Anchored, trap.CanCollide, trap.CanQuery, trap.CanTouch = true, false, false, true
+	trap.Transparency = 1
+	trap.Parent = Workspace
+	traps[trap] = { owner = player, character = character, endsAt = Workspace:GetServerTimeNow() + 60 }
+	-- O gatilho e o modelo visual entram juntos, no mesmo instante da
+	-- colocação. O visual nunca aparece antes do gatilho autoritativo.
+	local state = traps[trap]
+	if state then
+		state.visual = spawnTrapVisual(trap)
+	end
+end
+
+local function scheduleTrapPlacement(player: Player, character: Model, ground: RaycastResult, direction: Vector3)
+	local callback = function()
+		placeTrap(player, character, ground, direction)
+	end
+	if task.delay then task.delay(TRAP_PLACEMENT_DELAY, callback) else task.defer(callback) end
+end
+
 local function rarePosition(item: Instance): Vector3?
 	if not item:IsDescendantOf(Workspace) then return nil end
 	-- Never reveal an item inside a character/inventory, even when equipped.
@@ -173,7 +329,7 @@ end
 
 local durations = { RajadaFinal = 5, MantoDeSombras = 8, TiroCerteiro = 8,
 	InstintoDeCacadora = 4, IntuicaoSortuda = 6, EscudoProtetor = 4,
-	PosturaInabalavel = 5, GolpeDeSorte = 10 }
+	PosturaInabalavel = 5, GolpeDeSorte = 10, ArmadilhaImprovisada = 1.2 }
 
 local function activate(player: Player, character: Model, humanoid: Humanoid, root: BasePart, id: string): (boolean, string?)
 	if id == "RajadaFinal" then
@@ -184,20 +340,21 @@ local function activate(player: Player, character: Model, humanoid: Humanoid, ro
 	elseif id == "PassoFantasma" then
 		if not teleport(character, humanoid, root) then return false, "Não há um destino seguro à frente." end
 	elseif id == "ConsertoRelampago" then
-		local target = RadioSite.ApplyPowerRepair(player) or Raft.ApplyPowerRepair(player)
-		if not target then return false, "Interaja com o rádio após coletar as 3 peças, ou entre na área da jangada." end
+		-- O reparo de precisão em andamento vem PRIMEIRO: dá um acerto de graça
+		-- na sequência (nunca o último). É fixo pra todos, sem passar pelo
+		-- Reparo do personagem -- assim o poder do Diego não multiplica de novo
+		-- a vantagem que o atributo dele já dá no minigame.
+		local target = RepairMinigame.ApplyPowerBoost(player)
+			or RadioSite.ApplyPowerRepair(player)
+		if not target then return false, "Use durante um reparo ou na transmissão do rádio." end
 		Status.Emit(id, nil, target.Position, 1)
 	elseif id == "ArmadilhaImprovisada" then
 		local ground = Workspace:Raycast(root.Position, Vector3.new(0, -7, 0), rayParams(character))
 		if not ground or ground.Normal.Y < 0.65 or ground.Material == Enum.Material.Water then return false, "Precisa de chão firme." end
-		local trap = Instance.new("Part")
-		trap.Name = "ArmadilhaImprovisada"
-		trap.Size = Vector3.new(5, 1, 5)
-		trap.Position = ground.Position + Vector3.new(0, 0.5, 0)
-		trap.Anchored, trap.CanCollide, trap.CanQuery, trap.CanTouch = true, false, false, true
-		trap.Transparency = 1
-		trap.Parent = Workspace
-		traps[trap] = { owner = player, character = character, endsAt = Workspace:GetServerTimeNow() + 60 }
+		local direction = forward(root)
+		-- A animação é disparada pelo Status.Emit logo depois de activate;
+		-- criação do gatilho/modelo fica sincronizada no meio dela.
+		scheduleTrapPlacement(player, character, ground, direction)
 	elseif id == "TiroCerteiro" then
 		Status.Set(character, "PowerPreciseShot", true, 8)
 	elseif id == "MantoDeSombras" then
@@ -277,7 +434,11 @@ local function clearPlayer(player: Player, character: Model?)
 	senses[player] = nil
 	if character then Status.Reset(character) end
 	for trap, state in traps do
-		if state.owner == player then traps[trap] = nil; trap:Destroy() end
+		if state.owner == player then
+			traps[trap] = nil
+			if state.visual then state.visual:Destroy() end
+			trap:Destroy()
+		end
 	end
 end
 
@@ -367,7 +528,10 @@ function System.Init()
 		for trap, state in traps do
 			local character = living(state.owner)
 			if not trap.Parent or now >= state.endsAt or character ~= state.character or not Round.IsRoundActive() then
-				traps[trap] = nil; trap:Destroy(); continue
+				traps[trap] = nil
+				if state.visual then state.visual:Destroy() end
+				trap:Destroy()
+				continue
 			end
 			-- Server overlap of the trigger volume; cannot be forged via Touched.
 			for _, target in Players:GetPlayers() do
@@ -378,7 +542,10 @@ function System.Init()
 						and Workspace:Raycast(trap.Position + Vector3.new(0, 1, 0), root.Position - trap.Position - Vector3.new(0, 1, 0), rayParams(model, true)) == nil then
 						Status.Stun(model, 3)
 						Status.Emit("ArmadilhaImprovisada", model, trap.Position, 0.8, "Impact")
-						traps[trap] = nil; trap:Destroy(); break
+						traps[trap] = nil
+						if state.visual then state.visual:Destroy() end
+						trap:Destroy()
+						break
 					end
 				end
 			end

@@ -15,7 +15,7 @@
 	MonsterLightWeakness.Init() inteiro).
 
 	Usado por todo `forEachTagged`/checagem de Tool do projeto que varre
-	`game` ou `Workspace` inteiro: MonsterLightWeakness, RaftObjective,
+	`game` ou `Workspace` inteiro: MonsterLightWeakness,
 	RadioObjective, SabotageSystem, WeaponSystem, UtilityItemSystem,
 	ConfrontSystem.
 ]]

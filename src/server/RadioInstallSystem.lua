@@ -18,12 +18,29 @@ local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local RadioObjective = require(script.Parent.RadioObjective)
 local RadioTowerGenerator = require(script.Parent.Tools.RadioTowerGenerator)
+local RepairMinigameSystem = require(script.Parent.RepairMinigameSystem)
 
 local RadioInstallSystem = {}
+
+--[[
+	PieceInstalled:Fire(player, pieceType)
+	Uma peça foi instalada com sucesso no rack da torre.
+
+	AllInstalled:Fire(player)
+	As três peças ficaram instaladas -- `player` é quem instalou a última.
+	Dispara UMA vez por partida (a mesma trava completionSent que já existe
+	pra não repetir Remotes.ObjectiveProgress).
+
+	server/MatchRewardService escuta os dois pra RecordObjectiveStep (por
+	peça) e RecordObjectiveCompleted (rádio inteiro).
+]]
+RadioInstallSystem.PieceInstalled = Instance.new("BindableEvent")
+RadioInstallSystem.AllInstalled = Instance.new("BindableEvent")
 
 local PROMPT_NAME = "InstalarPeca"
 local UPDATE_INTERVAL = 0.15
 local DEFAULT_RANGE = 10
+local InteractionGuard = require(script.Parent.InteractionGuard)
 
 local PIECE_ORDER = { "Antena", "Bateria", "Transmissor" }
 local PIECE_COLORS: { [string]: Color3 } = {
@@ -106,7 +123,7 @@ local function inPromptRange(player: Player): boolean
 	local range = if currentPrompt.MaxActivationDistance > 0
 		then currentPrompt.MaxActivationDistance
 		else DEFAULT_RANGE
-	return (root.Position - host.Position).Magnitude <= range + 2
+	return InteractionGuard.CanReach(player, host, range + 2)
 end
 
 local function isEligible(player: Player): boolean
@@ -241,7 +258,7 @@ local function ensureInstallPrompt(foundTower: Instance): ProximityPrompt?
 	promptInstance.ActionText = "Instalar peca"
 	promptInstance.ObjectText = "Torre de Radio"
 	promptInstance.Enabled = false
-	promptInstance.RequiresLineOfSight = false
+	promptInstance.RequiresLineOfSight = true
 	promptInstance.MaxActivationDistance = DEFAULT_RANGE
 	promptInstance.HoldDuration = 0
 	promptInstance.KeyboardKeyCode = Enum.KeyCode.E
@@ -268,7 +285,12 @@ local function installFromPlayer(player: Player)
 	Remotes.LobbyMessage:FireClient(player, pieceType .. " instalada na Torre de Radio.")
 	RadioObjective.RefreshPieceProgress()
 	updateVisuals()
+	RadioInstallSystem.PieceInstalled:Fire(player, pieceType)
+	local wasCompleted = completionSent
 	emitCompletionIfNeeded()
+	if completionSent and not wasCompleted then
+		RadioInstallSystem.AllInstalled:Fire(player)
+	end
 	installing = false
 	refreshPrompt()
 	print(string.format("[RadioInstallSystem] %s instalou %s.", player.Name, pieceType))
@@ -301,14 +323,38 @@ function RadioInstallSystem.Init()
 	foundPrompt.KeyboardKeyCode = Enum.KeyCode.E
 	foundPrompt.GamepadKeyCode = Enum.KeyCode.ButtonX
 	foundPrompt.ClickablePrompt = true
-	foundPrompt.RequiresLineOfSight = false
+	foundPrompt.RequiresLineOfSight = true
 	foundPrompt.MaxActivationDistance = DEFAULT_RANGE
 	foundPrompt.HoldDuration = 0
 	createStatusLights(promptHost :: BasePart)
 	for _, pieceType in PIECE_ORDER do
 		foundTower:GetAttributeChangedSignal(installedAttribute(pieceType)):Connect(refreshPrompt)
 	end
-	foundPrompt.Triggered:Connect(installFromPlayer)
+
+	-- Instalar peça agora é o reparo de precisão (RepairMinigameSystem). O
+	-- onComplete é o MESMO installFromPlayer de antes, que revalida papel,
+	-- alcance e posse da peça na hora de consumir a Tool -- o minigame só
+	-- decide QUANDO ele roda. Uma barra compartilhada ("RadioInstalar"): as
+	-- peças entram uma por vez e a barra zera ao concluir cada uma.
+	local installSpec = {
+		taskId = "RadioInstalar",
+		configId = "RadioInstalar",
+		part = promptHost :: BasePart,
+		range = DEFAULT_RANGE + 2,
+		canStart = function(player: Player): (boolean, string?)
+			if installing or allInstalled() then
+				return false, "Todas as peças já estão instaladas."
+			end
+			if not isEligible(player) then
+				return false, "Você não está carregando nenhuma peça para instalar."
+			end
+			return true, nil
+		end,
+		onComplete = installFromPlayer,
+	}
+	foundPrompt.Triggered:Connect(function(player: Player)
+		RepairMinigameSystem.Start(player, installSpec)
+	end)
 
 	local elapsed = 0
 	RunService.Heartbeat:Connect(function(deltaTime)

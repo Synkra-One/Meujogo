@@ -14,8 +14,12 @@ function FearRules.ProximityRate(distance: number, config: Config): number
 	local t = math.clamp((config.MaxFearDistance - distance)
 		/ (config.MaxFearDistance - config.MinFearDistance), 0, 1)
 	local x = t ^ config.ProximityCurveExponent
-	-- Smoothstep: valor e inclinação contínuos inclusive nos limites 20/300.
-	return config.MaxProximityFearPerSecond * x * x * (3 - 2 * x)
+	-- Smoothstep: valor e inclinação contínuos inclusive nos limites
+	-- MinFearDistance/MaxFearDistance. O clamp final existe porque
+	-- x²(3-2x) pode fechar um ULP acima de 1 com x ≈ 1 em ponto flutuante --
+	-- o ganho base nunca pode passar do teto documentado na config.
+	return math.clamp(config.MaxProximityFearPerSecond * x * x * (3 - 2 * x),
+		0, config.MaxProximityFearPerSecond)
 end
 
 -- Retorna ganho/s, recuperação ativa e recuperação/s para o debug.

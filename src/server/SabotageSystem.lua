@@ -4,7 +4,7 @@
 	Processa pedidos de sabotagem do Espião (RemoteEvent SabotageAction,
 	ver contrato em ReplicatedStorage/Modules/Remotes.lua).
 
-	Fluxo atual (placeholder, até conectar aos objetivos de Rádio/Jangada):
+	Fluxo atual (placeholder, até conectar aos objetivos de Rádio):
 	  cliente dispara SabotageAction:FireServer(target) -> se o jogador for
 	  Espiao, o alvo for Sabotavel, estiver por perto e o cooldown já tiver
 	  passado, o servidor marca target:SetAttribute("Sabotado", true) e
@@ -25,6 +25,13 @@
 	precisar de item nenhum. Se você queria um "Fio" carregável de verdade,
 	me diga onde ele deveria spawnar.
 
+	O "segure E por GameConfig.Spy.RepairHoldDuration" virou o minigame de
+	precisão de RepairMinigameSystem. A REGRA continua aqui: quem pode
+	reparar e o que reparar faz (onRepairTriggered) não mudaram -- o minigame
+	só decide QUANDO essa função é chamada. Com
+	RepairMinigameConfig.Tasks.SabotagemFio.Enabled = false tudo volta a
+	resolver na hora, sem minigame.
+
 	Uso (chamar uma vez no boot do servidor):
 		local SabotageSystem = require(script.SabotageSystem)
 		SabotageSystem.Init()
@@ -37,6 +44,7 @@ local Workspace = game:GetService("Workspace")
 local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local SafeAttribute = require(ReplicatedStorage.Modules.SafeAttribute)
+local RepairMinigameSystem = require(script.Parent.RepairMinigameSystem)
 
 local SabotageSystem = {}
 
@@ -94,7 +102,7 @@ local function isValidTarget(player: Player, target: unknown): boolean
 end
 
 -- PLACEHOLDER: só marca o Attribute e loga no console. Substitua/expanda
--- aqui quando os objetivos de Rádio/Jangada existirem (ex: desligar luzes,
+-- aqui quando os objetivos de Rádio existirem (ex: desligar luzes,
 -- travar porta, atrasar reparo).
 local function applySabotage(player: Player, target: Instance)
 	target:SetAttribute("Sabotado", true)
@@ -153,27 +161,63 @@ local function onRepairTriggered(player: Player, target: Instance)
 	print(string.format("[Sabotage] %s reparou %s", player.Name, target:GetFullName()))
 end
 
+-- Revalidada pelo minigame a cada tique: outro sobrevivente terminar o reparo
+-- (ou o Espião desfazer a sabotagem) derruba a sessão de quem ficou pra trás.
+local function canRepair(player: Player, target: Instance): (boolean, string?)
+	if player:GetAttribute("Role") ~= GameConfig.Roles.Survivor then
+		return false, "Só os Sobreviventes consertam o fio."
+	end
+	if target:GetAttribute("Sabotado") ~= true then
+		return false, "O fio já foi consertado."
+	end
+	return true, nil
+end
+
+-- Id estável por ponto sabotado. Um contador, não Instance:GetDebugId() --
+-- aquele é restrito a plugin e erraria num Script de servidor -- nem
+-- GetFullName(), que dois irmãos de mesmo nome repetiriam.
+local nextRepairId = 0
+
 local function setupRepairPrompt(target: Instance)
 	local anchor = getPromptAnchor(target)
 	if not anchor or anchor:FindFirstChild("Reparar") then
 		return
 	end
 
+	nextRepairId += 1
+	local repairTaskId = string.format("SabotagemFio:%d", nextRepairId)
+
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.Name = "Reparar"
 	prompt.ActionText = "Reparar"
 	prompt.ObjectText = "Fio Cortado"
+	-- HoldDuration fica com o minigame (Bind zera). Fora dele o valor antigo
+	-- de GameConfig.Spy.RepairHoldDuration continua sendo o que vale.
 	prompt.HoldDuration = GameConfig.Spy.RepairHoldDuration
 	prompt.Enabled = target:GetAttribute("Sabotado") == true
 	prompt.Parent = anchor
 
 	target:GetAttributeChangedSignal("Sabotado"):Connect(function()
 		prompt.Enabled = target:GetAttribute("Sabotado") == true
+		-- Ponto reparado/sabotado de novo: o progresso parcial não fica
+		-- guardado de uma sabotagem pra outra.
+		RepairMinigameSystem.ResetTask(repairTaskId)
 	end)
 
-	prompt.Triggered:Connect(function(player)
-		onRepairTriggered(player, target)
-	end)
+	RepairMinigameSystem.Bind(prompt, {
+		-- Um id por ponto sabotado: dois fios cortados no mapa são reparos
+		-- independentes, e reparar junto no MESMO fio soma progresso.
+		taskId = repairTaskId,
+		configId = "SabotagemFio",
+		part = anchor,
+		range = MAX_SABOTAGE_DISTANCE,
+		canStart = function(player)
+			return canRepair(player, target)
+		end,
+		onComplete = function(player)
+			onRepairTriggered(player, target)
+		end,
+	})
 end
 
 local function forEachTagged(root: Instance, attributeName: string, callback: (Instance) -> ())

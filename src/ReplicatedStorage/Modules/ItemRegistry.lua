@@ -2,16 +2,11 @@
 --[[
 	ItemRegistry
 	Registro central de todos os itens coletáveis/craftáveis de "Náufragos".
-	ItemSpawner.lua usa isto pra saber ONDE e QUANTO spawnar; CraftingSystem
-	usa as receitas; outros sistemas leem Function só como referência (não
+	ItemSpawner.lua usa isto pra saber ONDE e QUANTO spawnar; outros sistemas
+	leem Function só como referência (não
 	é exibido em UI ainda).
 
 	CATEGORIAS
-	  "MaterialJangada" -- Madeira/Corda/Lona: NÃO são Tools. Vivem no
-	    inventário pessoal de RaftObjective.lua (contagem por tipo, não Tool
-	    no Backpack) porque precisam ser entregues em LocalJangada. Corda
-	    também é gasta por ConfrontSystem (amarrar) -- mesmo estoque, dois
-	    usos possíveis pro jogador escolher.
 	  "PecaRadio" -- Antena/Bateria/Transmissor: peças únicas criadas por
 	    RadioPieces.lua. Viram Tools no inventário e caem quando o portador morre.
 	  "Tool" -- FacaImprovisada/LancaDeBambu/PedraAfiada/Tocha/LancaAncestral:
@@ -52,28 +47,6 @@ ItemRegistry.Zone = {
 local Zone = ItemRegistry.Zone
 
 ItemRegistry.Items = {
-	Madeira = {
-		DisplayName = "Madeira",
-		Category = "MaterialJangada",
-		Rarity = "Comum",
-		Zones = { Zone.Floresta },
-		Function = "Estrutura da jangada. Também é o ingrediente base das receitas de craft.",
-	},
-	Corda = {
-		DisplayName = "Corda",
-		Category = "MaterialJangada",
-		Rarity = "Media",
-		Zones = { Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta, Zone.Construcoes, Zone.Construcoes },
-		Function = "Amarração da jangada OU amarrar o Espião (ConfrontSystem) -- mesmo estoque pessoal, um ou outro.",
-	},
-	Lona = {
-		DisplayName = "Lona (Pano de Vela)",
-		Category = "MaterialJangada",
-		Rarity = "Rara",
-		Zones = { Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta, Zone.Construcoes },
-		Function = "Vela da jangada. Também é o 'pano' da receita da Tocha -- concorre pelo mesmo item raro.",
-	},
-
 	Antena = {
 		DisplayName = "Antena",
 		Category = "PecaRadio",
@@ -107,21 +80,29 @@ ItemRegistry.Items = {
 		Function = "Dano fraco, afasta o Monstro brevemente. Não mata ninguém.",
 	},
 	LancaDeBambu = {
-		DisplayName = "Lança de Bambu",
+		DisplayName = "Pé de cabra",
 		Category = "Tool",
 		AttributeName = "LancaDeBambu",
 		Rarity = "Media",
 		Zones = { Zone.Floresta },
-		Craft = { Ingredients = { Madeira = 1, Corda = 1 } }, -- "bambu" não existe como item -> Madeira
-		Function = "Dano leve, mais alcance que a faca.",
+		AssetId = 81510444,
+		Function = "Golpe curto: 15 de dano e breve atordoamento no Monstro.",
 	},
 	PedraAfiada = {
-		DisplayName = "Pedra Afiada",
+		DisplayName = "Chave inglesa",
 		Category = "Tool",
 		AttributeName = "PedraAfiada",
 		Rarity = "Comum",
 		Zones = { Zone.Rochas },
-		Function = "Arma de arremesso, dano mínimo. Cria barulho num ponto -- distrai o Monstro pra lá.",
+		AssetId = 10490012632,
+		Function = "Golpe curto: 8 de dano e pequeno recuo no Monstro.",
+	},
+	Sinalizador = {
+		DisplayName = "Sinalizador",
+		Category = "Tool",
+		AttributeName = "Sinalizador",
+		Zones = {}, -- sem distribuição automática nesta etapa
+		Function = "Sinal de alcance médio; revelar/afastar o Monstro será implementado depois.",
 	},
 	Tocha = {
 		DisplayName = "Tocha",
@@ -129,7 +110,6 @@ ItemRegistry.Items = {
 		AttributeName = "Tocha", -- mesmo Attribute que MonsterLightWeakness.lua já usa
 		Rarity = "Media",
 		Zones = { Zone.Floresta, Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta, Zone.Construcoes },
-		Craft = { Ingredients = { Madeira = 1, Lona = 1 } },
 		Function = "Luz + repele o Monstro (fraqueza dele). Gasta combustível com o tempo equipada.",
 	},
 	Lanterna = {
@@ -167,13 +147,24 @@ ItemRegistry.Items = {
 		AssetId = 8679995948, -- modelo REAL do Toolbox (ver ToolFactory.lua)
 		Function = "Combustível portátil pro gerador da Estação de Rádio (server/RadioSiteSystem.lua). Levar até o bocal e segurar 'Abastecer': soma GameConfig.RadioSite.CombustivelPorGalao segundos e se destrói -- concorre com os galões fixos já presentes no local, mas vale carregar porque não depende de estar perto da estação pra achar.",
 	},
+	TacoBeisebol = {
+		DisplayName = "Taco de Beisebol",
+		Category = "Tool",
+		AttributeName = "TacoBeisebol",
+		-- Rara = RarityCount.Rara cópias no mapa (5), só dentro de construções e
+		-- na vila -- "alguns lugares", não espalhado pela ilha toda.
+		Rarity = "Rara",
+		Zones = { Zone.Construcoes, Zone.Construcoes, Zone.Construcoes, Zone.VilaNativa },
+		Function = "Corpo a corpo: clique = golpe leve (12 de dano); segurar o clique = golpe pesado (26 de dano, empurra e atordoa o Monstro, mas demora mais pra golpear de novo). Segura o taco com a animação Idle por cima da locomoção.",
+	},
 	LancaAncestral = {
-		DisplayName = "Lança Ancestral",
+		DisplayName = "Crowbar Ancestral",
 		Category = "Tool",
 		AttributeName = "ArmaRara", -- MESMO Attribute que ConfrontSystem.lua (Parte 3) já usa
 		Rarity = nil, -- não entra no sorteio geral: 1 por mapa, colocada nas Ruínas (IslandGenerator)
 		Zones = {},
 		MaxPerMap = 1,
+		AssetId = 81510444,
 		Function = "Única arma capaz de matar o Monstro (só se ele estiver enfraquecido pela luz) ou executar o Espião.",
 	},
 }

@@ -11,23 +11,33 @@
 		Poi.Clear()
 
 	O QUE VAI EM CADA SITE (nomes de IslandLayout.CONFIG.Sites):
-	  Acampamento  Lodge de frente pra fogueira central, 3 cabanas em volta,
-	               2 mesas de piquenique, lampiões acesos, varal.
-	  CabanasA/B   2-3 cabanas + fogueira + latrina + mesa; 1 lampião aceso.
+	  Acampamento  SEM construção -- só a clareira nivelada (raio aumentado
+	               em IslandLayout, pronta pra ~2 casas grandes tipo
+	               CampCabin_01). Era lodge + 3 cabanas; buildCamp() continua
+	               definida abaixo, só não é mais chamada por Generate().
+	  CabanasA/B   SEM construção -- idem, clareira nivelada maior. Era
+	               cluster de 2-3 cabanas; buildCabinCluster() continua
+	               definida, só não é chamada.
 	  Lago         Píer entrando na água, casa de barcos na margem, barco
 	               furado virado, canoa, secador de peixe.
 	  Campo        Celeiro, dois alvos de arco, fardos de feno espalhados,
 	               cerca curta caída.
 	  Torre        Torre de vigia (escada TrussPart escalável).
 	  Farol        Farol na ponta rochosa + barraco do faroleiro.
-	  VilaNativa   5 moradias + casa comunal mobiliadas, varandas, totem,
-	               fogueira, preparo de carne, sangue e canoa.
-	  Trilhas      Lampiões a cada ~60 studs; acesos só perto dos POIs.
+	  VilaNativa   SEM construção -- idem, clareira nivelada maior. Era a
+	               vila nativa completa (NativeVillage.Build); buildVillage()
+	               continua definida, só não é chamada por Generate() (mas
+	               PoiGenerator.GenerateVillage() ainda existe como ferramenta
+	               manual separada, se precisar).
+	  Trilhas      Postes de rua espaçados (~120 studs), com reforço nos
+	               acessos de vilas, torre e demais POIs.
 	  Layout       Marcadores invisíveis de cada site (Attribute Poi/Raio) --
-	               LobbyManager/RaftGenerator/PlaneCrash leem daqui depois de
-	               salvo, sem precisar recalcular o layout.
+	               LobbyManager/PlaneCrash leem daqui depois de
+	               salvo, sem precisar recalcular o layout. Existe pra TODO
+	               site, inclusive os 4 sem construção acima -- é como achar
+	               o centro/raio da clareira pra encaixar a casa na mão.
 
-	Ruínas e Caverna continuam no IslandGenerator; a Jangada no RaftGenerator.
+	Ruínas e Caverna continuam no IslandGenerator.
 ]]
 
 local Workspace = game:GetService("Workspace")
@@ -280,9 +290,27 @@ end
 
 local function buildTrailLamps(folder: Folder, rng: Random)
 	local sites = IslandLayout.Sites()
-	local spacing = 60
+	-- Um poste por ~120 studs deixa as trilhas legíveis à noite sem transformar
+	-- a ilha inteira numa avenida iluminada.
+	local spacing = 120
 	local carry = 0
 	local count = 0
+	local placed: { Vector3 } = {}
+
+	local function placeLamp(position: Vector3, toward: Vector3, entrance: boolean?): boolean
+		-- Evita um segundo poste quando o espaçamento normal já caiu na entrada
+		-- do POI. Isso mantém a quantidade baixa mesmo em trilhas curtas.
+		for _, other in placed do
+			if (position - other).Magnitude < 42 then
+				return false
+			end
+		end
+		local lamp = S.TrailLamp(folder, groundCF(position.X, position.Z, toward), true)
+		lamp:SetAttribute("EntradaPOI", entrance == true)
+		table.insert(placed, position)
+		count += 1
+		return true
+	end
 
 	for _, seg in IslandLayout.TrailSegments() do
 		local delta = seg.b - seg.a
@@ -298,19 +326,42 @@ local function buildTrailLamps(folder: Folder, rng: Random)
 			local sideSign = if rng:NextNumber() < 0.5 then -1 else 1
 			local lp = p + side * (sideSign * (IslandLayout.CONFIG.Trail.HalfWidth + 1.6))
 
-			local lit = false
-			for _, site in sites do
-				if (lp.X - site.x) ^ 2 + (lp.Z - site.z) ^ 2 < (site.r + 40) ^ 2 then
-					lit = true
-					break
-				end
-			end
-
-			S.TrailLamp(folder, groundCF(lp.X, lp.Z, p), lit)
-			count += 1
+			-- Todos os postes acendem, mas a proximidade dos POIs é preservada
+			-- pela distância curta entre eles ali; a maior parte da mata continua
+			-- escura e perigosa.
+			placeLamp(lp, p)
 			t += spacing
 		end
 		carry = (len - (t - spacing)) % spacing
+	end
+
+	-- Uma luz garantida na entrada dos locais mais usados. Ela cai ao lado da
+	-- trilha mais próxima, não no centro da clareira, então continua guiando o
+	-- jogador até a vila ou a torre sem encher o mapa de postes.
+	for _, name in { "Acampamento", "CabanasA", "CabanasB", "VilaNativa", "Torre" } do
+		local site = sites[name]
+		if site then
+			local center = Vector3.new(site.x, 0, site.z)
+			local closest: Vector3? = nil
+			local direction: Vector3? = nil
+			local best = math.huge
+			for _, seg in IslandLayout.TrailSegments() do
+				local delta = seg.b - seg.a
+				local lengthSq = delta:Dot(delta)
+				if lengthSq > 0 then
+					local t = math.clamp((center - seg.a):Dot(delta) / lengthSq, 0, 1)
+					local point = seg.a + delta * t
+					local distance = (center - point).Magnitude
+					if distance < best then
+						closest, direction, best = point, delta.Unit, distance
+					end
+				end
+			end
+			if closest and direction then
+				local side = Vector3.new(-direction.Z, 0, direction.X)
+				placeLamp(closest + side * (IslandLayout.CONFIG.Trail.HalfWidth + 1.7), closest + direction * 8, true)
+			end
+		end
 	end
 
 	return count
@@ -409,20 +460,14 @@ function PoiGenerator.Generate(): number
 		return f
 	end
 
-	if sites.Acampamento then
-		buildCamp(poiFolder("Acampamento"), sites.Acampamento, rng)
-		built += 1
-		task.wait()
-	end
-	if sites.CabanasA then
-		buildCabinCluster(poiFolder("CabanasA"), sites.CabanasA, rng, 3)
-		built += 1
-	end
-	if sites.CabanasB then
-		buildCabinCluster(poiFolder("CabanasB"), sites.CabanasB, rng, 2)
-		built += 1
-		task.wait()
-	end
+	-- Acampamento, CabanasA, CabanasB e VilaNativa: de propósito SEM
+	-- construção -- só a clareira nivelada (Layout.<nome> acima já marca
+	-- centro/raio). As casinhas pequenas saíram daqui; essas clareiras
+	-- agora são pra casas grandes (CampCabin_01 em diante, ~60-70x35-38
+	-- studs), montadas à mão por enquanto. buildCamp/buildCabinCluster/
+	-- buildVillage continuam definidas acima pra quem quiser voltar a gerar
+	-- casinha pequena ali.
+
 	if sites.Lago then
 		buildLake(poiFolder("Lago"), sites.Lago, rng)
 		built += 1
@@ -439,11 +484,6 @@ function PoiGenerator.Generate(): number
 	if sites.Farol then
 		buildLighthouse(poiFolder("Farol"), sites.Farol, rng)
 		built += 1
-	end
-	if sites.VilaNativa then
-		buildVillage(poiFolder("VilaNativa"), sites.VilaNativa)
-		built += 1
-		task.wait()
 	end
 
 	local lamps = buildTrailLamps(trilhas, rng)

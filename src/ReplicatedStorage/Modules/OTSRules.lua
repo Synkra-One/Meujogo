@@ -1,7 +1,25 @@
 --!strict
 -- Regras compartilhadas da Glock17 do Digital's OTS.
 -- Munição, raycast, cadência e dano continuam autoritativos no servidor.
+local GameConfig = require(game:GetService("ReplicatedStorage").Modules.GameConfig)
+local Pistol = GameConfig.Weapons.Definitions.Glock17
 local Rules = {}
+
+function Rules.IsFoundation(tool: Tool): boolean
+	return tool:GetAttribute("LobbyTestWeapon") ~= true
+end
+
+function Rules.AttackRange(tool: Tool): number
+	return if Rules.IsFoundation(tool) then Pistol.Range else Rules.Range
+end
+
+function Rules.AnimationsEnabled(tool: Tool): boolean
+	return not Rules.IsFoundation(tool) or Pistol.AnimationsEnabled == true
+end
+
+function Rules.ReloadEnabled(tool: Tool): boolean
+	return not Rules.IsFoundation(tool) or Pistol.ReloadEnabled == true
+end
 Rules.Range = 600
 Rules.ReloadDuration = 2.2
 
@@ -44,14 +62,17 @@ function Rules.Boolean(tool: Tool, group: string, name: string, fallback: boolea
 end
 
 function Rules.ShotInterval(tool: Tool): number
+	if Rules.IsFoundation(tool) then return Pistol.Cooldown end
 	return math.clamp(Rules.Number(tool, "Config", "Delay", 0.06), 0.05, 2)
 end
 
 function Rules.Spread(tool: Tool): number
+	if Rules.IsFoundation(tool) then return Pistol.Spread end
 	return math.clamp(Rules.Number(tool, "Config", "Spread", 3), 0, 15)
 end
 
 function Rules.Recoil(tool: Tool): number
+	if Rules.IsFoundation(tool) then return Pistol.Recoil end
 	return math.clamp(Rules.Number(tool, "Config", "Recoil", 0.4), 0, 5)
 end
 

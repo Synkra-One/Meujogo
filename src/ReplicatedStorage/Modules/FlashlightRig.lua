@@ -69,11 +69,11 @@ function Rig.Prepare(tool: Tool): Attachment?
 	local endpoint = attachment(handle, "FlashlightEnd", CFrame.identity)
 	local color = Color3.fromRGB(Config.LightColor[1], Config.LightColor[2], Config.LightColor[3])
 	local hotspot = light(emitter, "SpotLight", "LanternaLuz") :: SpotLight
-	hotspot.Face, hotspot.Range, hotspot.Angle = Enum.NormalId.Front, Config.FlashlightRange, Config.BeamAngle
+	hotspot.Face, hotspot.Range, hotspot.Angle = Enum.NormalId.Front, Config.LightRange, Config.LightAngle
 	hotspot.Brightness, hotspot.Color = Config.Brightness, color
 	hotspot.Shadows, hotspot.Enabled = true, false
 	local spill = light(emitter, "SpotLight", "LanternaSpill") :: SpotLight
-	spill.Face, spill.Range, spill.Angle = Enum.NormalId.Front, Config.FlashlightRange * 0.72, Config.SpillAngle
+	spill.Face, spill.Range, spill.Angle = Enum.NormalId.Front, Config.LightRange * 0.82, Config.SpillAngle
 	spill.Brightness, spill.Color = Config.SpillBrightness, color
 	spill.Shadows, spill.Enabled = false, false
 	local fill = light(emitter, "PointLight", "LanternaFill") :: PointLight
@@ -87,6 +87,7 @@ function Rig.Prepare(tool: Tool): Attachment?
 	local beam = if oldBeam then oldBeam :: Beam else Instance.new("Beam")
 	beam.Name, beam.Attachment0, beam.Attachment1 = "FlashlightBeam", emitter, endpoint
 	beam.FaceCamera, beam.LightEmission, beam.LightInfluence = true, 1, 0
+	beam.CurveSize0, beam.CurveSize1 = 0, 0
 	beam.Width0, beam.Width1 = 0.16, 3
 	beam.Color = ColorSequence.new(hotspot.Color)
 	beam.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.94),

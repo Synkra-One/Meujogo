@@ -128,6 +128,7 @@ local function onPieceTouched(piece: BasePart, hit: BasePart)
 	end
 
 	local tipoPeca = piece:GetAttribute("TipoPeca")
+	if not require(script.Parent.InteractionGuard).CanReach(player, piece, 10) then return end
 	if type(tipoPeca) ~= "string" or collectedPieces[tipoPeca] then
 		return
 	end

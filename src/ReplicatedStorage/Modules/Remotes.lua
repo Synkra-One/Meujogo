@@ -53,6 +53,14 @@ end
 
 local Remotes = {}
 
+-- C -> S: Tool equipada, sem dano/alvo/alcance enviados pelo cliente.
+-- Somente WeaponSystem atende; pistola mantém FirearmShoot.
+Remotes.WeaponAttack = getRemote("WeaponAttack")
+
+-- S -> C somente: atacante, chave da arma, posicao de impacto, atordoou.
+-- WeaponImpactController so apresenta confirmacoes feitas pelo servidor.
+Remotes.WeaponImpact = getRemote("WeaponImpact")
+
 -- S -> C SOMENTE para monstros vivos/ativos que detectaram o som.
 -- (noisePosition: Vector3, intensity: number). Sem identidade/alvo/posição futura.
 -- Não possui OnServerEvent: só sistemas do servidor podem produzir ruído.
@@ -61,6 +69,9 @@ Remotes.NoiseDetected = getRemote("NoiseDetected")
 -- C -> S: "Aim", tool, unitDirection | "Toggle", tool, enabled, unitDirection, sequence.
 -- No hit, target, origin, battery or damage is accepted from a client.
 -- S -> C: "State", tool, enabled, battery, sequence (toggle acknowledgement).
+-- C -> S: "Burst", tool, nil, unitDirection, increasingSequence.
+-- S -> C (shooter only): "BurstResult", tool, accepted, Hit/Miss/rejection, sequence.
+-- Server attributes carry FlashBurstAt/ReadyAt and victim-only blind/stun state.
 Remotes.Flashlight = getRemote("Flashlight")
 
 -- C -> S: slot (1 | 2), no target/character/cooldown from client.
@@ -69,6 +80,17 @@ Remotes.Flashlight = getRemote("Flashlight")
 Remotes.UseSurvivorPower = getRemote("UseSurvivorPower")
 -- S -> C only: powerId, character?, position, duration, phase; nearby clients.
 Remotes.SurvivorPowerFX = getRemote("SurvivorPowerFX")
+
+-- Apagão do Abismo (habilidade do Monstro).
+-- C -> S: "Use" -- só isso. Nenhum alvo, raio, duração ou cooldown vem do
+--   cliente; o servidor lê a área UMA vez, no instante da ativação.
+-- S -> C: "Cast", casterCharacter, position -- para todos (VFX de mundo);
+--         "Hit", duration, endsAt          -- só para quem foi registrado;
+--         "End"                            -- fim do efeito daquela vítima;
+--         "Result", caughtCount            -- retorno só para o Monstro;
+--         "Rejected", reason               -- só para o Monstro.
+-- Ver server/AbyssBlackout.lua e docs/ApagaoDoAbismo.md.
+Remotes.AbyssBlackout = getRemote("AbyssBlackout")
 
 -- Somente Server -> Client: ("Trip", character, duration). Apresentação do
 -- hook autoritativo do Fear; não existe listener OnServerEvent.
@@ -258,9 +280,8 @@ Remotes.CooldownUpdate = getRemote("CooldownUpdate")
 --   campo Craft -- hoje: LancaDeBambu, Tocha).
 -- Client -> Server (FireServer):
 --   itemId: string   -- chave em ItemRegistry.Items (ex: "Tocha")
--- Servidor (CraftingSystem.lua) confere os ingredientes no inventário
---   pessoal (RaftObjective.GetMaterialCount); se faltar algo, rejeita em
---   silêncio. Se tiver, consome tudo de uma vez e entrega a Tool
+-- Servidor confere os ingredientes no inventário pessoal; se faltar algo,
+--   rejeita em silêncio. Se tiver, consome tudo de uma vez e entrega a Tool
 --   (ToolFactory.lua) no Backpack. Este remote não é retransmitido -- quem
 --   quiser saber que craftou algo escuta o próprio Backpack no cliente.
 --------------------------------------------------------------------------------
@@ -294,16 +315,15 @@ Remotes.RoundEnded = getRemote("RoundEnded")
 --------------------------------------------------------------------------------
 -- ObjectiveProgress
 -- Disparado por: servidor, ao atualizar progresso de um objetivo da rodada
---   (ex: RadioObjective, RaftObjective).
+--   (ex: RadioObjective).
 -- Server -> Clients (FireAllClients):
 --   objectiveId: string     -- ex: "RadioPecas", "RadioCompleto",
---                               "TodasPecasInstaladas", "JangadaProgresso",
---                               "FugaJangada"
+--                               "TodasPecasInstaladas"
 --   current: number
 --   max: number
 --   players: { Player }?    -- opcional; presente quando o objetivo precisa
 --                               identificar quem participou (ex:
---                               "FugaJangada" -> jogadores a bordo)
+--                               (players pode identificar participantes)
 -- Recebido por: todos os clientes (barra de progresso / resultado na UI).
 --------------------------------------------------------------------------------
 Remotes.ObjectiveProgress = getRemote("ObjectiveProgress")
@@ -383,33 +403,77 @@ Remotes.DropItem = getRemote("DropItem")
 Remotes.TransmissionMinigame = getRemote("TransmissionMinigame")
 
 --------------------------------------------------------------------------------
+-- RepairMinigame
+-- Reparo de precisão dos pontos reparáveis (server/RepairMinigameSystem.lua
+--   <-> client/RepairMinigameController.client.luau). Ver docs/ReparoMinigame.md.
+--
+-- Server -> Client (FireClient), SÓ pra quem está reparando:
+--   "Start", token: number, part: BasePart, label: string,
+--            streak: number, required: number
+--   "Test", token, test: RepairMinigameConfig.Test
+--       Os parâmetros do teste (velocidade, centro, larguras, estilo) são
+--       sorteados SÓ no servidor; o cliente desenha o marcador a partir deles.
+--   "Result", token, testId: number,
+--             grade: "Perfect"|"Green"|"Yellow"|"Red"|"Miss",
+--             streak: number, required: number, stall: number, accuracy: number
+--       O reparo só conclui com `required` acertos SEGUIDOS (verde/azul);
+--       qualquer outra nota zera `streak`. `stall` = segundos até o próximo teste.
+--   "Streak", token, streak: number, required: number  -- Conserto Relâmpago
+--   "Stop", token, reason: string, completed: boolean, streak, required
+--
+-- Client -> Server (FireServer):
+--   "Hold", token           -- confirma que ainda está segurando (~4 Hz)
+--   "Release", token        -- soltou a tecla / botão: cancela
+--   "Hit", token, testId: number, elapsed: number
+--       `elapsed` é o instante do teste em que o jogador apertou, medido no
+--       relógio do SERVIDOR (Workspace:GetServerTimeNow). O servidor só o
+--       aceita se bater com a hora de chegada dentro de
+--       RepairMinigameConfig.Scoring.MaxInputLag -- fora disso usa a chegada.
+--
+-- O CLIENTE NUNCA MANDA SEQUÊNCIA, NOTA, ALVO NEM RUÍDO. Token de sessão
+--   descarta mensagem de um reparo anterior; distância, linha de visão,
+--   papel, vida e estado da partida são revalidados a cada tique no servidor.
+--------------------------------------------------------------------------------
+Remotes.RepairMinigame = getRemote("RepairMinigame")
+
+--------------------------------------------------------------------------------
+-- GeneratorErrorSound
+-- Som 3D do choque do gerador quando alguém erra o minigame de reparo dele
+--   (server/GeneratorErrorSound.lua -> client/GeneratorErrorSoundController).
+-- SOMENTE Server -> Client (FireClient), SÓ pra quem errou e pro Monstro vivo
+--   dentro do alcance de GameConfig.RadioSite.ErroGerador.RollOffMaxDistance:
+--   generator: BasePart   -- a Part do gerador (atributo MotorGerador)
+-- Cada cliente cria o Sound LOCALMENTE como filho dessa Part (não replica, então
+--   os outros sobreviventes não ouvem). Não existe OnServerEvent: o cliente não pede som.
+--------------------------------------------------------------------------------
+Remotes.GeneratorErrorSound = getRemote("GeneratorErrorSound")
+
+--------------------------------------------------------------------------------
 -- PERSONAGENS JOGÁVEIS
---   client/CharacterSelectController <-> server/CharacterStatsApplier
+--   client/SurvivorSelectionController <-> server/CharacterStatsApplier
 --------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------
 -- SelectCharacter
 -- Client -> Server (FireServer):
---   characterId: string   -- Id de Modules/CharacterData (ex: "SofiaRibeiro")
--- Servidor valida que o id existe e que NINGUÉM mais já escolheu esse
---   personagem nesta partida. Se ok, guarda a escolha e reemite o roster pra
---   todo mundo (CharacterRoster). Escolha inválida/tomada é ignorada em
---   silêncio -- o roster que o cliente já tem mostra o card desabilitado.
---   A escolha acontece depois do sorteio do papel. Monstro não usa este
---   remote: recebe Jason automaticamente. Depois de escolher, o servidor
---   fecha CharacterSelectOpen para evitar troca no meio da rodada.
+--   "Select", characterId -- escolha tentativa, validada no servidor
+--   "Confirm"             -- trava a escolha atual para aquele jogador
+--   "Sync"                -- pede o snapshot atual somente para o remetente
+-- O servidor valida fase, prazo, papel, disponibilidade e exclusividade.
+-- Monstro recebe Jason automaticamente. No fim dos 30s, o servidor confirma
+-- a escolha atual (ou um fallback livre) sem depender de mensagem do cliente.
 --------------------------------------------------------------------------------
 Remotes.SelectCharacter = getRemote("SelectCharacter")
 
 --------------------------------------------------------------------------------
 -- CharacterRoster
--- Server -> Clients (FireAllClients), sempre que alguém escolhe/troca/sai:
---   taken: { [characterId]: number }  -- id -> UserId de quem pegou
---   roundActive: boolean              -- true = partida rolando (a tela de
---                                        escolha fica escondida)
--- A UI usa isso pra desabilitar em tempo real os cards já tomados e marcar
---   qual é o SEU. Também é disparado só pra quem entra (FireClient) pra o
---   jogador novo receber o estado atual.
+-- Server -> Clients, sempre que alguém escolhe/confirma/sai:
+--   snapshot.state: "Selecting" | "Closed"
+--   snapshot.endsAt: number (Workspace:GetServerTimeNow)
+--   snapshot.roster: { [characterId]: UserId }       -- confirmados
+--   snapshot.choices: { [UserId]: characterId }      -- escolhas atuais
+--   snapshot.confirmed: { [UserId]: true }
+--   snapshot.availability: { [characterId]: estado }
 --------------------------------------------------------------------------------
 Remotes.CharacterRoster = getRemote("CharacterRoster")
 
@@ -475,5 +539,61 @@ Remotes.FirearmReload = getRemote("FirearmReload")
 -- Alimenta o kill feed da HUD "Weapon".
 --------------------------------------------------------------------------------
 Remotes.FirearmFeed = getRemote("FirearmFeed")
+
+--------------------------------------------------------------------------------
+-- XP, ESTATÍSTICAS E RESULTADO DA PARTIDA
+--   server/MatchStatsService + MatchRewardService + MatchResultsService
+--   <-> client/XPNotificationController + MatchResultsController
+--
+-- OS DOIS REMOTES ABAIXO SÃO SOMENTE SERVER -> CLIENT.
+-- Nenhum dos dois tem OnServerEvent conectado em lugar nenhum do projeto, e
+-- não deve ganhar um. XP é 100% autoritativo do servidor: o cliente não pede,
+-- não confirma e não influencia recompensa nenhuma -- ele só desenha o que
+-- chega. Um FireServer aqui não é "ignorado em silêncio", ele literalmente
+-- não tem ouvinte.
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- MatchResults
+-- Disparado por: servidor (MatchResultsService.FinalizeMatch), uma vez por
+--   jogador, quando a partida termina e os resultados são congelados.
+-- Server -> Client (FireClient), SÓ pro dono do relatório:
+--   payload: MatchStatsTypes.ResultsPayload
+--     Winner, Reason        -- mesmos valores do RoundEnded
+--     Role                  -- papel DELE na partida
+--     MatchXP               -- XP total DELE
+--     PerformanceScore      -- pontuação de desempenho DELE
+--     XPBreakdown           -- XP por categoria (Survival, Objectives, ...)
+--     Actions               -- ações DELE, já AGRUPADAS por ação
+--                              ("Acertou o Monstro" ×4 vira uma linha só)
+--     Stats                 -- { Key, Label, Value } já formatados pra tela
+--     Highlights            -- destaques da partida (públicos: nome + valor)
+--     MVPUserId, IsMVP
+-- Cada jogador recebe um payload DIFERENTE, montado a partir da sessão dele.
+-- Estatística, histórico e XP de outro jogador NÃO entram no payload -- só os
+-- destaques, que são o placar público da partida.
+--------------------------------------------------------------------------------
+Remotes.MatchResults = getRemote("MatchResults")
+
+--------------------------------------------------------------------------------
+-- MatchXPNotification
+-- Disparado por: servidor (MatchRewardService), toda vez que uma concessão de
+--   XP é APROVADA por todas as guardas (papel, cooldown, limite, teto, alvo
+--   válido, janela da partida). Recusa nunca vira notificação.
+-- Server -> Client (FireClient), SÓ pro jogador que ganhou/perdeu o XP:
+--   payload: MatchStatsTypes.NotificationPayload
+--     Id        -- identificador único; o cliente descarta repetição
+--     ActionId  -- id estável da ação (chave de MatchRewardsConfig.Actions)
+--     Label     -- descrição pronta ("Curou um aliado")
+--     XP        -- positivo (ganho) ou negativo (penalidade)
+--     Category  -- MatchStatsTypes.Category
+--     Priority  -- 1..5; ordena a fila no cliente
+-- São só esses seis campos: nenhuma tabela interna, nenhum total acumulado,
+-- nenhum dado de outro jogador. Ninguém mais vê a notificação de ninguém.
+-- A fila, o agrupamento de repetições, a animação e o som são 100% do
+-- cliente (client/XPNotificationController); o servidor só confirma O QUE
+-- aconteceu e QUANTO valeu.
+--------------------------------------------------------------------------------
+Remotes.MatchXPNotification = getRemote("MatchXPNotification")
 
 return Remotes

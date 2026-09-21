@@ -32,6 +32,9 @@ local function object(class)
 	end
 	return self
 end
+local cframeMeta = {}
+cframeMeta.__mul = function(a, b) return a end
+local function cframe() return setmetatable({}, cframeMeta) end
 local vectorMeta = {}
 local function vector(x, y, z) return setmetatable({ X=x, Y=y, Z=z }, vectorMeta) end
 vectorMeta.__sub = function(a,b) return vector(a.X-b.X,a.Y-b.Y,a.Z-b.Z) end
@@ -70,9 +73,12 @@ local environment = setmetatable({
 	print = function(message) table.insert(logs, message) end,
 	warn = function(message) error(message) end,
 	Vector3 = { new = vector },
+	CFrame = { new = cframe, Angles = cframe },
+	Color3 = { new = function(...) return {...} end, fromRGB = function(...) return {...} end },
 	RaycastParams = { new = function() return {} end },
 	Enum = { RaycastFilterType = { Exclude = "Exclude" }, Material = { Air="Air", Water="Water" },
-		HumanoidStateType = { Swimming="Swimming" } },
+		HumanoidStateType = { Swimming="Swimming" },
+		KeyCode = { E = "E", X = "X", ButtonX = "ButtonX", ButtonB = "ButtonB" } },
 	Random = { new = function() return { NextNumber = function() randomCalls+=1; return randomValue end } end },
 	Instance = { new = function(class)
 		assert(class == "BindableEvent")
@@ -138,31 +144,45 @@ near(scaling.FearGainMultiplier(high), 0.55)
 assert(math.abs(scaling.FearGainMultiplier(spy) - 1) < 0.01)
 near(scaling.FearRecoveryMultiplier(low), 0.65)
 near(scaling.FearRecoveryMultiplier(high), 1.35)
+-- A rampa vem da config; o teste nunca repete os números dela, senão um
+-- rebalanceamento quebra o teste em vez de ser verificado por ele.
+local danger, closest = cfg.MaxFearDistance, cfg.MinFearDistance
+local far = danger * 2
 local previous = math.huge
-for d = 0, 350, 0.05 do
+for d = 0, far, 0.05 do
 	local rate = rules.ProximityRate(d, cfg)
-	assert(rate <= previous + 1e-10 and rate >= 0 and rate <= 10)
+	assert(rate <= previous + 1e-10 and rate >= 0 and rate <= cfg.MaxProximityFearPerSecond)
 	previous = rate
 end
-for _, d in { 20, 30, 60, 120, 200, 300 } do
+for _, d in { closest, closest + 10, danger * 0.4, danger * 0.75, danger } do
 	assert(math.abs(rules.ProximityRate(d - 1e-5, cfg) - rules.ProximityRate(d + 1e-5, cfg)) < 1e-4)
 end
-near(rules.ProximityRate(0, cfg), 10)
-near(rules.ProximityRate(300, cfg), 0)
+near(rules.ProximityRate(0, cfg), cfg.MaxProximityFearPerSecond)
+near(rules.ProximityRate(danger, cfg), 0)
 near(rules.ProximityRate(math.huge, cfg), 0)
+-- A BARRA SOBE COM O TEMPO: colado no Monstro, nem o pior caso possível
+-- (Compostura 0 + linha de visão + perseguição) enche a barra num piscar.
+local worst = cfg.MaxProximityFearPerSecond * 1.5 * cfg.LineOfSightMultiplier * cfg.ChaseFearMultiplier
+local fastest = cfg.MaxFear / math.min(worst, cfg.MaxFearGainPerSecond)
+assert(fastest >= 10, "0 -> 100 no pior caso leva pelo menos 10 s: " .. string.format("%.1f", fastest))
+local typical = cfg.MaxFear / (cfg.MaxProximityFearPerSecond * cfg.LineOfSightMultiplier)
+assert(typical >= 15 and typical <= 40, "perseguição típica enche em 15..40 s: " .. string.format("%.1f", typical))
+-- E DESCE quando a pessoa fica longe da zona de perigo.
+local drain = cfg.MaxFear / cfg.BaseFearRecoveryPerSecond
+assert(drain > fastest and drain <= 45, "descer é mais lento que subir, mas não eterno")
 local state = { value = 50, safeFor = 0 }
-rules.Step(state, 350, 1, 1, 3.9, cfg)
+rules.Step(state, far, 1, 1, 3.9, cfg)
 near(state.value, 50)
-rules.Step(state, 350, 1, 1, 0.3, cfg)
+rules.Step(state, far, 1, 1, 0.3, cfg)
 near(state.value, 49.3, "only post-delay fraction recovers")
-rules.Step(state, 299.9, 1, 1, 0.2, cfg)
+rules.Step(state, danger - 0.1, 1, 1, 0.2, cfg)
 near(state.safeFor, 0)
 local before = state.value
-rules.Step(state, 350, 1, 1, 4, cfg)
+rules.Step(state, far, 1, 1, 4, cfg)
 near(state.value, before, "reentry restarts delay")
 local a, b = { value = 80, safeFor = 0 }, { value = 80, safeFor = 0 }
-rules.Step(a, 400, 1, 1, 9, cfg)
-for _ = 1, 45 do rules.Step(b, 400, 1, 1, 0.2, cfg) end
+rules.Step(a, far, 1, 1, 9, cfg)
+for _ = 1, 45 do rules.Step(b, far, 1, 1, 0.2, cfg) end
 near(a.value, b.value, "recovery independent of tick size")
 
 fear.Init(); fear.Init()
@@ -185,20 +205,20 @@ near(fear.AddFear(low, 0/0), 100)
 near(fear.ReduceFear(low, -100), 100)
 near(fear.ReduceFear(low, 1000), 0)
 fear.AddFear(low, 50, "Test"); fear.AddFear(high, 50 - fear.GetFear(high), "Test")
-monster.Character.children.HumanoidRootPart.Position = position(350)
+monster.Character.children.HumanoidRootPart.Position = position(far)
 for _ = 1, 20 do heartbeat:Fire(0.2) end
 near(fear.GetFear(low), 50)
 near(fear.GetFear(high), 50)
 heartbeat:Fire(0.2)
-near(fear.GetFear(low), 50 - 3.5 * 0.65 * 0.2)
-near(fear.GetFear(high), 50 - 3.5 * 1.35 * 0.2)
+near(fear.GetFear(low), 50 - cfg.BaseFearRecoveryPerSecond * 0.65 * 0.2)
+near(fear.GetFear(high), 50 - cfg.BaseFearRecoveryPerSecond * 1.35 * 0.2)
 fear.AddFear(low, 1, "FutureSource")
 before = fear.GetFear(low)
 heartbeat:Fire(0.2)
 near(fear.GetFear(low), before, "external source interrupts recovery")
-local monster2 = player("Nearest", config.Roles.Monster, 20, 50)
+local monster2 = player("Nearest", config.Roles.Monster, closest, 50)
 heartbeat:Fire(0.2)
-near(fear.GetFear(low), before + 3, "nearest monster selected")
+near(fear.GetFear(low), before + rules.ProximityRate(closest, cfg) * 1.5 * 0.2, "nearest monster selected")
 monster2:SetAttribute("Eliminado", true)
 before = fear.GetFear(low)
 heartbeat:Fire(0.2)
@@ -244,7 +264,7 @@ table.remove(players.list, 1)
 assert(low.CharacterAdded:Count() == 0 and low.CharacterRemoving:Count() == 0)
 assert(low.Character.ChildAdded:Count() == 0 and h.Died:Count() == 0)
 print("PASS: continuous curve, existing Compostura, recovery delay/reentry/partial ticks, clamping, server authority, role/round/death filters, nearest monster, respawn/exit cleanup, idempotent Init and throttled debug")
-for _, d in { 300, 200, 100, 50, 20 } do
+for _, d in { danger, danger * 0.75, danger * 0.5, danger * 0.25, closest } do
 	print(string.format("%d studs -> %.3f base Fear/s", d, rules.ProximityRate(d, cfg)))
 end
 
@@ -264,8 +284,8 @@ near(rules.EffectChance(75,75,100,0.03,0.12),0.03)
 near(rules.EffectChance(100,75,100,0.03,0.12),0.12)
 near(rules.EffectChance(87,75,100,0.03,0.12),0.0732)
 local capped = { value=0,safeFor=0 }
-local gain = rules.Step(capped,20,1.5*1.35*1.4,1,0.2,cfg)
-near(gain,20)
+local gain = rules.Step(capped,closest,1.5*cfg.LineOfSightMultiplier*cfg.ChaseFearMultiplier,1,0.2,cfg)
+near(gain,cfg.MaxFearGainPerSecond)
 
 local subject = high
 local root = subject.Character.children.HumanoidRootPart
@@ -421,6 +441,7 @@ local function regenTrial(value)
 	for _=1,15 do heartbeat:Fire(0.1) end
 	return stamina.Get(subject)-depleted
 end
+local proximityRate = cfg.MaxProximityFearPerSecond
 local normal=regenTrial(0)
 local frightened=regenTrial(100)
 near(frightened,normal*0.5,"real stamina recovers at half rate")
@@ -429,7 +450,7 @@ print("PASS Part 2: state thresholds, LOS cache/blocking/filter, directional cha
 
 -- Survivor powers integrate with the actual Fear/Stamina loops.
 round.RoundPrepared.Event:Fire()
-cfg.MaxProximityFearPerSecond=10
+cfg.MaxProximityFearPerSecond=proximityRate
 fear.AddFear(subject,60)
 subject.Character:SetAttribute("PowerFearHidden",true)
 local hiddenFear=fear.GetFear(subject)

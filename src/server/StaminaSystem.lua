@@ -55,6 +55,7 @@ StaminaSystem.MovementSampled = Instance.new("BindableEvent")
 
 local MAX = 100
 local TICK = 0.05 -- 20 Hz: portão da corrida e HUD mudam no mesmo instante perceptível
+local JUMP_COST = 30 -- pulo é uma reserva de emergência, não uma ação gratuita
 
 -- Fração do WalkSpeed atual acima da qual consideramos que ESTÁ correndo.
 -- O sprint do pacote é ~1.9x o andar, então 1.35x separa bem andar de correr
@@ -67,6 +68,7 @@ type State = {
 	intent: boolean, -- cliente segurando Shift
 	exhausted: boolean, -- zerou: só volta a correr em StaminaMinToSprint
 	idleFor: number, -- segundos sem gastar (gate do RegenDelay)
+	wasAirborne: boolean,
 }
 
 local states: { [Player]: State } = {}
@@ -78,7 +80,7 @@ local states: { [Player]: State } = {}
 local function getState(player: Player): State
 	local state = states[player]
 	if not state then
-		state = { value = MAX, intent = false, exhausted = false, idleFor = 0 }
+		state = { value = MAX, intent = false, exhausted = false, idleFor = 0, wasAirborne = false }
 		states[player] = state
 	end
 	return state
@@ -133,6 +135,18 @@ local function step(dt: number)
 			continue
 		end
 
+		local humanoidState = humanoid:GetState()
+		local airborne = humanoidState == Enum.HumanoidStateType.Jumping
+			or humanoidState == Enum.HumanoidStateType.Freefall
+		local jumpStarted = humanoidState == Enum.HumanoidStateType.Jumping
+			or (humanoidState == Enum.HumanoidStateType.Freefall and root.AssemblyLinearVelocity.Y > 4)
+		if jumpStarted and not state.wasAirborne and character:GetAttribute("PowerInfiniteStamina") ~= true then
+			state.value = math.max(0, state.value - JUMP_COST)
+			state.idleFor = 0
+			if state.value <= 0 then state.exhausted = true end
+		end
+		state.wasAirborne = airborne
+
 		-- CORRENDO DE VERDADE? intenção + velocidade real acima do limiar.
 		-- O limiar sai do WalkSpeed do próprio personagem, então vale pra
 		-- todo mundo (Rafael anda mais rápido que Diego CORRE, e ainda assim
@@ -140,7 +154,18 @@ local function step(dt: number)
 		local walkBase = StatScaling.WalkSpeed(player)
 		local speed = horizontalSpeed(root)
 		StaminaSystem.MovementSampled:Fire(player, character, humanoid, root, speed, walkBase)
+		-- Em múltiplos de walkBase o pacote anda 1.0, trota 1.25 e CORRE 1.92
+		-- (12/15/23 sobre NormalSpeed 12, e SpeedMul = walkBase/12). Só a
+		-- velocidade não bastava: curva, tranco, ladeira ou rampa derrubam a
+		-- velocidade abaixo de 1.35 por alguns frames e o fôlego congelava
+		-- enquanto o personagem seguia correndo -- era isso que fazia a corrida
+		-- inteira gastar só um pedaço da barra.
+		-- IsSprinting é publicado pelo script Crouching no root. Ele só SOMA
+		-- casos de gasto, nunca isenta: quem mentir "false" continua caindo na
+		-- regra de velocidade acima, então não abre brecha de exploit.
+		local packSprinting = root:GetAttribute("IsSprinting") == true
 		local moving = speed > walkBase * SPRINT_SPEED_RATIO
+			or (packSprinting and speed > walkBase * 0.6)
 		local shadowBusy = character:GetAttribute("ShadowRushBusy") == true
 		local grabLocked = character:GetAttribute("GrabLocked") == true
 		if character:GetAttribute("PowerInfiniteStamina") == true then
@@ -150,7 +175,11 @@ local function step(dt: number)
 			publish(player, state)
 			continue
 		end
-		local sprinting = state.intent and moving and not state.exhausted and not shadowBusy and not grabLocked
+		-- Mesma lógica do `moving`: o estado real do pacote também vale como
+		-- intenção, pra um SprintIntent perdido na rede não deixar a corrida
+		-- de graça.
+		local sprinting = (state.intent or packSprinting)
+			and moving and not state.exhausted and not shadowBusy and not grabLocked
 
 		if sprinting then
 			state.idleFor = 0

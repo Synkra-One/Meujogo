@@ -37,6 +37,7 @@ local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local AssetRegistry = require(ReplicatedStorage.Modules.AssetRegistry)
 local LoadoutData = require(ReplicatedStorage.Modules.LoadoutData)
 local CharacterPresentation = require(script.Parent.CharacterPresentation)
+local MonsterMeshyVisuals = require(script.Parent.MonsterMeshyVisuals)
 
 local AppearanceManager = {}
 
@@ -44,6 +45,9 @@ local ORIGINAL_SCALE_ATTRIBUTE = "MonsterR6OriginalScale"
 local ORIGINAL_HIP_HEIGHT_ATTRIBUTE = "MonsterR6OriginalHipHeight"
 local ACTIVE_SCALE_ATTRIBUTE = "MonsterScaleMultiplier"
 local SCALE_EPSILON = 1e-4
+
+-- ApplyAppearance roda ate 3x por spawn; cada motivo de "Meshy nao aplicado" avisa uma vez so.
+local warnedMeshyReasons: { [string]: boolean } = {}
 
 local function findTorso(character: Model): BasePart?
 	return (character:FindFirstChild("UpperTorso") :: BasePart?) or (character:FindFirstChild("Torso") :: BasePart?)
@@ -186,12 +190,24 @@ local function applyMonsterAppearance(character: Model)
 	cosmetic.Name = "MonsterCosmetic"
 	cosmetic.Parent = character
 
+	-- Aparencia Meshy: vai por cima do rig ja escalado (as MeshParts sao
+	-- encaixadas no Size atual de cada parte R6). O rig nao e tocado.
+	local meshyApplied, meshyReason = MonsterMeshyVisuals.Apply(character, asset.Meshy :: any)
+	if not meshyApplied and meshyReason and not warnedMeshyReasons[meshyReason] then
+		warnedMeshyReasons[meshyReason] = true
+		warn("[AppearanceManager] Aparencia Meshy nao aplicada, mantida a anterior: " .. meshyReason)
+	end
+
 	if head then
 		local face = head:FindFirstChild("face")
 		if face and face:IsA("Decal") then
 			face.Transparency = 1
 		end
+	end
 
+	-- Mascara/olhos/arranhao/cinto/corte sao o corpo antigo do Monstro; o Meshy ja
+	-- traz rosto e corpo proprios, entao so sobrevive o facao (item, nao corpo).
+	if head and not meshyApplied then
 		local mask = weldAccessory(
 			"JasonMask",
 			head,
@@ -225,8 +241,10 @@ local function applyMonsterAppearance(character: Model)
 		weldAccessory("MaskScratch", head, Vector3.new(0.04, 0.48, 0.035), CFrame.new(0.28, 0.02, -head.Size.Z * 0.61) * CFrame.Angles(0, 0, math.rad(-22)), Color3.fromRGB(125, 16, 12), Enum.Material.Neon, cosmetic)
 	end
 
-	weldAccessory("MonsterBelt", torso, Vector3.new(torso.Size.X * 1.08, 0.16, torso.Size.Z * 1.16), CFrame.new(0, -torso.Size.Y * 0.23, 0), Color3.fromRGB(18, 14, 10), Enum.Material.Fabric, cosmetic)
-	weldAccessory("ChestGash", torso, Vector3.new(0.08, 0.75, 0.04), CFrame.new(0.34, 0.08, -torso.Size.Z * 0.54) * CFrame.Angles(0, 0, math.rad(24)), Color3.fromRGB(100, 7, 5), Enum.Material.Neon, cosmetic)
+	if not meshyApplied then
+		weldAccessory("MonsterBelt", torso, Vector3.new(torso.Size.X * 1.08, 0.16, torso.Size.Z * 1.16), CFrame.new(0, -torso.Size.Y * 0.23, 0), Color3.fromRGB(18, 14, 10), Enum.Material.Fabric, cosmetic)
+		weldAccessory("ChestGash", torso, Vector3.new(0.08, 0.75, 0.04), CFrame.new(0.34, 0.08, -torso.Size.Z * 0.54) * CFrame.Angles(0, 0, math.rad(24)), Color3.fromRGB(100, 7, 5), Enum.Material.Neon, cosmetic)
+	end
 
 	if rightArm then
 		weldAccessory(
@@ -240,7 +258,9 @@ local function applyMonsterAppearance(character: Model)
 		)
 	end
 
-	if asset.MeshId ~= "" then
+	if meshyApplied then
+		return -- o torso R6 fica invisivel; SpecialMesh/cor do torso nao se aplicam
+	elseif asset.MeshId ~= "" then
 		applyMonsterMesh(torso, asset.MeshId)
 	else
 		torso.Color = asset.Placeholder.TorsoColor:Lerp(Color3.fromRGB(24, 26, 24), 0.65)
@@ -281,6 +301,9 @@ function AppearanceManager.ApplyAppearance(player: Player)
 	if existing then existing:Destroy() end
 	local monsterCosmetic = character:FindFirstChild("MonsterCosmetic")
 	if monsterCosmetic then monsterCosmetic:Destroy() end
+	-- Devolve a Transparency das partes R6 e remove os visuais Meshy antes de
+	-- reaplicar (o Role pode ter deixado de ser Monstro).
+	MonsterMeshyVisuals.Clear(character)
 	local skin = LoadoutData.GetSkin(player:GetAttribute("SkinId"))
 	local torso = findTorso(character)
 	if skin and skin.Color and torso and role ~= GameConfig.Roles.Monster then

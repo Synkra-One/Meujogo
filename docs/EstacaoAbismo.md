@@ -1,175 +1,184 @@
 # Estação Abismo
 
-Laboratório subterrâneo abandonado sob a floresta, com uma rota de fuga que
-termina numa caverna costeira dentro d'água.
+Laboratório subterrâneo com entrada em uma pequena caverna rochosa na floresta.
+Fica **do lado oposto da ilha em relação à montanha**: a caverna do Monstro e o
+laboratório nunca dividem a mesma encosta. Uma porta industrial dá acesso à
+escada de degraus e à recepção. O corredor central conecta todas as salas,
+passa pelo salão de testes e termina em outra escada, com porta de saída para
+um pátio seco junto à costa.
 
-```
-FLORESTA
-  v  escotilha escondida entre árvores e pedras
-POÇO DE ACESSO (escada de treliça, tubo de concreto)
-  v
-NÍVEL -1   eclusa / vestiário
-  v  caixa de escada fechada (14 degraus)
-NÍVEL -2   átrio -> corredor -> LABORATÓRIO | CONTROLE | ALA CLÍNICA
-  v
-CÂMARA DE BOMBAS
-  v
-TÚNEL DE EVACUAÇÃO (ACESSO MARÍTIMO) -- vai degradando
-  v  comporta estanque
-TRECHO ALAGADO (nada-se)
-  v  grade antiga
-CAVERNA COSTEIRA -> OCEANO
+```text
+FLORESTA → CAVERNA → PORTA → ESCADA DE ENTRADA (60 studs)
+                                  ↓
+            ÁREA TÉCNICA  ←  RECEPÇÃO
+                                  ↓
+             LABORATÓRIO  ←  CORREDOR  →  SALÃO DE TESTES
+                 ARQUIVO  ←  CORREDOR        (Frog Generator)
+              ENFERMARIA  ←  CORREDOR  →  CONTROLE
+                                  ↓
+                     ESCADA DE SAÍDA (36 studs) → PORTA → COSTA
 ```
 
-Tudo mora em `src/server/Tools/AbyssStationGenerator.lua`. É ferramenta de
-EDITOR, como `IslandGenerator` e `PlaneCrashGenerator`: escreve terreno e
-baixa assets do Toolbox, coisas que só funcionam em modo de edição.
+## Planta
 
-## Como gerar
+O corpo do laboratório tem 120 studs de corredor entre os dois lances, contra
+92 studs de escada somados — antes era o contrário. Todas as medidas em studs,
+no espaço local da estação (X lateral, +Z para a costa).
 
-Command Bar do Studio, em **modo de edição**, depois de `IslandGenerator.Generate()`:
+| Ambiente | Frente × fundo | Pé-direito | Porta |
+|---|---|---|---|
+| Vestíbulo (na caverna) | 20 × 8 | 14 | Entrada, 12 |
+| Recepção | 48 × 32 | 16 | — (vão da escada) |
+| Área Técnica | 42 × 32 | 16 | 10 |
+| Corredor | 24 × 120 | 16 | — |
+| Laboratório | 48 × 48 | 16 | 10 |
+| **Salão de Testes** | **76 × 76** | **18** | 14 |
+| Arquivo | 48 × 32 | 16 | 10 |
+| Enfermaria | 48 × 28 | 16 | 10 |
+| Controle | 48 × 36 | 16 | 10 |
+| Saída Seca | 20 × 8 | 14 | Saída, 12 |
+
+## Salão de testes e o Frog Generator
+
+A maior ala do laboratório: 76 × 76 com 18 de pé-direito, é onde os cientistas
+trabalhavam com os monstros. O centro fica vazio, com o ralo no meio do piso.
+
+- **Frog Generator** — a cápsula de cultivo, de frente para a porta do salão.
+  Base de aço, tanque de vidro com fluido verde e luz própria, o espécime
+  suspenso dentro, anéis de pressão, quatro mangueiras descendo e o console
+  de comando na frente. O `Model` chama-se `FrogGenerator` e carrega os
+  Attributes `FrogGenerator = true` e `AbismoCapsula = "FrogGenerator"` —
+  é por eles que o resto do jogo acha a cápsula, não pelo nome.
+- **Seis celas de contenção** nas duas paredes longas, com grades, verga,
+  comedouro e sangue seco. Uma de cada três aparece rompida, com as grades
+  tortas para fora.
+- **Quatro consoles de observação** junto à porta, fora da varredura da folha.
+- **Duas mesas de necropsia** com correias, canaleta, foco cirúrgico e
+  instrumental.
+- **Ponte rolante** com trilhos, carro e guincho parado sobre a cápsula.
+- Faixas de perigo em volta da cápsula e rastros de arrasto pelo piso.
+
+## Aplicar no Studio
+
+Sincronize o projeto pelo Rojo (plugin **Connected**). Na Command Bar, em
+**modo de edição**, depois da geração do terreno e da vegetação, cole esta
+**única linha**:
 
 ```lua
-local Abismo = require(game.ServerScriptService.Server.Tools.AbyssStationGenerator)
-Abismo.Build()
+require(game.ServerScriptService.Server.Tools.AbyssStationRunner).Run()
 ```
 
-E **salve o lugar** (Ctrl+S). `Abismo.Clear()` apaga as Parts (o terreno
-escavado não volta -- pra isso, regere a ilha).
+O `Run()` carrega uma cópia nova de `Tools` (o `require` do Studio guarda o
+gerador antigo em cache), usa a seed da ilha e chama `Build()`. O relatório
+sai no Output **e** em `ServerStorage.DiagAbismo` (propriedade `Value`): se o
+painel Output estiver filtrando mensagens, leia por lá. Um relatório com
+`OK: estação construída` e `FrogGenerator no modelo: true` confirma o
+resultado; em caso de erro ele traz a mensagem e o traceback.
 
-## Onde ela nasce
+Salve o lugar após conferir a construção. O gerador substitui
+`Workspace.Ilha.EstacaoAbismo`; alterar seu código não modifica automaticamente
+uma estação já salva. Ele não é executado no início de cada partida.
 
-`findSite()` varre a costa de 5 em 5 graus e exige, para aceitar uma direção:
+Execute o Abismo **por último**: gerar terreno ou reparar a água depois da
+estação pode voltar a preenchê-la. `Build()` mantém a posição e a orientação
+nas reconstruções **da mesma versão da planta**.
 
-- a escotilha a **178 studs da linha d'água** (a praia tem 45, então sobram
-  ~133 studs *dentro* da floresta);
-- fora da montanha, fora de clareira/POI/trilha/lago;
-- chão a pelo menos **+20** (senão não sobra rocha acima do Nível -1);
-- e o **caminho inteiro até a praia** também floresta (9 amostras) -- senão a
-  escotilha cairia num corredor de trilha.
+Uma estação salva com a planta antiga (`AbismoVersion` 3 ou a escotilha
+original) não é remendada: o gerador fecha o poço/eixo antigo com rocha,
+escolhe um sítio novo do lado oposto da montanha e constrói lá. A escavação
+abandonada continua aberta embaixo da terra — para apagá-la de vez é preciso
+regenerar o terreno.
 
-Se a ilha não tiver nenhum trecho assim, ele avisa e não constrói.
+`Clear()` remove somente o modelo. As plantas e rochas que invadiam a
+construção ficam preservadas em `ServerStorage.AbismoVegetacaoPreservada`,
+identificadas pelo atributo `AbismoPastaOriginal`.
 
-## Orçamento vertical
+## Escolha do local
 
-`IslandLayout.CONFIG.MinY = -24`: abaixo disso não existe terreno.
+`findSite()` varre os 72 ângulos da costa e mede cada corredor candidato:
 
-| Área | Piso | Teto | Rocha abaixo | Rocha acima |
-|---|---|---|---|---|
-| Nível -1 | -4 | +8 | — | ~19 (floresta) |
-| Nível -2 / túnel | -18 | -6 | ~4,5 | ~33 floresta, ~13 sob a praia |
-| Caverna costeira | -20 | +8 | dentro do promontório | idem |
+1. **Separação da montanha** — pelo menos 120° entre a estação e o centro da
+   montanha, e no mínimo 340 studs entre qualquer ponto da estação e a boca da
+   caverna. Nos testes de seed isso dá 144–180° e 545–863 studs.
+2. **Terreno livre** — nenhum POI, trilha, lago ou encosta de montanha sob o
+   eixo nem sob as duas alas.
+3. **Cotas** — chão de 14 a 32 na boca da caverna (para a escada de entrada
+   caber em 60 studs), de 6 a 12,25 na saída, e pelo menos 18 sobre o teto das
+   salas em todo o corpo.
 
-A praia é um platô em +8..+12 e o fundo do mar despenca para -20/-22 a um
-stud da linha d'água (`IslandLayout.rawHeight`), então a boca da caverna abre
-direto em água funda.
+Os critérios são afrouxados em duas etapas se a seed não oferecer nada que
+sirva, sempre com `warn` dizendo o que cedeu. Só depois disso a construção
+falha pedindo `Frame` explícito.
 
-## "Tudo tampado": nenhuma terra, areia ou grama à vista
+## Acabamento e acesso
 
-Duas garantias, porque uma só não basta.
+- Painéis claros de laboratório, rodapés em azul petróleo, piso metálico
+  contínuo, teto fechado, iluminação fria e sinalização de emergência.
+- Mobiliário nativo, sem downloads do Toolbox. Os postos de trabalho encostam
+  nas paredes, pulando os vãos declarados no plano e as quinas, e as salas
+  grandes ganham duas ilhas centrais — o miolo e o eixo das portas continuam
+  livres.
+- Oito portas integradas ao `DoorSystem`. Visores e barras são soldados à folha
+  móvel; as dobradiças ficam fora da espessura da parede.
+- Escadas sólidas de 16 studs de largura, com espelhos de até 0,95 stud,
+  pisadas de pelo menos 0,95 (1,4 a 1,6 numa entrada de cota normal),
+  corrimãos e caixa fechada. Não existem `TrussPart`, escotilha ou trecho de
+  nado.
+- Saída independente pela costa, acessível pelo corredor principal.
 
-1. **Casca fechada por ambiente.** `roomShell` monta piso, teto e as quatro
-   paredes; `wallX`/`wallZ` recortam a parede em segmentos em volta de cada
-   vão (peitoril embaixo, verga em cima), então nenhum pedaço "some" quando
-   se abre uma porta. `slabWithHole` faz o teto do Nível -1 com o vão do poço
-   em quatro retângulos que se encontram sem fresta.
-2. **Casca de rocha.** `encaseRock()` converte em ROCHA o miolo em volta da
-   instalação inteira **antes** de cavar. Se sobrar qualquer fresta de voxel
-   entre o acabamento e o terreno, o que aparece é pedra. O topo desse
-   preenchimento fica 9 studs abaixo da superfície (amostrada por raycast em
-   5 pontos da largura, todos antes de qualquer escrita) pra não brotar
-   mancha de rocha no meio do mato.
+O laboratório fica em Y=-16. Cada ambiente tem piso e teto de 2 studs e
+paredes de 2 studs. As paredes compartilhadas possuem um único responsável; o
+salão de testes, mais alto que o corredor, fecha sozinho apenas a faixa acima
+da parede do vizinho. Somente os vãos declarados no plano ficam abertos. As
+escadas têm 12 studs de altura livre nominal.
 
-A caverna costeira é a única rocha exposta, e é de propósito: ali a estação
-já acabou.
+A escavação deixa 8 studs de folga além da estrutura nas laterais e embaixo, e
+4 acima do teto — perto da praia o terreno é raso, e dois voxels acima do teto
+encostariam na superfície. As partes superiores das escadas têm cobertura e
+laterais rochosas, e os acessos possuem bases sólidas. Vegetação e rochas que
+atravessariam esses volumes são retiradas da área construída.
 
-O poço de acesso é um tubo **quadrado**: anel de painéis curvos contra um
-buraco retangular de laje sempre deixa canto sem cobrir, e canto sem cobrir é
-exatamente onde a terra apareceria. Pelo mesmo motivo a caixa de escada leva
-parede e teto por degrau, em peças 1,4 mais grossas que o passo de 1,0 -- o
-encavalamento de 0,4 fecha o espelho de cada degrau.
+## Arquivos e parâmetros
 
-## Assets do Toolbox
-
-| Constante | ID | Onde é usado inteiro | Onde vira peça avulsa |
-|---|---|---|---|
-| `ASSETS.Laboratorio` | 1105615633 | Laboratório (fundo da sala) | Controle, Ala Clínica, Átrio |
-| `ASSETS.Complexo` | 12470367049 | Ala Clínica (fundo da ala) | Laboratório, Nível -1, Câmara de Bombas |
-| `ASSETS.Porta` | 4590494732 | folha das 4 portas | — |
-
-- `placeAsset` + `fitInto` escalam pela **bounding box** (o Toolbox não segue
-  escala nenhuma) e apoiam pelo **centro da caixa**, não pelo pivô -- asset de
-  pivô torto ficaria meio enterrado no chão.
-- `openPassage` limpa o vão de entrada depois que o cenário entrou: não dá pra
-  saber onde o modelo pôs as próprias paredes, então o que for do tamanho de
-  móvel e estiver no caminho da porta é apagado, e o que for grande demais pra
-  apagar sem furar a cena vira atravessável. Nenhuma das duas saídas prende o
-  jogador.
-- `harvest` + `scatterPieces` separam o asset em adereços avulsos e os
-  espalham nos outros ambientes. Peças com cara de casca (parede/piso/teto,
-  por nome ou por serem placas grandes e finas) ficam de fora: soltas viram um
-  paredão no meio da sala.
-- `assetDoor`: o `DoorSystem` só sabe girar **uma** BasePart. Então a folha de
-  verdade é uma Part do tamanho do vão (leva o Attribute `Porta` e a colisão,
-  retangular e previsível) e as Parts do asset entram desancoradas, presas nela
-  por `WeldConstraint` e **sem colisão** -- malha de asset como colisor num vão
-  estreito é o jeito mais curto de prender o jogador.
-- Se um asset não carregar (InsertService é restrito fora do modo de edição),
-  o ambiente cai no mobiliário procedural de reserva e `Build()` avisa no
-  Output quais faltaram. A estação nunca fica vazia.
-
-## Água
-
-- **Poças** do trecho seco: Parts refletivas isoladas (infiltração).
-- **Água de terreno** do trecho alagado até o mar aberto. O teto do trecho
-  alagado fica em **-8**, muito abaixo do mar (+4): "cheio d'água" é o estado
-  coerente, e é isso que obriga a nadar. A **comporta estanque** explica o
-  corredor seco atrás.
-- A água é preenchida só até o **teto do vazio escavado**, não até o nível do
-  mar: senão sobraria um bolsão de água preso dentro da rocha acima do túnel.
-- Dentro da caverna a água vai a +4 e o teto a +8: sobra bolsão de ar pra
-  emergir antes de sair.
-
-### Caminho de nado (conferido numericamente)
-
-| Etapa | Vão livre |
+| Arquivo | Responsabilidade |
 |---|---|
-| comporta | 6,0 × 8,0 |
-| trecho alagado | 7,3 × 10,0 |
-| colar da boca do túnel | 7,2 × 9,3 |
-| caverna | 22 × 28 |
-| fresta da boca | 9,0 de largura, topo 3 studs **acima** da linha d'água |
-| saída externa | passa de onde a rocha artificial acaba, sem lábio de pedra |
+| `src/server/Tools/AbyssStationGenerator.lua` | Localização, construção, escavação, portas e limpeza da área |
+| `src/server/Tools/AbyssStationPlan.lua` | Dimensões, salas, aberturas, escadas, portas e faixas do sítio |
+| `src/server/Tools/AbyssLabFurnishings.lua` | Mobiliário das salas, salão de testes e Frog Generator |
+| `src/server/Tools/AbyssStationRunner.lua` | Comando de uma linha para a Command Bar, com relatório em `DiagAbismo` |
 
-O **colar da boca do túnel** (`buildFlooded`) tapa a folga entre a seção de
-concreto e a rocha da caverna: sem ele, quem está na caverna enxerga o vazio
-escavado em volta do túnel -- e é justamente lá que o terreno da praia
-apareceria.
+`Build(seed?, options?)` retorna o modelo. Normalmente basta `Build()`.
+Para uma implantação deliberadamente posicionada ou um teste:
 
-## Ganchos pra gameplay futura
+```lua
+Abismo.Build(1337, {
+    Frame = CFrame.new(150, 0, -210), -- horizontal; +Z aponta para a costa
+    EntryGround = 24,               -- altura do chão junto à entrada
+    ExitGround = 9,                 -- altura do chão junto à saída
+    Terrain = false,               -- apenas para inspecionar geometria sem cavar
+})
+```
 
-Nada disso está implementado; a arquitetura é que está pronta.
+`Terrain` é `true` por padrão. Cada lance tem vão fixo: um plano cuja escada
+não caberia nele falha **antes** de apagar a estação anterior ou modificar o
+terreno, dizendo quantos degraus precisaria e quantos studs existem.
 
-| Attribute | Onde | Pra quê |
-|---|---|---|
-| `AbismoZona` | marcadores por área | Escotilha, Poco, NivelMenos1, Escada, NivelMenos2, Bombas, Tunel, Alagado, Caverna, Mar |
-| `AbismoSala` | marcadores do Nível -2 | Atrio, Corredor, Laboratorio, Controle, Clinica |
-| `AbismoAlagavel` + `NivelAguaCheio` | bombas, túnel, alagado | áreas que um sistema de inundação pode encher |
-| `AbismoPortaPrincipal` | tampa da escotilha | bloquear a saída principal |
-| `AbismoPorta` | folhas das 4 portas internas | trancar/arrombar |
-| `AbismoComporta` | comporta estanque | disparar a inundação |
-| `AbismoGradeMar` | grade da caverna | último obstáculo |
-| `AbismoSaidaMaritima` | boca, no mar | ponto de fuga |
-| `Porta` | comporta, grade e as 4 portas | `DoorSystem` já dá o prompt Abrir/Fechar |
-| `PontoLoot` | espalhados | `ItemSpawner` / `LootCrateSystem` |
+Permanecem os contratos `EstacaoAbismo`, `Construcao="Abismo"`, `AbismoZona`,
+`AbismoPortaPrincipal`, `AbismoSaidaMaritima`, e agora oito pontos `PontoLoot`
+(um por sala, dois no salão de testes).
 
-Cobre "presos dentro", "porta principal bloqueada", "fuga pelo túnel",
-"instalação alagando" e "escapar mergulhando".
+## Validação
 
-## Limitação conhecida
+```sh
+python3 tests/run_abyss_station.py /caminho/para/luau
+rojo build default.project.json -o /tmp/Meujogo-abismo.rbxlx
+```
 
-Nada disto foi visto no Studio -- a validação é por compilação, análise
-estática e conferência numérica de volumes/colisão. O ponto que mais vale
-conferir na prática é o nado da comporta até o mar aberto, e como cada asset
-do Toolbox se comporta depois de escalado (se um deles vier com o pivô muito
-fora do corpo, é `fitInto` que ajusta).
+Os testes executam os módulos reais sobre um stub de Roblox: verificam salas
+acessíveis, paredes/piso/teto, altura livre, degraus, giro das portas sem atingir
+paredes ou móveis, mobiliário dentro da casca, soldas, escavação, reconstrução,
+migração da escotilha antiga, retirada de vegetação invasora, seleção de local,
+presença do Frog Generator dentro do salão e a proporção entre escadas e corpo.
+Incluem implantação girada e alturas maiores.
+Não substituem a conferência de renderização, voxels e caminhada com um Humanoid
+no Studio. Confira entrada, todas as portas, salas e saída nos dois sentidos.

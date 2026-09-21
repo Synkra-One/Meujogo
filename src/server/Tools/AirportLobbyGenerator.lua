@@ -60,8 +60,7 @@
 	VIZINHANÇA (não encostar)
 	  - Terreno da ilha: IslandLayout.AreaHalf = 960, logo |z| <= 960. O
 	    terminal vive em z -1456..-1612: longe.
-	  - Sala de espera (WaitingRoomManager.origin): (120, 10, -1500), 52x44
-	    -> ocupa x 94..146. A parede leste daqui para em x = +58.
+	  - A fila de partida permanece no lobby; não há uma sala física separada.
 
 	ASSETS DO TOOLBOX (InsertService -- só funciona em MODO DE EDIÇÃO)
 	  Se o asset carrega, entra no lugar certo, ancorado e escalado pro
@@ -261,10 +260,15 @@ local function label(host: BasePart, face: Enum.NormalId, text: string, color: C
 	return tl
 end
 
+-- O terminal estava ficando estourado quando várias fontes se sobrepunham,
+-- principalmente no salão das poltronas. Mantemos a iluminação global do
+-- jogo intacta e controlamos apenas as fontes locais do lobby.
+local LOBBY_LIGHT_SCALE = 0.78
+
 local function pointLight(host: BasePart, range: number, brightness: number, color: Color3)
 	local light = Instance.new("PointLight")
 	light.Range = range
-	light.Brightness = brightness
+	light.Brightness = brightness * LOBBY_LIGHT_SCALE
 	light.Color = color
 	light.Shadows = false -- luz sem sombra é ordens de grandeza mais barata
 	light.Parent = host
@@ -450,6 +454,19 @@ local function placeAsset(parent: Instance, spec: AssetSpec, name: string, cf: C
 	model:SetAttribute("AssetId", spec.Id)
 	model:SetAttribute("AssetName", spec.Label)
 	model.Parent = parent
+	-- Assets de cadeiras de Toolbox frequentemente trazem uma caixa de
+	-- colisão invisível maior que o próprio banco. Ela bloqueava o corredor
+	-- no meio da sala de embarque. Só Seats reais continuam colidindo para
+	-- preservar a possibilidade de sentar; o restante é apenas decoração.
+	if spec == ASSETS.Seats then
+		for _, d in model:GetDescendants() do
+			if d:IsA("BasePart") and not d:IsA("Seat") and not d:IsA("VehicleSeat") then
+				d.CanCollide = false
+				d.CanTouch = false
+				d.CanQuery = false
+			end
+		end
+	end
 	reportFor(spec).Loaded += 1
 	return model
 end
@@ -710,7 +727,9 @@ local function buildGlass(parent: Instance)
 			local upper = box(f, "GlassPane_Door", V3(paneW, lowerH - 11, 0.5), at(cx, L.GlassSill + 11 + (lowerH - 11) / 2, L.ZGlass), M.Glass, C.Glass, { Transparency = 0.82, CanCollide = false, CastShadow = false })
 			upper.Reflectance = 0.09
 		else
-			local pane = box(f, "GlassPane_" .. tostring(i + 1), V3(paneW, lowerH, 0.5), at(cx, L.GlassSill + lowerH / 2, L.ZGlass), M.Glass, C.Glass, { Transparency = 0.82, CastShadow = false })
+			-- O vidro é cenário visual; deixá-lo com a colisão padrão criava
+			-- uma parede contínua e invisível entre as poltronas e as janelas.
+			local pane = box(f, "GlassPane_" .. tostring(i + 1), V3(paneW, lowerH, 0.5), at(cx, L.GlassSill + lowerH / 2, L.ZGlass), M.Glass, C.Glass, { Transparency = 0.82, CanCollide = false, CastShadow = false })
 			pane.Reflectance = 0.09
 		end
 
@@ -983,10 +1002,10 @@ local function fallbackSeatRow(parent: Instance, cf: CFrame)
 
 	deco(f, "Frame", V3(length + 1, 0.7, 1.2), rel(0, 1.4, 0.4), M.Metal, C.SteelDark)
 	for _, dx in { -length / 2 + 2, length / 2 - 2 } do
-		box(f, "Leg", V3(0.8, 1.4, 3.6), rel(dx, 0.7, 0.4), M.Metal, C.SteelDark)
+		box(f, "Leg", V3(0.8, 1.4, 3.6), rel(dx, 0.7, 0.4), M.Metal, C.SteelDark, { CanCollide = false })
 	end
-	box(f, "SeatPan", V3(length, 0.7, 3.2), rel(0, 2.1, -0.2), M.Fabric, C.Seat)
-	box(f, "SeatBack", V3(length, 3.6, 0.7), rel(0, 3.9, 1.5), M.Fabric, C.Seat)
+	box(f, "SeatPan", V3(length, 0.7, 3.2), rel(0, 2.1, -0.2), M.Fabric, C.Seat, { CanCollide = false })
+	box(f, "SeatBack", V3(length, 3.6, 0.7), rel(0, 3.9, 1.5), M.Fabric, C.Seat, { CanCollide = false })
 	deco(f, "BackCap", V3(length, 0.4, 1.1), rel(0, 5.8, 1.5), M.SmoothPlastic, C.SteelDark)
 	for i = 0, seats do
 		deco(f, "Armrest", V3(0.5, 0.5, 3), rel(-length / 2 + i * pitch, 2.7, -0.1), M.SmoothPlastic, C.SteelDark)
@@ -1211,7 +1230,7 @@ local function buildLighting(parent: Instance)
 	local spot = Instance.new("SpotLight")
 	spot.Angle = 70
 	spot.Range = 40
-	spot.Brightness = 2
+	spot.Brightness = 2 * LOBBY_LIGHT_SCALE
 	spot.Face = Enum.NormalId.Bottom
 	spot.Color = C.LightWarm
 	spot.Shadows = false

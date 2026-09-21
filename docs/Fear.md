@@ -15,21 +15,29 @@ Somente sobreviventes vivos com `InRound = true`, numa rodada ativa e após fech
 
 ## Balanceamento
 
-Valores iniciais em `GameConfig.Fear`: teto 100, alcance 300 studs, ganho base máximo 10/s até 20 studs, recuperação base 3,5/s após 4 segundos seguros, atualização a cada 0,2s. A distância é 3D entre HumanoidRootParts. Usa o monstro vivo mais próximo, sem somar vários monstros. Paredes bloqueiam o bônus de visão; o ganho base por proximidade permanece.
+Valores iniciais em `GameConfig.Fear`: teto 100, zona de perigo de 160 studs, ganho base máximo 3,5/s até 20 studs, recuperação base 3,5/s após 4 segundos seguros, atualização a cada 0,2s. A distância é 3D entre HumanoidRootParts. Usa o monstro vivo mais próximo, sem somar vários monstros. Paredes bloqueiam o bônus de visão; o ganho base por proximidade permanece.
 
-A curva é `t = clamp((300 - distância) / (300 - 20), 0, 1)`, `x = t ^ ProximityCurveExponent`, ganho base `10 * x² * (3 - 2x)`. O expoente inicial é 2. A curva não tem degraus e sua inclinação chega suavemente a zero nos limites.
+**O Fear é uma barra que sobe com o tempo, nunca um estouro.** Ver o monstro não enche a barra: encher exige ficar perto por vários segundos. `MaxFearDistance` é a fronteira dos dois regimes -- dentro dela a barra sobe, fora dela (passado o atraso) ela desce.
 
-| Distância | Fear base/s, antes de Compostura |
-| --- | ---: |
-| 300+ | 0 |
-| 200 | 0,447 |
-| 100 | 5,153 |
-| 50 | 8,933 |
-| 20 ou menos | 10 |
+A curva é `t = clamp((160 - distância) / (160 - 20), 0, 1)`, `x = t ^ ProximityCurveExponent`, ganho base `3,5 * x² * (3 - 2x)`. O expoente inicial é 1,4. A curva não tem degraus e sua inclinação chega suavemente a zero nos limites.
+
+| Distância | base/s | com visão | perseguido | 0 → 100 perseguido |
+| --- | ---: | ---: | ---: | ---: |
+| 160+ | 0 | 0 | 0 | nunca (recupera) |
+| 120 | 0,278 | 0,376 | 0,526 | ~190s |
+| 100 | 0,780 | 1,053 | 1,474 | ~68s |
+| 80 | 1,524 | 2,057 | 2,880 | ~35s |
+| 60 | 2,389 | 3,226 | 4,516 | ~22s |
+| 40 | 3,156 | 4,260 | 5,964 | ~17s |
+| 20 ou menos | 3,500 | 4,725 | 6,615 | ~15s |
+
+Referências de ritmo com Compostura média: parado a 20 studs com linha de visão, 0 → 100 leva **~21s**; sendo perseguido colado, **~15s**; no pior caso possível (Compostura 0 + visão + perseguição, limitado por `MaxFearGainPerSecond`), **~12,5s**. Longe da zona de perigo, 100 → 0 leva **~29s**. Descer é de propósito mais lento que subir sob perseguição -- correr em círculos não apaga a tensão.
+
+**Histórico:** o alcance era 300 studs com ganho base de 10/s e expoente 2. Isso somava duas queixas: colado no monstro a barra enchia em ~5s (parecia ir direto ao máximo), e como *quase a ilha inteira* contava como zona de perigo, era possível acumular medo lentamente sem nunca recuperar.
 
 `ComposureGain` varia de 1,5 a 0,55, com `ComposureGainExponent = 0.93` (Compostura 50 ≈ 1x). `ComposureRecovery` varia de 0,65 a 1,35, com expoente 1 (Compostura 50 = 1x). A normalização e o fallback neutro usam a mesma escala dos demais atributos. A Parte 2 não reaplica Compostura sobre stamina/chances; os efeitos dependem somente do Fear já calculado.
 
-Em 300 studs ou mais, conta o atraso de recuperação. Reentrar em menos de 300 reinicia os 4 segundos, mesmo com ganho muito pequeno. Sem monstro vivo, também recupera após o atraso. Somente a fração do tick posterior ao atraso recupera, usando o tempo real decorrido.
+Em 160 studs ou mais, conta o atraso de recuperação. Reentrar em menos de 160 reinicia os 4 segundos, mesmo com ganho muito pequeno. Sem monstro vivo, também recupera após o atraso. Somente a fração do tick posterior ao atraso recupera, usando o tempo real decorrido.
 
 ## Teste no Studio
 
@@ -65,8 +73,8 @@ end
 
 1. Clique **Pronto** nas quatro janelas. O primeiro jogador será Monstro, o segundo Espião e os outros dois Sobreviventes.
 2. Após o sorteio, nos dois sobreviventes escolha **Camila Duarte** (Compostura 10) e **Sofia Ribeiro** (96). Feche também a seleção do Espião.
-3. Aproxime o monstro, sem atacar: teste aproximadamente 200, 100, 50 e 20 studs. Confirme as distâncias no Output. À mesma distância, Camila deve acumular mais rápido que Sofia.
-4. Afaste o monstro além de 300 studs. Fear para de subir e só cai após 4 segundos; Sofia recupera mais rápido. Retorne ao alcance antes dos 4 segundos para confirmar que o atraso reinicia.
+3. Aproxime o monstro, sem atacar: teste aproximadamente 160, 100, 60 e 20 studs. Confirme as distâncias no Output. À mesma distância, Camila deve acumular mais rápido que Sofia.
+4. Afaste o monstro além de 160 studs. Fear para de subir e só cai após 4 segundos; Sofia recupera mais rápido. Retorne ao alcance antes dos 4 segundos para confirmar que o atraso reinicia.
 5. Reinicie/mate o personagem e confira Fear zero. Eliminados não voltam a ganhar Fear após respawn. Ao terminar a rodada, todos voltam a zero.
 
 Para comparar à distância exata sem dirigir o monstro, pode ancorar temporariamente a raiz dele e reposicioná-lo pela Command Bar do servidor. Mude `distance` e execute novamente (os sobreviventes devem estar próximos entre si e longe de obstáculos):
@@ -117,7 +125,7 @@ Todos os campos abaixo foram adicionados à configuração existente, sem outro 
 | --- | --- |
 | LOS | Raycast a cada 0,4s, multiplicador 1,35 |
 | Chase | Até 80 studs; ambos a pelo menos 2 studs/s; confirmação de 0,6s; multiplicador 1,4 |
-| Ganho final | `base × Compostura × LOS × Chase`, limitado a 20 Fear/s |
+| Ganho final | `base × Compostura × LOS × Chase`, limitado a 8 Fear/s |
 | Estados (valor real, inclusive frações) | Calm <25; Nervous ≥25; Scared ≥50; Panicked ≥75; ExtremePanic ≥90 |
 | Regeneração de stamina | 100% até Fear 25; ~90,4% em 50; ~72,8% em 75; 50% em 100 |
 | Tropeço | Fear ≥75; teste a cada 3s correndo no chão; chance 3–12%; cooldown 8s |
@@ -231,6 +239,23 @@ Aceita `"rbxassetid://SEU_ID_NUMERICO"` ou apenas a string numérica real do seu
 Heartbeat começa em Fear 30, até volume 0,45 e PlaybackSpeed 0,9–1,25. Respiração começa em 45, até volume 0,35 e velocidade 0,95–1,15. Sons locais são criados uma vez e reutilizados. O debug mostra volume efetivo zero enquanto o respectivo ID estiver vazio.
 
 A vinheta começa em 50 e chega a opacidade 0,22 por borda. Quatro gradientes deixam o centro livre; a GUI não recebe input e fica abaixo da HUD. É separada da vinheta de dano/agachamento. O blur começa em 75 e chega a 4, em um BlurEffect local próprio associado à câmera; outros efeitos e presets de Lighting não são modificados. Transições usam interpolação exponencial e curvas contínuas a 20Hz, sem criar Tweens por atualização e sem degraus de FearState.
+
+### Pânico: tela escura e HUD sumindo
+
+Acima de certos limiares o jogador perde a leitura calma da tela. Tudo é **apresentação local**: fôlego, itens, mapa e Fear continuam iguais no servidor, e os limiares vivem em `GameConfig.Fear`.
+
+| Efeito | Começa | Completo | Onde |
+| --- | ---: | ---: | --- |
+| Escurecimento animado da tela | 68 | 100 | `FearPresentation` (camada `FearDarken`) |
+| Minimapa + barra de fôlego apagam | 70 | 86 | `SurvivalMinimapHUD` (o `CanvasGroup` inteiro) |
+| Mapa grande (M) trava e fecha | 86 | — | `SurvivorMapController` |
+| Barra de itens desliza pra fora | 78 | 92 | `HotbarController` |
+
+O escurecimento é um `Frame` de tela cheia com `ZIndex = 0`, **por baixo** da vinheta, que respira devagar (`DarkenPulseSpeed = 1.15` ciclos/s, oscilando 22% da opacidade) para não virar um filtro estático. `DarkenMaxOpacity` é 0,42 e o código impõe um teto duro de 0,6: a tela escurece, nunca apaga.
+
+Os quatro consumidores usam a **mesma função pura** `FearPresentationRules.HudFade(fear, config)` e leem o Fear do Attribute replicado pelo servidor -- nenhum deles calcula medo. `SurvivalMinimapHUD:Update` recebe o valor como último argumento e aplica `math.max` sobre a transparência ociosa que já existia: o medo só pode esconder mais, nunca revelar. O inventário é o último a sair (78 contra 70): você perde a leitura da tela antes de perder a barra de itens.
+
+Nada disso desabilita controle: as teclas 1/2/3, G e o fôlego continuam funcionando com o HUD invisível. Só o mapa grande é realmente bloqueado, porque abrir um mapa em pânico anularia o efeito inteiro. Quando o Fear cai, tudo volta sozinho.
 
 **FOV permanece desativado.** Movimento, agachamento, sprint e mira já compartilham um tween em Crouching. Não foi acrescentado outro escritor de FieldOfView. `EnableFearFOV = false`, `FearFOVStart` e `FearFOVMaxOffset` ficam reservados; ativar a flag avisa no Output e mantém offset zero até existir integração com um compositor de câmera. Nenhum camera shake foi acrescentado.
 

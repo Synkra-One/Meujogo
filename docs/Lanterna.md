@@ -23,12 +23,20 @@ e sem massa. A normalizacao para 1,8 studs fica apenas para o fallback via asset
 - Clique/toque de uso da Tool ou `T`: alternar a luz.
 - Controle: ativacao da Tool ou `Y`.
 - Celular: botao com a miniatura da lanterna.
+- Disparo concentrado: `V` no PC, `L2` no controle ou botao `Clarao` no celular.
+  Custa 25% da mesma bateria e tem cooldown de 8 segundos. Configuracao,
+  arquitetura e roteiro completo: [Disparo concentrado](FlashBurst.md).
 
-`F` continua reservado para interagir com os objetos do jogo. A luz acompanha
-o centro da camera com inercia curta, respiracao e balanco proporcional a
-caminhada/corrida. A Tool permanece presa ao `RightGrip` criado pelo Roblox e
-herda a orientacao do braco; o visual da lanterna nao gira mais esse joint de
-forma independente.
+`F` continua reservado para interagir com os objetos do jogo. O braco acompanha
+o centro da camera com suavizacao curta, inclusive para cima, para baixo e
+para os lados (limites de 80 graus em relacao ao personagem). A cabeca acompanha
+parte desse movimento. A Tool permanece presa ao `RightGrip` criado pelo Roblox.
+O emissor e as duas pontas do feixe ficam no espaco local do Handle: a luz segue
+a lente fisica, sem uma segunda rotacao independente da camera.
+
+A mira da camera e recalculada a cada frame. A verificacao de parede do feixe
+tambem se renova quando a lente muda de posicao ou direcao, mesmo antes do
+intervalo normal de 1/15 segundo.
 
 ## Animacoes R6
 
@@ -57,6 +65,15 @@ pelo idle da lanterna.
 Os IDs ficam em `src/ReplicatedStorage/Modules/FlashlightConfig.lua`, em
 `Animations.Click`, `Animations.Equip` e `Animations.Idle`.
 
+Nao sao necessarios clips novos para olhar nas diferentes direcoes.
+`FlashlightPose` converte a rotacao para os eixos dos joints R6 e calcula o
+alinhamento do ombro direito usando a orientacao real da lente. A camada anterior
+e removida em `PreAnimation`, e a nova pose entra em `PreSimulation`, depois do
+Animator. Isso evita tanto a sobrescrita da mira quanto acumulo de rotacao em
+joints sem keyframes. O cleanup preserva a animacao-base e escritas posteriores
+de outros sistemas. Essa ordem segue o ciclo documentado de
+[Motor6D.Transform](https://create.roblox.com/docs/reference/engine/classes/Motor6D/Transform).
+
 O feixe combina foco principal com luz periferica e preenchimento proximo;
 abaixo de 18% de bateria, a intensidade fica levemente instavel.
 
@@ -70,6 +87,11 @@ Todos os parametros ficam em `src/ReplicatedStorage/Modules/FlashlightConfig.lua
 | BatteryDrainRate | 100 / 60 por segundo |
 | FlashlightRange | 36 studs |
 | BeamAngle | 38 graus |
+| LightRange (iluminacao visual) | 44 studs |
+| LightAngle (iluminacao visual) | 48 graus |
+| Brightness | 4,6 |
+| SpillAngle / SpillBrightness | 76 graus / 1,0 |
+| FillRange / FillBrightness | 9 studs / 0,25 |
 | ExposureRate | 1 por segundo |
 | ExposureDecayRate | 1,5 por segundo |
 | EffectStartExposure | 1 segundo |
@@ -81,6 +103,9 @@ Todos os parametros ficam em `src/ReplicatedStorage/Modules/FlashlightConfig.lua
 | MaxExposureDisorientation | 0,65 segundo |
 | ResistanceDuration | 5 segundos apos a desorientacao |
 | ResistanceEffectMultiplier | 10% do efeito normal |
+
+`LightRange` e `LightAngle` controlam a iluminacao do cenario; `FlashlightRange`
+e `BeamAngle` continuam controlando o cone de exposicao do monstro no servidor.
 
 O primeiro segundo causa somente incomodo visual leve. A lentidao cresce
 depois disso. O pico e audiovisual, sem zerar WalkSpeed, bloquear ataques,
@@ -140,6 +165,20 @@ atravessou uma parede. Cada amostra de cabeca/torso precisa estar no cone e ter
 o proprio monstro como primeiro obstaculo atingido. Outros objetos e jogadores
 tambem podem bloquear a luz.
 
+### Attributes que travam a lanterna
+
+`FlashlightConfig.BlockingFlags` e a lista unica lida pelo servidor
+(`FlashlightSystem.canUse`) e pelo cliente (`FlashlightController.blockedReason`).
+Enquanto qualquer um desses Attributes for `true` no character OU no Player, a
+lanterna apaga e nao liga -- a Tool continua no inventario, com a mesma bateria:
+
+`GrabLocked`, `ShadowRushBusy`, `TeleportBusy`, `PowerStunned`, `Amarrado`,
+`AbyssBlackout` (Apagao do Abismo, ver [ApagaoDoAbismo.md](ApagaoDoAbismo.md)).
+
+Um poder novo so precisa ligar o Attribute e adiciona-lo a essa lista; nada de
+segunda lanterna nem de mexer no inventario. `FlashlightSystem.ForceOff(character)`
+apaga no mesmo frame quem ja estava com a luz ligada, sem nunca acender nada.
+
 Ha uma unica exposicao, resistencia e janela de dano por monstro. Duas ou mais
 lanternas nao multiplicam essas taxas. Dano/efeitos exigem rodada ativa e ambos
 os jogadores na partida; invulnerabilidade e ForceField sao respeitados.
@@ -158,6 +197,7 @@ habilita por si so a finalizacao de lanca ancestral baseada em `IsWeakened`.
 
 ```sh
 ruby tests/run_flashlight_tests.rb /caminho/para/luau
+python3 tests/run_flashlight_presentation.py /caminho/para/luau
 rojo build default.project.json -o /tmp/Meujogo-lanterna.rbxlx
 ```
 
@@ -167,6 +207,12 @@ invalidos, limites de frequencia, lobby, drop, morte, recarga e teto de dano.
 Compilacao Luau e build Rojo tambem foram verificados. O asset foi inspecionado
 no Studio, mas a validacao visual em partida multiplayer e em celular ainda
 precisa ser concluida no Studio.
+
+A suite de apresentacao executa `FlashlightPose` e `FlashlightVisuals` com
+matrizes 3D e um ombro/pescoco R6 simulado. Verifica mira vertical/lateral,
+estabilidade a 30/60/144 FPS, restauracao da animacao-base, bloqueio, desequipar,
+alinhamento lente/feixe e oclusao. Nao substitui o playtest dos assets e da
+renderizacao no Studio.
 
 Roteiro de playtest: dois sobreviventes apontando para um monstro, com uma
 parede entre eles; alternar cobertura, conferir o dano e o pico, largar e

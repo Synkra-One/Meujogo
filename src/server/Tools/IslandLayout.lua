@@ -11,7 +11,7 @@
 	  - PoiGenerator: Sites() pra saber ONDE construir cada coisa e
 	    TrailSegments() pros lampiões de trilha.
 	  - Runtime (LobbyManager, WeaponSpawner, LootCrateSystem, ItemSpawner,
-	    RaftGenerator, PlaneCrashGenerator): CoastRadiusMax()/AreaHalf() em vez
+	    PlaneCrashGenerator): CoastRadiusMax()/AreaHalf() em vez
 	    de número mágico repetido.
 
 	INSPIRAÇÃO: mapas do Friday the 13th (Camp Crystal Lake / Packanack /
@@ -20,15 +20,27 @@
 	aberto, marcos altos pra se orientar. Aqui numa ilha.
 
 	POIs (nome do site -> o que PoiGenerator constrói):
-	  Acampamento  lodge + 3 cabanas + fogueira + mesa (clareira grande)
-	  CabanasA/B   2-3 cabanas + fogueira + latrina (clareiras menores)
+	  Acampamento  clareira grande nivelada, SEM construção (era lodge + 3
+	               cabanas pequenas -- removido, cabe casa grande agora)
+	  CabanasA/B   clareira nivelada, SEM construção (idem, era cluster de
+	               2-3 cabanas pequenas)
 	  Lago         bacia com água, píer, casa de barcos, barco virado
 	  Campo        planície plana de grama, celeiro, alvo de arco, fardos
 	  Torre        torre de vigia num morro (o site mais alto)
 	  Farol        farol velho numa ponta rochosa da costa
-	  VilaNativa   cabanas nativas, totem, fogueira apagada, secador de peixe
+	  VilaNativa   clareira nivelada, SEM construção (era vila nativa
+	               completa -- removida, cabe casa grande agora)
 	  Ruinas       círculo de pedras + Lança Ancestral (IslandGenerator)
-	  (Montanha/Caverna continuam no IslandGenerator; Jangada no RaftGenerator)
+	  (Montanha/Caverna continuam no IslandGenerator)
+
+	CASAS GRANDES (CampCabin_01 em diante, ~60-70x35-38 studs): Acampamento,
+	CabanasA, CabanasB e VilaNativa agora só nivelam e limpam o terreno --
+	PoiGenerator.Generate() não constrói mais casinha pequena nelas (as
+	funções buildCamp/buildCabinCluster/buildVillage continuam no código,
+	só não são chamadas). O raio de cada site (CONFIG.Sites) foi aumentado
+	pra caber ~2 casas grandes por clareira; use o marcador em
+	Workspace.Ilha.Layout.<nome> (Attributes Poi/Raio) pra saber onde
+	encaixar as casas na mão.
 
 	TRILHAS: um loop passando pelos POIs "de morador" (ordenados por ângulo
 	em volta do centro) + ramais pra Torre, Farol, Ruínas e boca da Caverna.
@@ -121,20 +133,23 @@ local CONFIG = {
 
 	-- Sites: raio da clareira/nivelamento e faixa de distância da costa
 	-- (inland) onde podem cair. Ordem = prioridade de colocação.
+	-- Acampamento/VilaNativa/CabanasA/CabanasB: raio aumentado pra caber
+	-- ~2 casas grandes (CampCabin_01 em diante, até ~70x38 studs -- meia
+	-- diagonal ~40 studs) por clareira, já com folga pra andar em volta.
 	Sites = {
 		{ name = "Campo", r = 130, inlandMin = 190, inlandMax = 360, flatten = true, blend = 45 },
 		{ name = "Lago", r = 60, inlandMin = 150, inlandMax = 330, flatten = true, blend = 30 },
-		{ name = "Acampamento", r = 62, inlandMin = 95, inlandMax = 230, flatten = true, blend = 24 },
-		{ name = "VilaNativa", r = 50, inlandMin = 95, inlandMax = 220, flatten = true, blend = 20 },
-		{ name = "CabanasA", r = 40, inlandMin = 85, inlandMax = 240, flatten = true, blend = 18 },
-		{ name = "CabanasB", r = 40, inlandMin = 85, inlandMax = 240, flatten = true, blend = 18 },
+		{ name = "Acampamento", r = 100, inlandMin = 95, inlandMax = 230, flatten = true, blend = 32 },
+		{ name = "VilaNativa", r = 95, inlandMin = 95, inlandMax = 220, flatten = true, blend = 30 },
+		{ name = "CabanasA", r = 85, inlandMin = 85, inlandMax = 240, flatten = true, blend = 26 },
+		{ name = "CabanasB", r = 85, inlandMin = 85, inlandMax = 240, flatten = true, blend = 26 },
 		{ name = "Ruinas", r = 24, inlandMin = 110, inlandMax = 260, flatten = true, blend = 14 },
 		{ name = "Torre", r = 14, inlandMin = 130, inlandMax = 320, flatten = true, blend = 12, highest = true },
 		{ name = "Farol", r = 18, inlandMin = 8, inlandMax = 14, flatten = true, blend = 16, coastal = true },
 		-- Estação de rádio: clareira grande e nivelada pro pátio cercado da
 		-- torre. Fica por último de propósito -- acrescentar um site no fim
 		-- não muda onde os outros caem na mesma seed.
-		{ name = "Radio", r = 34, inlandMin = 150, inlandMax = 340, flatten = true, blend = 22 },
+		{ name = "Radio", r = 96, inlandMin = 150, inlandMax = 340, flatten = true, blend = 26 },
 	},
 	SiteSpacing = 70, -- folga extra entre bordas de dois sites
 	MountainMargin = 40,

@@ -25,9 +25,11 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ContextActionService = game:GetService("ContextActionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local FlashlightRules = require(ReplicatedStorage.Modules.FlashlightRules)
 
 local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
+local MonsterAnimationConfig = require(ReplicatedStorage.Modules.MonsterAnimationConfig)
 
 local LocalPlayer = Players.LocalPlayer
 local CFG = GameConfig.Monster
@@ -54,6 +56,7 @@ local swingTrack: AnimationTrack? = nil
 
 local function loadSwingTrack()
 	swingTrack = nil
+	-- A animação exclusiva do Monster independe das reações genéricas de dano.
 	local hum = humanoid
 	if not hum then
 		return
@@ -62,8 +65,12 @@ local function loadSwingTrack()
 	if not animator then
 		return
 	end
+	local animationId = MonsterAnimationConfig.AnimationIds.Attack
+	if not MonsterAnimationConfig.IsUsableAnimationId(animationId) then
+		return -- nunca tocar o antigo slash padrão num rig customizado
+	end
 	local anim = Instance.new("Animation")
-	anim.AnimationId = CFG.SwingAnimationId
+	anim.AnimationId = animationId
 	local ok, track = pcall(function()
 		return animator:LoadAnimation(anim)
 	end)
@@ -134,7 +141,7 @@ local function playHitSound()
 end
 
 local function applyLunge()
-	if character and (character:GetAttribute("ShadowRushBusy") == true or character:GetAttribute("GrabLocked") == true) then return end
+	if character and (FlashlightRules.PowerBlocked(character) or character:GetAttribute("ShadowRushBusy") == true or character:GetAttribute("GrabLocked") == true) then return end
 	local hrp = rootPart
 	local hum = humanoid
 	if not hrp or not hum or hum.Health <= 0 or ATK.LungeForce <= 0 then
@@ -176,7 +183,7 @@ local function tryAttack()
 		return
 	end
 	-- Durante o teleporte o servidor já recusa, mas nem toca a animação aqui.
-	if character and (character:GetAttribute("TeleportBusy") == true or character:GetAttribute("ShadowRushBusy") == true
+	if character and (FlashlightRules.PowerBlocked(character) or character:GetAttribute("TeleportBusy") == true or character:GetAttribute("ShadowRushBusy") == true
 		or character:GetAttribute("GrabLocked") == true) then
 		return
 	end
@@ -231,7 +238,7 @@ end
 
 Remotes.MonsterAttack.OnClientEvent:Connect(function(kind: string, a: any)
 	if kind == "confirm" then
-		if character and (character:GetAttribute("ShadowRushBusy") == true or character:GetAttribute("GrabLocked") == true) then return end
+		if character and (FlashlightRules.PowerBlocked(character) or character:GetAttribute("ShadowRushBusy") == true or character:GetAttribute("GrabLocked") == true) then return end
 		applyLunge()
 		local hitCount = tonumber(a) or 0
 		if hitCount > 0 then

@@ -27,6 +27,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local Ammo = require(ReplicatedStorage.Modules.OTSAmmo)
+local InteractionGuard = require(script.Parent.InteractionGuard)
 
 local AmmoSystem = {}
 
@@ -144,7 +145,7 @@ local function watchPickup(part: BasePart)
 	prompt.ActionText = "Pegar munição"
 	prompt.ObjectText = string.format("%s (%d)", kind, qty)
 	prompt.MaxActivationDistance = PICKUP_DISTANCE
-	prompt.RequiresLineOfSight = false
+	prompt.RequiresLineOfSight = true
 	prompt.Parent = part
 
 	prompt.Triggered:Connect(function(player: Player)
@@ -155,7 +156,7 @@ local function watchPickup(part: BasePart)
 		local root = character and character:FindFirstChild("HumanoidRootPart")
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		if not root or not root:IsA("BasePart") or not humanoid or humanoid.Health <= 0
-			or (root.Position - part.Position).Magnitude > PICKUP_DISTANCE + 2 then return end
+			or not InteractionGuard.CanReach(player, part, PICKUP_DISTANCE + 2) then return end
 		if part:GetAttribute("LobbyTestPickup") == true
 			and (player:GetAttribute("InRound") == true or player:GetAttribute("InWaitingRoom") == true) then return end
 		local gained = AmmoSystem.AddReserve(player, kind, qty)

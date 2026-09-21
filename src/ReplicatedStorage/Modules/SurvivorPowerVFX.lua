@@ -172,7 +172,25 @@ function VFX.Play(id: string, character: Model?, position: Vector3, duration: nu
 			local animation = keep(session, Instance.new("Animation"))
 			animation.AnimationId = asset.AnimationId
 			local ok, track = pcall(function() return animator:LoadAnimation(animation) end)
-			if ok then session.track = track; track.Priority = Enum.AnimationPriority.Action; track.Looped = false; track:Play(0.12) end
+			if ok and track then
+				session.track = track
+				-- Colocar a armadilha precisa dominar a locomoção e os braços
+				-- precisam ficar livres durante todo o gesto.
+				track.Priority = if id == "ArmadilhaImprovisada"
+					then Enum.AnimationPriority.Action4
+					else Enum.AnimationPriority.Action
+				track.Looped = false
+				track:Play(0.12)
+				-- O servidor coloca a trap no meio do gesto; mantenha o track
+				-- vivo até o fim mesmo quando a duração enviada for curta.
+				if track.Length > 0 then
+					session.endsAt = math.max(session.endsAt, os.clock() + track.Length + 0.15)
+				end
+			elseif not ok then
+				warn(string.format("[SurvivorPowerVFX] Não foi possível carregar a animação de %s (%s).", id, asset.AnimationId))
+			end
+		elseif id == "ArmadilhaImprovisada" then
+			warn("[SurvivorPowerVFX] Diego não possui Animator; a armadilha será colocada sem animação.")
 		end
 	end
 end

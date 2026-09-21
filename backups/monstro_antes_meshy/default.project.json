@@ -1,0 +1,271 @@
+{
+  "name": "Meujogo",
+  "tree": {
+    "$className": "DataModel",
+
+    "ReplicatedStorage": {
+      "Shared": {
+        "$path": "src/shared"
+      },
+      "Modules": {
+        "$path": "src/ReplicatedStorage/Modules"
+      },
+      "Remotes": {
+        "$path": "src/ReplicatedStorage/Remotes"
+      },
+      "WeaponAssets": {
+        "$path": "src/ReplicatedStorage/WeaponAssets"
+      },
+
+      "RayPart": { "$path": "src/MovementPack/ReplicatedStorage/RayPart.rbxmx" },
+      "ViewModel": { "$path": "src/MovementPack/ReplicatedStorage/ViewModel.rbxmx" },
+      "FallDamageEvent": { "$path": "src/MovementPack/ReplicatedStorage/FallDamageEvent.rbxmx" },
+      "FallSystem": { "$path": "src/MovementPack/ReplicatedStorage/FallSystem.rbxmx" },
+      "MonsterAnimationRig": { "$path": "src/Workspace/R6Monster.rbxmx" }
+    },
+
+    "ReplicatedFirst": {
+      "$path": "src/ReplicatedFirst"
+    },
+
+    "ServerScriptService": {
+      "Server": {
+        "$path": "src/server"
+      },
+
+      "R6Ragdoll": { "$path": "src/MovementPack/ServerScriptService/R6Ragdoll.rbxmx" },
+      "NoCollision": { "$path": "src/MovementPack/ServerScriptService/NoCollision.rbxmx" },
+      "DisableDefaultShiftLock": { "$path": "src/MovementPack/ServerScriptService/DisableDefaultShiftLock.rbxmx" },
+      "DeathRespawnHandler": { "$path": "src/MovementPack/ServerScriptService/DeathRespawnHandler.rbxmx" }
+    },
+
+    "ServerStorage": {
+      "$path": "src/ServerStorage",
+      "GameCharacter": {
+        "$path": "src/StarterPlayer/StarterCharacter.rbxmx"
+      },
+      "GameCharacterScripts": {
+        "$className": "Folder",
+        "Animate": {
+          "$path": "src/MovementPack/StarterCharacterScripts/Animate.rbxmx"
+        }
+      }
+    },
+
+    "StarterPlayer": {
+      "$properties": {
+        "CameraMinZoomDistance": 6,
+        "CameraMaxZoomDistance": 9,
+        "LoadCharacterAppearance": true,
+        "EnableMouseLockOption": false
+      },
+
+      "StarterPlayerScripts": {
+        "Client": {
+          "$path": "src/client"
+        },
+
+        "PlayerModule": { "$path": "src/MovementPack/StarterPlayerScripts/PlayerModule.rbxmx" },
+        "RbxCharacterSounds": { "$path": "src/MovementPack/StarterPlayerScripts/RbxCharacterSounds.rbxmx" },
+        "IK": { "$path": "src/MovementPack/StarterPlayerScripts/IK.rbxmx" },
+        "Footsteps": { "$path": "src/MovementPack/StarterPlayerScripts/Footsteps.rbxmx" },
+        "DeathScreenUI": { "$path": "src/MovementPack/StarterPlayerScripts/DeathScreenUI.rbxmx" },
+        "DamageScreen": { "$path": "src/MovementPack/StarterPlayerScripts/DamageScreen.rbxmx" }
+      },
+
+      "StarterCharacterScripts": {
+        "Crouching": { "$path": "src/MovementPack/StarterCharacterScripts/Crouching.rbxmx" },
+        "CustomShiftLock": { "$path": "src/MovementPack/StarterCharacterScripts/CustomShiftLock.rbxmx" },
+        "Turning": { "$path": "src/MovementPack/StarterCharacterScripts/Turning.rbxmx" }
+      }
+    },
+
+    "StarterGui": {
+      "$path": "src/StarterGui"
+    },
+
+    "StarterPack": {
+      "$className": "StarterPack",
+      "$ignoreUnknownInstances": false
+    },
+
+    "Workspace": {
+      "$properties": {
+        "FilteringEnabled": true,
+        "StreamingEnabled": true,
+        "StreamingMinRadius": 128,
+        "StreamingTargetRadius": 768
+      },
+
+      "R6 Monster": {
+        "$path": "src/Workspace/R6Monster.rbxmx"
+      },
+
+      "R6 novo": {
+        "$path": "rigR6.rbxmx"
+      },
+
+      "R6 Monster Meshy": {
+        "$path": "src/Workspace/R6MonsterMeshy.rbxmx"
+      },
+
+      "LobbyFloor": {
+        "$className": "Part",
+        "$properties": {
+          "Anchored": true,
+          "CanCollide": true,
+          "Color": [0.35, 0.35, 0.4],
+          "Position": [0, 9, -1500],
+          "Size": [60, 2, 60]
+        }
+      },
+
+      "LobbySpawn": {
+        "$className": "SpawnLocation",
+        "$properties": {
+          "Anchored": true,
+          "Neutral": true,
+          "Position": [0, 10.5, -1500],
+          "Size": [8, 1, 8]
+        }
+      },
+
+      "IniciarPartida": {
+        "$className": "Part",
+        "$properties": {
+          "Anchored": true,
+          "CanCollide": true,
+          "Color": [0.2, 0.4, 0.8],
+          "Position": [0, 10.5, -1480],
+          "Size": [4, 1, 4]
+        },
+        "StartPrompt": {
+          "$className": "ProximityPrompt",
+          "$properties": {
+            "ActionText": "Iniciar partida",
+            "ObjectText": "Preparação da partida",
+            "MaxActivationDistance": 10
+          }
+        }
+      },
+
+      "System": {
+        "$className": "Folder",
+        "Tracers": { "$className": "Folder" },
+        "Impacts": { "$className": "Folder" },
+        "Misc": { "$className": "Folder" }
+      },
+
+      "IlhaSpawns": {
+        "$className": "Folder",
+        "IlhaSpawn1": {
+          "$className": "Part",
+          "$properties": { "Anchored": true, "CanCollide": false, "Position": [40, 0.5, -5], "Size": [4, 1, 4] },
+          "$attributes": { "IlhaSpawn": true }
+        },
+        "IlhaSpawn2": {
+          "$className": "Part",
+          "$properties": { "Anchored": true, "CanCollide": false, "Position": [50, 0.5, -5], "Size": [4, 1, 4] },
+          "$attributes": { "IlhaSpawn": true }
+        },
+        "IlhaSpawn3": {
+          "$className": "Part",
+          "$properties": { "Anchored": true, "CanCollide": false, "Position": [60, 0.5, -5], "Size": [4, 1, 4] },
+          "$attributes": { "IlhaSpawn": true }
+        },
+        "IlhaSpawn4": {
+          "$className": "Part",
+          "$properties": { "Anchored": true, "CanCollide": false, "Position": [70, 0.5, -5], "Size": [4, 1, 4] },
+          "$attributes": { "IlhaSpawn": true }
+        },
+        "IlhaSpawn5": {
+          "$className": "Part",
+          "$properties": { "Anchored": true, "CanCollide": false, "Position": [80, 0.5, -5], "Size": [4, 1, 4] },
+          "$attributes": { "IlhaSpawn": true }
+        },
+        "IlhaSpawn6": {
+          "$className": "Part",
+          "$properties": { "Anchored": true, "CanCollide": false, "Position": [40, 0.5, 5], "Size": [4, 1, 4] },
+          "$attributes": { "IlhaSpawn": true }
+        },
+        "IlhaSpawn7": {
+          "$className": "Part",
+          "$properties": { "Anchored": true, "CanCollide": false, "Position": [50, 0.5, 5], "Size": [4, 1, 4] },
+          "$attributes": { "IlhaSpawn": true }
+        },
+        "IlhaSpawn8": {
+          "$className": "Part",
+          "$properties": { "Anchored": true, "CanCollide": false, "Position": [60, 0.5, 5], "Size": [4, 1, 4] },
+          "$attributes": { "IlhaSpawn": true }
+        },
+        "IlhaSpawn9": {
+          "$className": "Part",
+          "$properties": { "Anchored": true, "CanCollide": false, "Position": [70, 0.5, 5], "Size": [4, 1, 4] },
+          "$attributes": { "IlhaSpawn": true }
+        },
+        "IlhaSpawn10": {
+          "$className": "Part",
+          "$properties": { "Anchored": true, "CanCollide": false, "Position": [80, 0.5, 5], "Size": [4, 1, 4] },
+          "$attributes": { "IlhaSpawn": true }
+        }
+      }
+    },
+    "Lighting": {
+      "$properties": {
+        "Ambient": [0.42, 0.43, 0.46],
+        "OutdoorAmbient": [0.58, 0.6, 0.64],
+        "Brightness": 2.3,
+        "ClockTime": 8,
+        "ExposureCompensation": 0,
+        "FogColor": [0.75, 0.77, 0.8],
+        "FogEnd": 1400,
+        "FogStart": 200,
+        "GlobalShadows": true,
+        "Outlines": false,
+        "Technology": "Voxel"
+      },
+      "Atmosphere": {
+        "$className": "Atmosphere",
+        "$properties": {
+          "Density": 0.5,
+          "Offset": 0.25,
+          "Color": [0.76, 0.77, 0.8],
+          "Decay": [0.55, 0.56, 0.6],
+          "Glare": 0,
+          "Haze": 3.6
+        }
+      },
+      "SomberColor": {
+        "$className": "ColorCorrectionEffect",
+        "$properties": {
+          "Brightness": 0,
+          "Contrast": -0.05,
+          "Saturation": -0.25,
+          "TintColor": [0.92, 0.95, 1]
+        }
+      },
+      "LowLightBloom": {
+        "$className": "BloomEffect",
+        "$properties": {
+          "Intensity": 0.08,
+          "Size": 14,
+          "Threshold": 1.2
+        }
+      },
+      "WeakDuskRays": {
+        "$className": "SunRaysEffect",
+        "$properties": {
+          "Intensity": 0,
+          "Spread": 0.75
+        }
+      }
+    },
+    "SoundService": {
+      "$properties": {
+        "RespectFilteringEnabled": true
+      },
+      "Main": { "$path": "src/MovementPack/SoundService/Main.rbxmx" },
+      "FallSounds": { "$path": "src/MovementPack/SoundService/FallSounds.rbxmx" }
+    }
+  }
+}

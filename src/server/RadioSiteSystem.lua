@@ -56,6 +56,9 @@ local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local RadioObjective = require(script.Parent.RadioObjective)
 local WeaponSystem = require(script.Parent.WeaponSystem)
+local InteractionGuard = require(script.Parent.InteractionGuard)
+local RepairMinigameSystem = require(script.Parent.RepairMinigameSystem)
+local GeneratorErrorSound = require(script.Parent.GeneratorErrorSound)
 
 local RadioSiteSystem = {}
 
@@ -168,16 +171,7 @@ local function canAct(player: Player, target: BasePart?): boolean
 	if character:GetAttribute("PowerStunned") == true or character:GetAttribute("GrabLocked") == true then
 		return false
 	end
-	return (root.Position - target.Position).Magnitude <= CFG.AlcanceInteracao
-end
-
-local function distanceTo(player: Player, target: BasePart?): number
-	local character = player.Character
-	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if not target or not root or not root:IsA("BasePart") then
-		return math.huge
-	end
-	return (root.Position - target.Position).Magnitude
+	return InteractionGuard.CanReach(player, target, CFG.AlcanceInteracao)
 end
 
 --------------------------------------------------------------------------------
@@ -292,12 +286,56 @@ local function anyPlayerCarriesGasolina(): boolean
 	return false
 end
 
+-- "Por que esta etapa ainda não pode acontecer", em uma frase ou nil. O
+-- minigame de reparo revalida isto a cada tique (alguém pode gastar o último
+-- galão, sabotar o painel ou desligar o gerador no meio da sua canalização) e
+-- o próprio handler reusa no fim -- uma regra só, dois consumidores.
+local function refuelBlocked(player: Player): string?
+	if getNumber("Combustivel") >= CFG.CombustivelMaximo then
+		return "O tanque do gerador já está cheio."
+	end
+	if not carriedGasolina(player) and not nearestFullCan() then
+		return "Não sobrou combustível: nem galão no local, nem Gasolina no inventário."
+	end
+	return nil
+end
+
+local function starterBlocked(_player: Player): string?
+	if isSabotaged() then
+		return "Tem cabo cortado aqui. Repare antes de dar partida."
+	end
+	if not getFlag("FusivelInstalado") then
+		return "Sem fusível na caixa, o gerador não arranca."
+	end
+	if getNumber("Combustivel") <= 0 then
+		return "Tanque seco. Despeje um galão primeiro."
+	end
+	return nil
+end
+
+local function panelBlocked(_player: Player): string?
+	if getFlag("PainelAtivo") then
+		return "O transmissor já está energizado."
+	end
+	if not getFlag("GeradorLigado") then
+		return "O painel está morto. Ligue o gerador."
+	end
+	if not piecesInstalled() then
+		return "Faltam peças no rack: antena, bateria e transmissor."
+	end
+	if isSabotaged() then
+		return "Sabotaram o painel. Repare o fio antes."
+	end
+	return nil
+end
+
 local function onRefuel(player: Player)
 	if not canAct(player, hosts.Abastecer) then
 		return
 	end
-	if getNumber("Combustivel") >= CFG.CombustivelMaximo then
-		Remotes.LobbyMessage:FireClient(player, "O tanque do gerador já está cheio.")
+	local blocked = refuelBlocked(player)
+	if blocked then
+		Remotes.LobbyMessage:FireClient(player, blocked)
 		return
 	end
 
@@ -315,6 +353,8 @@ local function onRefuel(player: Player)
 
 	local can = nearestFullCan()
 	if not can then
+		-- refuelBlocked já cobriu este caso; a guarda fica como rede de
+		-- segurança pra qualquer chamador futuro que pule a checagem.
 		Remotes.LobbyMessage:FireClient(player, "Não sobrou combustível: nem galão no local, nem Gasolina no inventário.")
 		return
 	end
@@ -413,16 +453,9 @@ local function onStarter(player: Player)
 		print(string.format("[RadioSite] %s desligou o gerador.", player.Name))
 		return
 	end
-	if isSabotaged() then
-		Remotes.LobbyMessage:FireClient(player, "Tem cabo cortado aqui. Repare antes de dar partida.")
-		return
-	end
-	if not getFlag("FusivelInstalado") then
-		Remotes.LobbyMessage:FireClient(player, "Sem fusível na caixa, o gerador não arranca.")
-		return
-	end
-	if getNumber("Combustivel") <= 0 then
-		Remotes.LobbyMessage:FireClient(player, "Tanque seco. Despeje um galão primeiro.")
+	local blocked = starterBlocked(player)
+	if blocked then
+		Remotes.LobbyMessage:FireClient(player, blocked)
 		return
 	end
 
@@ -436,16 +469,16 @@ local function onPanel(player: Player)
 	if not canAct(player, hosts.Painel) then
 		return
 	end
-	Remotes.TransmissionMinigame:FireClient(player, "OpenPanel")
-	if getFlag("PainelAtivo") then
-		return
-	end
-	if not getFlag("GeradorLigado") then
-		Remotes.LobbyMessage:FireClient(player, "O painel está morto. Ligue o gerador.")
-		return
-	end
-	if not piecesInstalled() then
-		Remotes.LobbyMessage:FireClient(player, "Faltam peças no rack: antena, bateria e transmissor.")
+	-- A arte em tela cheia do painel (TransmissionMinigame "OpenPanel") era o
+	-- marcador de "minigame do painel vira etapa futura". Essa etapa agora é
+	-- o reparo de precisão, que roda numa faixa embaixo da tela SEM tapar a
+	-- visão -- abrir o modal junto esconderia o próprio minigame. A caixa de
+	-- fusíveis ("OpenFuse") continua usando aquela UI, intacta.
+	local blocked = panelBlocked(player)
+	if blocked then
+		if not getFlag("PainelAtivo") then
+			Remotes.LobbyMessage:FireClient(player, blocked)
+		end
 		return
 	end
 
@@ -510,14 +543,26 @@ type PromptSpec = {
 	object: string,
 	hold: number,
 	handler: (Player) -> (),
+	-- Etapas que eram "segure E por alguns segundos" agora abrem o reparo de
+	-- precisão. `repairTask` é a chave em RepairMinigameConfig.Tasks; sem ela
+	-- o prompt continua exatamente como era (as duas do fusível e o socorro
+	-- são toque instantâneo e canalização própria, não reparo).
+	repairTask: string?,
+	blocked: ((Player) -> string?)?,
 }
 
 local PROMPT_SPECS: { [string]: PromptSpec } = {
-	Abastecer = { name = "AbastecerGerador", action = "Abastecer", object = "Gerador", hold = CFG.HoldAbastecer, handler = onRefuel },
-	Partida = { name = "LigarGerador", action = "Ligar gerador", object = "Gerador", hold = CFG.HoldPartida, handler = onStarter },
+	-- Abastecer segue como "segurar E": o ProximityPrompt de segurar dispara
+	-- PromptButtonHoldBegan, que é o que liga a pose de interação
+	-- (FearPresentation). Sem repairTask, ensurePrompt não converte em minigame.
+	Abastecer = { name = "AbastecerGerador", action = "Abastecer", object = "Gerador", hold = CFG.HoldAbastecer,
+		handler = onRefuel },
+	Partida = { name = "LigarGerador", action = "Ligar gerador", object = "Gerador", hold = CFG.HoldPartida,
+		handler = onStarter, repairTask = "RadioPartida", blocked = starterBlocked },
 	Fusivel = { name = "InstalarFusivel", action = "Abrir", object = "Caixa de fusíveis", hold = 0, handler = onOpenFuse },
 	PegarFusivel = { name = "PegarFusivel", action = "Pegar", object = "Fusível reserva", hold = 0, handler = onTakeFuse },
-	Painel = { name = "AtivarPainel", action = "Ativar painel", object = "Painel de controle", hold = CFG.HoldPainel, handler = onPanel },
+	Painel = { name = "AtivarPainel", action = "Ativar painel", object = "Painel de controle", hold = CFG.HoldPainel,
+		handler = onPanel, repairTask = "RadioPainel", blocked = panelBlocked },
 	Socorro = { name = "EnviarSocorro", action = "Enviar socorro", object = "Rádio de emergência", hold = 0, handler = onSignal },
 }
 
@@ -533,13 +578,48 @@ local function ensurePrompt(host: BasePart, key: string): ProximityPrompt?
 	prompt.ObjectText = spec.object
 	prompt.HoldDuration = spec.hold
 	prompt.MaxActivationDistance = math.max(4, CFG.AlcanceInteracao - 2)
+	-- O bocal fica parcialmente embutido/acima do corpo do gerador. Deixe o
+	-- prompt aparecer quando o jogador está no alcance; a validação autoritativa
+	-- de distância e oclusão continua em canAct()/InteractionGuard.CanReach().
 	prompt.RequiresLineOfSight = false
 	prompt.KeyboardKeyCode = Enum.KeyCode.E
 	prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
 	prompt.ClickablePrompt = true
 	prompt.Enabled = false
 	prompt.Parent = host
-	prompt.Triggered:Connect(spec.handler)
+
+	local repairTask = spec.repairTask
+	if not repairTask then
+		prompt.Triggered:Connect(spec.handler)
+		return prompt
+	end
+
+	local repairSpec = {
+		taskId = repairTask,
+		configId = repairTask,
+		part = host,
+		range = CFG.AlcanceInteracao,
+		canStart = function(player: Player): (boolean, string?)
+			if not canAct(player, host) then
+				return false, nil
+			end
+			local blocked = spec.blocked and (spec.blocked :: (Player) -> string?)(player)
+			return blocked == nil, blocked
+		end,
+		onComplete = spec.handler,
+	}
+
+	-- Bind zeraria o HoldDuration e mandaria TODO toque pro minigame. A
+	-- partida precisa decidir antes: DESLIGAR o gerador é um botão, não um
+	-- reparo -- ninguém joga um minigame pra apagar a própria luz.
+	prompt.HoldDuration = 0
+	prompt.Triggered:Connect(function(player: Player)
+		if key == "Partida" and getFlag("GeradorLigado") then
+			spec.handler(player)
+			return
+		end
+		RepairMinigameSystem.Start(player, repairSpec)
+	end)
 	return prompt
 end
 
@@ -718,7 +798,8 @@ local function stillTransmitting(player: Player): boolean
 	if character:GetAttribute("PowerStunned") == true or character:GetAttribute("GrabLocked") == true then
 		return false
 	end
-	return distanceTo(player, hosts.Socorro) <= CFG.SinalRaio
+	local console = hosts.Socorro
+	return console ~= nil and InteractionGuard.CanReach(player, console, CFG.SinalRaio)
 end
 
 local function updateBeacons(now: number)
@@ -975,6 +1056,13 @@ function RadioSiteSystem.Reset()
 		panel:SetAttribute("Sabotado", false)
 	end
 
+	-- Reparo parcial de uma rodada não pode ser herdado pela próxima.
+	for _, spec in PROMPT_SPECS do
+		if spec.repairTask then
+			RepairMinigameSystem.ResetTask(spec.repairTask :: string)
+		end
+	end
+
 	Remotes.ObjectiveProgress:FireAllClients("RadioSocorro", 0, 100)
 	syncSounds()
 	refreshPrompts()
@@ -1016,6 +1104,10 @@ function RadioSiteSystem.Init()
 	fuseHome = if fuse then fuse.CFrame else nil
 	setupEffects()
 	watchSabotage()
+
+	-- Onde o choque 3D do erro de minigame toca (GameConfig.RadioSite.ErroGerador).
+	-- Mapa antigo sem MotorGerador cai no painel de partida, que fica ao lado.
+	GeneratorErrorSound.SetGenerator(engine or hosts.Partida)
 
 	for _, player in Players:GetPlayers() do
 		watchPlayer(player)

@@ -20,6 +20,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local FlashlightRules = require(ReplicatedStorage.Modules.FlashlightRules)
 local RunService = game:GetService("RunService")
 local ContextActionService = game:GetService("ContextActionService")
 local UserInputService = game:GetService("UserInputService")
@@ -383,7 +384,7 @@ end
 
 local function onMapPick(point: Vector3)
 	local char = character
-	if not char or char:GetAttribute("TeleportBusy") == true or char:GetAttribute("ShadowRushBusy") == true
+	if not char or FlashlightRules.PowerBlocked(char) or char:GetAttribute("TeleportBusy") == true or char:GetAttribute("ShadowRushBusy") == true
 		or char:GetAttribute("GrabLocked") == true then
 		closeMap()
 		return
@@ -455,7 +456,7 @@ local function toggleMap()
 		return
 	end
 	local char = character
-	if not char or char:GetAttribute("TeleportBusy") == true or char:GetAttribute("ShadowRushBusy") == true
+	if not char or FlashlightRules.PowerBlocked(char) or char:GetAttribute("TeleportBusy") == true or char:GetAttribute("ShadowRushBusy") == true
 		or char:GetAttribute("GrabLocked") == true then
 		return
 	end

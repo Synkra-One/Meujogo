@@ -40,9 +40,8 @@
 	nome (rotor/hélice/blade/...) e gira por frame. Se o modelo voar de lado,
 	é só ajustar GameConfig.Extraction.GuinadaModelo.
 
-	Igual à Jangada (RaftObjective), não restrinjo por papel: um Espião
-	infiltrado também consegue embarcar. Quem decide o vencedor é o
-	RoundManager.
+	Não restrinjo por papel: um Espião infiltrado também consegue embarcar.
+	Quem decide o vencedor é o RoundManager.
 
 	ONDE FICA A ZONA: na praia do lado OPOSTO ao site "Radio" do IslandLayout
 	-- a corrida final atravessa a ilha inteira, com o Monstro sabendo
@@ -67,7 +66,7 @@ local Layout = require(script.Parent.Tools.IslandLayout)
 local ExtractionSystem = {}
 
 -- Disparado com a lista de quem estava a bordo na decolagem. RoundManager
--- escuta e encerra a partida (mesmo contrato de RaftObjective.RaftEscaped).
+-- escuta e encerra a partida quando o helicóptero parte.
 ExtractionSystem.SurvivorsExtracted = Instance.new("BindableEvent")
 
 local CFG = GameConfig.Extraction
@@ -177,7 +176,7 @@ end
 	findBeachSpot()
 	Ponto de areia na praia do lado oposto à Estação de Rádio. Anda de fora
 	pra dentro a partir da costa até achar Sand acima da linha d'água; se a
-	direção escolhida não servir (falésia, o lago, a própria jangada), gira
+	direção escolhida não servir (falésia ou o lago), gira
 	alguns graus e tenta de novo.
 ]]
 local function findBeachSpot(): Vector3?
@@ -193,8 +192,6 @@ local function findBeachSpot(): Vector3?
 		baseAngle = (Layout.Seed() % 360) * math.pi / 180
 	end
 
-	local raft = Workspace:FindFirstChild("LocalJangada", true)
-	local raftPos = if raft and raft:IsA("BasePart") then raft.Position else nil
 	local beach = Layout.CONFIG.BeachWidth
 	local seaLevel = Layout.CONFIG.SeaLevel
 
@@ -213,10 +210,7 @@ local function findBeachSpot(): Vector3?
 			local y, material = groundAt(x, z)
 			if y and material == Enum.Material.Sand and y > seaLevel + 1 then
 				local spot = Vector3.new(x, y, z)
-				-- Não em cima da jangada: são duas fugas diferentes.
-				if not raftPos or (Vector3.new(spot.X - raftPos.X, 0, spot.Z - raftPos.Z)).Magnitude > CFG.Raio * 3 then
-					return spot
-				end
+				return spot
 			end
 		end
 	end
@@ -645,7 +639,7 @@ local function spinRotor(dt: number)
 end
 
 -- Passageiros acompanham o helicóptero pela pose relativa do assento (mesmo
--- truque da Jangada: root ancorado + CFrame por frame).
+-- truque de manter o root ancorado + CFrame por frame).
 local function lockPassengers()
 	local model = helicopter
 	if not model then

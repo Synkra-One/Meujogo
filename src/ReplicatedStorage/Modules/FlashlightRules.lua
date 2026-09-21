@@ -55,11 +55,32 @@ function Rules.ValidDirection(direction: any): boolean
 	return length == length and length > 0.9 and length < 1.1
 end
 
-function Rules.InCone(origin: Vector3, direction: Vector3, point: Vector3): boolean
+function Rules.InCone(origin: Vector3, direction: Vector3, point: Vector3, range: number?, angle: number?): boolean
 	local offset = point - origin
 	local distance = offset.Magnitude
-	return distance > 0.01 and distance <= Config.FlashlightRange
-		and direction:Dot(offset / distance) >= math.cos(math.rad(Config.BeamAngle / 2))
+	return distance > 0.01 and distance <= (range or Config.FlashlightRange)
+		and direction:Dot(offset / distance) >= math.cos(math.rad((angle or Config.BeamAngle) / 2))
+end
+
+function Rules.ValidBurstAim(root: BasePart?, direction: any): boolean
+	if not root or not Rules.ValidDirection(direction) then return false end
+	local aim = root.CFrame:VectorToObjectSpace(direction.Unit)
+	return math.abs(math.asin(math.clamp(aim.Y, -1, 1))) <= math.rad(Config.FlashBurstMaxAimPitch)
+		and math.abs(math.atan2(-aim.X, -aim.Z)) <= math.rad(Config.FlashBurstMaxAimYaw)
+end
+
+-- Shared by monster inputs and server entry points. A distinct flag avoids
+-- clearing somebody else's stun when the flashlight's power lock expires.
+function Rules.PowerBlocked(character: Model?): boolean
+	return character ~= nil and (character:GetAttribute("PowerStunned") == true
+		or character:GetAttribute("FlashPowerBlocked") == true)
+end
+
+function Rules.BurstEnvelope(now: number, startedAt: number, endsAt: number): number
+	if now < startedAt or now >= endsAt or endsAt <= startedAt then return 0 end
+	local attack = math.clamp((now - startedAt) / 0.08, 0, 1)
+	local fade = math.clamp((endsAt - now) / math.max(0.1, (endsAt - startedAt) * 0.75), 0, 1)
+	return attack * fade * fade * (3 - 2 * fade)
 end
 
 return Rules

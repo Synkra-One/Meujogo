@@ -29,13 +29,12 @@ local MapMarkers = {}
 
 MapMarkers.Category = {
 	Firearm = "Firearm", -- armas de fogo (hoje só a Glock17)
-	Melee = "Melee", -- Faca Improvisada, Lança de Bambu, Pedra Afiada
+	Melee = "Melee", -- Faca Improvisada, Crowbar, Wrench
 	Light = "Light", -- Tocha, Lanterna
 	Heal = "Heal", -- Chocolate, Bandagem
-	Material = "Material", -- Madeira, Corda, Lona
 	Radio = "Radio", -- Antena, Bateria, Transmissor
 	Fuel = "Fuel", -- Gasolina
-	Rare = "Rare", -- Lança Ancestral
+	Rare = "Rare", -- Crowbar Ancestral
 	Crate = "Crate", -- caixa de loot (sem itemId específico)
 }
 
@@ -44,7 +43,6 @@ local STYLE: { [string]: { Color: Color3, Glyph: string } } = {
 	[MapMarkers.Category.Melee] = { Color = Color3.fromRGB(196, 164, 130), Glyph = "/" },
 	[MapMarkers.Category.Light] = { Color = Color3.fromRGB(240, 200, 120), Glyph = "L" },
 	[MapMarkers.Category.Heal] = { Color = Color3.fromRGB(120, 220, 150), Glyph = "+" },
-	[MapMarkers.Category.Material] = { Color = Color3.fromRGB(190, 160, 110), Glyph = "M" },
 	[MapMarkers.Category.Radio] = { Color = Color3.fromRGB(150, 200, 240), Glyph = "R" },
 	[MapMarkers.Category.Fuel] = { Color = Color3.fromRGB(230, 140, 60), Glyph = "G" },
 	[MapMarkers.Category.Rare] = { Color = Color3.fromRGB(233, 193, 99), Glyph = "★" },
@@ -57,13 +55,11 @@ local ITEM_CATEGORY: { [string]: string } = {
 	FacaImprovisada = MapMarkers.Category.Melee,
 	LancaDeBambu = MapMarkers.Category.Melee,
 	PedraAfiada = MapMarkers.Category.Melee,
-	Tocha = MapMarkers.Category.Light,
+	TacoBeisebol = MapMarkers.Category.Melee,
+	Tocha =MapMarkers.Category.Light,
 	Lanterna = MapMarkers.Category.Light,
 	Chocolate = MapMarkers.Category.Heal,
 	Bandagem = MapMarkers.Category.Heal,
-	Madeira = MapMarkers.Category.Material,
-	Corda = MapMarkers.Category.Material,
-	Lona = MapMarkers.Category.Material,
 	Antena = MapMarkers.Category.Radio,
 	Bateria = MapMarkers.Category.Radio,
 	Transmissor = MapMarkers.Category.Radio,

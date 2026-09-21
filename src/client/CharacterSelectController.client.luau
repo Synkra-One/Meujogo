@@ -1,10 +1,10 @@
 --!strict
 --[[
 	CharacterSelectController
-	Preparação exclusiva da sala de espera: personagem, skin, perk e pronto.
+	Preparação do lobby: skin, perk e pronto.
 	Não abre no lobby inicial. O shell fica em StarterGui/CharacterSelectUI.model.json;
-	os CARDS são montados aqui a partir de Modules/CharacterData -- adicionar
-	um personagem novo lá faz o card aparecer sozinho, sem tocar em UI.
+	a escolha de sobrevivente em si vive na tela dedicada
+	SurvivorSelectionController, aberta depois que todos ficam prontos.
 
 	CADA CARD tem: nome, apelido, os 7 atributos em barra (com o número),
 	a passiva única quando existe, e o total (sempre 350).
@@ -43,7 +43,7 @@ local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
-title.Text = "SALA DE ESPERA"
+title.Text = "PREPARAÇÃO DA PARTIDA"
 title.TextSize = 23
 title.Position = UDim2.fromOffset(0, 8)
 subtitle.Position = UDim2.fromOffset(12, 44)
@@ -56,7 +56,7 @@ footer.TextSize = 13
 closeButton.Position = UDim2.new(0, 16, 1, -14)
 closeButton.AnchorPoint = Vector2.new(0, 1)
 closeButton.Size = UDim2.new(0.3, -16, 0, 42)
-closeButton.Text = "Ver sala"
+closeButton.Text = "Ver preparação"
 closeButton.TextSize = 14
 
 local function actionButton(name: string, text: string, x: number, color: Color3): TextButton
@@ -405,10 +405,12 @@ end
 -- Visibilidade
 --------------------------------------------------------------------------------
 
-local function setVisible(visible: boolean)
+local function setVisible(visible: boolean, keepCursorFree: boolean?)
 	visible = visible and (inRoom or selectingCharacter)
 	gui.Enabled = visible
-	reopen.Visible = (inRoom or selectingCharacter) and not visible
+	-- O fluxo normal deixa a tela completamente limpa. O atalho de reabertura
+	-- continua disponível apenas pela tecla M, sem manter um botão sobre o jogo.
+	reopen.Visible = false
 	readyButton.Visible = inRoom
 	leaveButton.Visible = inRoom
 	cardArea.Visible = selectingCharacter
@@ -419,8 +421,8 @@ local function setVisible(visible: boolean)
 		closeButton.Text = "Escolher depois"
 		reopen.Text = "Escolher personagem  [C]"
 	else
-		title.Text = "SALA DE ESPERA"
-		closeButton.Text = "Ver sala"
+		title.Text = "PREPARAÇÃO DA PARTIDA"
+		closeButton.Text = "Ver preparação"
 		reopen.Text = "Preparar skin/perk  [C]"
 	end
 	layoutPanels()
@@ -429,7 +431,21 @@ local function setVisible(visible: boolean)
 	-- (SmoothShiftLock, pacote de movimento) trava a mira no centro; ela lê
 	-- este Attribute e solta o mouse enquanto ele estiver true. Some quando
 	-- a tela fecha -> a mira volta pro centro pra jogar.
-	LocalPlayer:SetAttribute("CursorLivre", visible or nil)
+	-- Durante Revealing/Starting a tela de preparacao fecha, mas a partida
+	-- ainda nao assumiu a camera. Nao teleporte a mira para o centro nesse
+	-- intervalo; o estado Playing fara a troca uma unica vez.
+	-- A tela dedicada de escolha (SurvivorSelectionController) assume o mouse
+	-- nesta fase. Este controller antigo continua responsável apenas pela
+	-- preparação do lobby; nunca pode travar a mira no centro por causa de uma
+	-- mudança de CharacterSelectOpen/Role enquanto a escolha está aberta.
+	local dedicatedSelection = playerGui:FindFirstChild("SurvivorSelectionUI")
+	local selectionOwnsCursor = player:GetAttribute("CharacterSelectOpen") == true
+		or ReplicatedStorage:GetAttribute("MatchState") == "Selecting"
+		or (dedicatedSelection and (dedicatedSelection :: ScreenGui).Enabled == true)
+	local cursorFree = visible or keepCursorFree == true or selectionOwnsCursor
+	LocalPlayer:SetAttribute("CursorLivre", if cursorFree then true else nil)
+	UserInputService.MouseBehavior = if cursorFree then Enum.MouseBehavior.Default else Enum.MouseBehavior.LockCenter
+	UserInputService.MouseIconEnabled = cursorFree
 
 	if visible then
 		overlay.BackgroundTransparency = 1
@@ -496,19 +512,31 @@ local function refreshCards()
 end
 
 Remotes.CharacterRoster.OnClientEvent:Connect(function(newRoster)
-	roster = if type(newRoster) == "table" then newRoster else {}
+	-- O contrato novo envia um snapshot completo. Aceitar a tabela crua tambem
+	-- mantém compatibilidade com servidores antigos durante Studio Play.
+	roster = if type(newRoster) == "table" and type(newRoster.roster) == "table"
+		then newRoster.roster
+		elseif type(newRoster) == "table" then newRoster
+		else {}
 	refreshCards()
 end)
 
 --------------------------------------------------------------------------------
--- Só aparece para quem entrou na sala de espera
+-- Só aparece para quem entrou na fila da partida
 --------------------------------------------------------------------------------
 
 closeButton.Activated:Connect(function()
 	setVisible(false)
 end)
 reopen.Activated:Connect(function() setVisible(true) end)
-readyButton.Activated:Connect(function() Remotes.WaitingRoom:FireServer("Ready") end)
+readyButton.Activated:Connect(function()
+	-- Mantém o ponteiro disponível no instante do clique, antes mesmo do
+	-- próximo Heartbeat atualizar o painel.
+	LocalPlayer:SetAttribute("CursorLivre", true)
+	UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+	UserInputService.MouseIconEnabled = true
+	Remotes.WaitingRoom:FireServer("Ready")
+end)
 leaveButton.Activated:Connect(function() Remotes.WaitingRoom:FireServer("Leave") end)
 
 UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
@@ -555,18 +583,16 @@ Remotes.WaitingRoom.OnClientEvent:Connect(function(newSnapshot)
 		button.BackgroundColor3 = if selectedDevRole == id then Color3.fromRGB(109, 45, 45) else Color3.fromRGB(32, 38, 43)
 	end
 	refreshCards()
-	setVisible(inRoom and (not wasInRoom or gui.Enabled))
+	local preserveCursor = (snapshot.state == "Revealing" or snapshot.state == "Starting") and not inRoom
+	setVisible(inRoom and (not wasInRoom or gui.Enabled), preserveCursor)
 end)
 
 local function refreshCharacterSelectionState()
-	local role = LocalPlayer:GetAttribute("Role")
-	selectingCharacter = LocalPlayer:GetAttribute("CharacterSelectOpen") == true
-		and type(role) == "string"
-		and role ~= GameConfig.Roles.Monster
+	-- A tela profissional dedicada é dona desta fase. Este controller continua
+	-- exclusivamente com skin/perk/pronto e fecha assim que a seleção começa.
+	selectingCharacter = false
 	refreshCards()
-	if selectingCharacter then
-		setVisible(true)
-	elseif not inRoom and gui.Enabled then
+	if not inRoom and gui.Enabled then
 		setVisible(false)
 	else
 		layoutPanels()
@@ -577,6 +603,15 @@ LocalPlayer:GetAttributeChangedSignal("CharacterSelectOpen"):Connect(refreshChar
 LocalPlayer:GetAttributeChangedSignal("Role"):Connect(refreshCharacterSelectionState)
 
 RunService.Heartbeat:Connect(function()
+	-- Enquanto o painel de preparação estiver visível, ele é o dono do
+	-- ponteiro. O ShiftLock e o menu podem tentar restaurar o LockCenter no
+	-- mesmo frame em que o jogador clica em Pronto; reaplicar aqui mantém o
+	-- cursor visível e clicável.
+	if inRoom and gui.Enabled then
+		LocalPlayer:SetAttribute("CursorLivre", true)
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+		UserInputService.MouseIconEnabled = true
+	end
 	if selectingCharacter then
 		local role = LocalPlayer:GetAttribute("Role")
 		subtitle.Text = string.format(

@@ -96,6 +96,7 @@ function Pose.new(playTracks: boolean?)
 		character = nil :: Model?,
 		humanoid = nil :: Humanoid?,
 		joints = { right = nil, left = nil, neck = nil } :: JointSet,
+		applied = {} :: { [Motor6D]: { base: CFrame, result: CFrame } },
 		tracks = {} :: TrackSet,
 		animations = {} :: { Animation },
 		failedStates = {} :: { [string]: boolean },
@@ -111,11 +112,12 @@ function Pose.new(playTracks: boolean?)
 		leftPose = CFrame.identity,
 		neckPose = CFrame.identity,
 		stepTime = 0,
+		burstAt = -math.huge,
 	}, Pose)
 end
 
 local function priorityFor(name: string): Enum.AnimationPriority
-	if name == "Click" then return Enum.AnimationPriority.Action3 end
+	if name == "Click" or name == "Burst" then return Enum.AnimationPriority.Action3 end
 	if name == "Equip" then return Enum.AnimationPriority.Action2 end
 	return Enum.AnimationPriority.Action
 end
@@ -203,6 +205,7 @@ function Pose:SetTool(tool: Tool?)
 end
 
 function Pose:Clear()
+	self:Reset()
 	for _, track in self.tracks do
 		track:Stop(0)
 		track:Destroy()
@@ -211,9 +214,6 @@ function Pose:Clear()
 	for _, animation in self.animations do animation:Destroy() end
 	table.clear(self.animations)
 	table.clear(self.failedStates)
-	for _, joint in self.joints do
-		if joint and joint.Parent then joint.Transform = CFrame.identity end
-	end
 	self.tool = nil
 	self.character = nil
 	self.humanoid = nil
@@ -230,6 +230,12 @@ function Pose:Clear()
 	self.leftPose = CFrame.identity
 	self.neckPose = CFrame.identity
 	self.stepTime = 0
+	self.burstAt = -math.huge
+end
+
+function Pose:PlayBurst()
+	self.burstAt = os.clock()
+	self:_playOnce("Burst")
 end
 
 function Pose:PlayClick()
@@ -275,11 +281,55 @@ local function statePose(state: string, authoredIdle: boolean): (Vector3, Vector
 	return Vector3.new(-31, 8, 20), Vector3.new(-15, -7, -13), 0
 end
 
-local function applyAdditive(joint: Motor6D?, delta: CFrame)
+-- Called in PreAnimation, before the Animator evaluates this frame. Restore
+-- only our own write, including joints that the current clip does not key.
+-- Otherwise an unkeyed neck/shoulder accumulates the offset every frame.
+function Pose:Reset()
+	for joint, applied in self.applied do
+		if joint.Parent and joint.Transform == applied.result then
+			joint.Transform = applied.base
+		end
+	end
+	table.clear(self.applied)
+end
+
+function Pose:_apply(joint: Motor6D?, transform: CFrame)
 	if not joint or not joint.Parent then return end
-	-- Animator escreve a pose-base em Transform antes do RenderStep; a mira
-	-- entra depois, sem apagar o idle publicado nem a locomocao do pacote.
-	joint.Transform = joint.Transform * delta
+	self.applied[joint] = { base = joint.Transform, result = transform }
+	joint.Transform = transform
+end
+
+local function parentSpacePose(joint: Motor6D, delta: CFrame): CFrame
+	-- R6 shoulders and neck have rotated C0 axes. A torso-space pitch must
+	-- be converted to joint space BEFORE the authored animation, not appended
+	-- as a local X rotation (which rolls a raised R6 arm sideways).
+	local basis = joint.C0.Rotation
+	return basis:Inverse() * delta * basis * joint.Transform
+end
+
+local function rotationBetween(from: Vector3, to: Vector3): CFrame
+	local dot = math.clamp(from:Dot(to), -1, 1)
+	local axis = from:Cross(to)
+	if axis.Magnitude < 0.00001 then
+		if dot > 0 then return CFrame.identity end
+		axis = from:Cross(if math.abs(from.Y) < 0.9 then Vector3.yAxis else Vector3.xAxis)
+	end
+	return CFrame.fromAxisAngle(axis.Unit, math.acos(dot))
+end
+
+function Pose:_aimShoulder(joint: Motor6D, base: CFrame, direction: Vector3, weight: number): CFrame
+	local origin = self.tool and self.tool:FindFirstChild("FlashlightOrigin", true)
+	local parent, arm = joint.Part0, joint.Part1
+	if not origin or not origin:IsA("Attachment") or not parent or not arm then return base end
+	-- Predict the lens from THIS animation's transform. Part CFrames still
+	-- contain the previous simulation pose here; reading just WorldCFrame
+	-- would feed yesterday's correction back into the shoulder and oscillate.
+	local armToLens = arm.CFrame:ToObjectSpace(origin.WorldCFrame)
+	local frame = parent.CFrame * joint.C0
+	local lens = frame * base * joint.C1:Inverse() * armToLens
+	local correction = CFrame.identity:Lerp(rotationBetween(lens.LookVector, direction), weight)
+	local basis = frame.Rotation
+	return basis:Inverse() * correction * basis * base
 end
 
 function Pose:Update(direction: Vector3, aiming: boolean, dt: number)
@@ -313,12 +363,10 @@ function Pose:Update(direction: Vector3, aiming: boolean, dt: number)
 	self.movementBlend = smooth(self.movementBlend, math.clamp(speed / 12, 0, 1), 9, dt)
 
 	local localAim = if rootPart then rootPart.CFrame:VectorToObjectSpace(direction) else direction
-	-- In Roblox, a positive X rotation raises the -Z look axis.  Keep this
-	-- sign aligned with Camera.CFrame.LookVector: looking up lifts the arms
-	-- and head; looking down lowers them.  The prior inverse sign made the
-	-- visual beam follow the camera while the held Tool pose lagged/opposed it.
-	local targetPitch = math.clamp(math.asin(math.clamp(localAim.Y, -1, 1)), math.rad(-65), math.rad(65))
-	local targetYaw = math.clamp(math.atan2(-localAim.X, -localAim.Z), math.rad(-55), math.rad(55))
+	local targetPitch = math.clamp(math.asin(math.clamp(localAim.Y, -1, 1)),
+		-math.rad(Config.AimPitchLimit), math.rad(Config.AimPitchLimit))
+	local targetYaw = math.clamp(math.atan2(-localAim.X, -localAim.Z),
+		-math.rad(Config.AimYawLimit), math.rad(Config.AimYawLimit))
 	self.pitch = smooth(self.pitch, targetPitch, Config.PoseAimResponsiveness, dt)
 	self.yaw = smooth(self.yaw, targetYaw, Config.PoseAimResponsiveness, dt)
 	local pitch, yaw = self.pitch, self.yaw
@@ -327,7 +375,8 @@ function Pose:Update(direction: Vector3, aiming: boolean, dt: number)
 	local forward = math.clamp(-localVelocity.Z / 14, -1, 1)
 	local backpedal = math.clamp(-forward, 0, 1)
 	local idleTrack = self.tracks.Idle
-	local authoredIdle = idleTrack ~= nil and idleTrack.IsPlaying and not self.failedStates.Idle
+	-- Other players already receive the owner's animation tracks via Animator.
+	local authoredIdle = not self.playTracks or (idleTrack ~= nil and idleTrack.IsPlaying and not self.failedStates.Idle)
 	local rightBase, leftBase, bobScale = statePose(state, authoredIdle)
 	local frequency = if state == "Sprint" then 11 elseif state == "Walk" then 7 elseif state == "CrouchWalk" then 5 else 1.25
 	self.stepTime += dt * frequency
@@ -338,8 +387,8 @@ function Pose:Update(direction: Vector3, aiming: boolean, dt: number)
 	local aim, hold = self.aimBlend, self.equipBlend
 
 	local right = CFrame.Angles(
-		math.rad(rightBase.X) + stride + breathe + pitch * Config.RightAimPitch * aim + math.rad(5) * backpedal,
-		math.rad(rightBase.Y) + yaw * Config.RightAimYaw * aim + counter + sway,
+		math.rad(rightBase.X) + stride + breathe + math.rad(5) * backpedal,
+		math.rad(rightBase.Y) + counter + sway,
 		math.rad(rightBase.Z) + math.rad(10) * aim - math.rad(10) * side
 	)
 	local left = CFrame.Angles(
@@ -355,9 +404,19 @@ function Pose:Update(direction: Vector3, aiming: boolean, dt: number)
 	self.neckPose = self.neckPose:Lerp(CFrame.identity:Lerp(neck, hold), poseAlpha)
 
 	local joints = self.joints
-	applyAdditive(joints.right, self.rightPose)
-	applyAdditive(joints.left, self.leftPose)
-	applyAdditive(joints.neck, self.neckPose)
+	if joints.right then
+		local aimFrame = CFrame.Angles(0, yaw, 0) * CFrame.Angles(pitch, 0, 0)
+		local burstAt = if self.playTracks then self.burstAt else tool:GetAttribute("FlashBurstAt") or -math.huge
+		local elapsed = (if self.playTracks then os.clock() else workspace:GetServerTimeNow()) - burstAt
+		local recoil = if elapsed >= 0 and elapsed < Config.FlashBurstVisualDuration
+			then math.sin(elapsed / Config.FlashBurstVisualDuration * math.pi) * math.rad(4) else 0
+		aimFrame *= CFrame.Angles(recoil, 0, 0)
+		local aimedDirection = if rootPart then rootPart.CFrame:VectorToWorldSpace(aimFrame.LookVector) else aimFrame.LookVector
+		local base = parentSpacePose(joints.right, self.rightPose)
+		self:_apply(joints.right, self:_aimShoulder(joints.right, base, aimedDirection, aim * hold))
+	end
+	if joints.left then self:_apply(joints.left, parentSpacePose(joints.left, self.leftPose)) end
+	if joints.neck then self:_apply(joints.neck, parentSpacePose(joints.neck, self.neckPose)) end
 end
 
 function Pose:Destroy()

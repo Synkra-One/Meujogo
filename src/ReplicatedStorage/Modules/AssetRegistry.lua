@@ -47,6 +47,32 @@ AssetRegistry.Monstro_Modelo = {
 	Placeholder = {
 		TorsoColor = Color3.new(0, 0, 0),
 	},
+
+	-- Aparência Meshy (Charred Hollow Figure): 6 MeshParts vestidas sobre o rig
+	-- R6 atual, sem alterá-lo (ver server/MonsterMeshyVisuals.lua e
+	-- docs/MonstroMeshy.md). As malhas/texturas vêm do template
+	-- ServerStorage.MonsterMeshyVisuals, gerado por tools/build_meshy_monster.py
+	-- a partir de model/roblox_upload/asset_ids.json. Sem MeshId em alguma peça
+	-- nada é aplicado e vale a aparência anterior.
+	--
+	-- Fit/Offset são relativos ao Size ATUAL da parte R6 (já escalada em 1.2x):
+	--   tamanho do visual = Size * Fit     centro = CFrame da parte * (Size * Offset)
+	-- Fit 1,1,1 / Offset 0,0,0 = ocupa a caixa inteira da parte. Ajuste UMA peça
+	-- mexendo só na entrada dela.
+	Meshy = {
+		Enabled = true,
+		TemplateName = "MonsterMeshyVisuals",
+		Parts = {
+			-- A parte Head do R6 é 2x1x1 e o que se vê dela é a malha de 1.25 (Size.Y * 1.25),
+			-- apoiada no pescoço: Fit 0.625 x 1.25 x 1.25 e centro 0.125 * Size.Y acima.
+			Head = { Fit = Vector3.new(0.625, 1.25, 1.25), Offset = Vector3.new(0, 0.125, 0) },
+			Torso = { Fit = Vector3.new(1, 1, 1), Offset = Vector3.new(0, 0, 0) },
+			["Left Arm"] = { Fit = Vector3.new(1, 1, 1), Offset = Vector3.new(0, 0, 0) },
+			["Right Arm"] = { Fit = Vector3.new(1, 1, 1), Offset = Vector3.new(0, 0, 0) },
+			["Left Leg"] = { Fit = Vector3.new(1, 1, 1), Offset = Vector3.new(0, 0, 0) },
+			["Right Leg"] = { Fit = Vector3.new(1, 1, 1), Offset = Vector3.new(0, 0, 0) },
+		},
+	},
 }
 
 AssetRegistry.Tocha_Item = {
@@ -89,6 +115,19 @@ AssetRegistry.RiftTeleport = {
 }
 
 --------------------------------------------------------------------------------
+-- ILHA: ILUMINAÇÃO DAS TRILHAS
+--------------------------------------------------------------------------------
+-- Poste de rua usado pelo gerador das trilhas. O modelo não precisa existir no
+-- Explorer: Structures.lua carrega, limpa scripts e clona este asset ao gerar
+-- os POIs. Se o Roblox não puder carregá-lo, entra o lampião primitivo local.
+AssetRegistry.StreetLamp = {
+	AssetId = 3348608106,
+	LightColor = Color3.fromRGB(255, 222, 164),
+	LightRange = 30,
+	LightBrightness = 0.9,
+}
+
+--------------------------------------------------------------------------------
 -- SONS (placeholder -- troque cada rbxassetid quando tiver o som real)
 --------------------------------------------------------------------------------
 
@@ -123,6 +162,17 @@ AssetRegistry.Sounds = {
 		-- Pedido de socorro indo ao ar: toca no console durante a
 		-- canalização e para junto se a transmissão for cancelada.
 		PedidoSocorro = "rbxassetid://6985678040",
+
+		-- ==================== ONDE TROCAR O SOM DO CHOQUE ====================
+		-- Som de choque/curto-circuito do gerador quando alguém ERRA o
+		-- minigame de reparo dele. Toca em 3D, na posição do gerador, pra quem
+		-- errou e pro Monstro (server/GeneratorErrorSound.lua +
+		-- client/GeneratorErrorSoundController.client.luau).
+		-- Volume, distância, tamanho do emissor e cooldown ficam em
+		-- GameConfig.RadioSite.ErroGerador.
+		-- O áudio precisa estar público ou pertencer ao dono da experiência,
+		-- senão não carrega no jogo publicado.
+		ErroGerador = "rbxassetid://113653339826980",
 	},
 
 	-- server/ExtractionSystem.lua: o helicóptero do resgate.
@@ -140,7 +190,13 @@ AssetRegistry.SurvivorPowers = {
 	RajadaFinal = { Label = "Rajada Final", Color = Color3.fromRGB(169, 221, 238), Style = "Trail" },
 	SaltoLongo = { Label = "Salto Longo", Color = Color3.fromRGB(193, 177, 148), Style = "Dust" },
 	ConsertoRelampago = { Label = "Conserto Relâmpago", Color = Color3.fromRGB(150, 210, 242), Style = "Sparks" },
-	ArmadilhaImprovisada = { Label = "Armadilha Improvisada", Color = Color3.fromRGB(127, 188, 241), Style = "Electric" },
+	ArmadilhaImprovisada = {
+		Label = "Armadilha Improvisada", Color = Color3.fromRGB(127, 188, 241), Style = "Electric",
+		-- Animação de colocar a armadilha no chão.
+		AnimationId = "rbxassetid://114151976975575",
+		-- Modelo Bear Trap usado pelo visual da armadilha colocada.
+		ModelAssetId = 9615431080,
+	},
 	TiroCerteiro = { Label = "Tiro Certeiro", Color = Color3.fromRGB(213, 82, 72), Style = "Weapon" },
 	InstintoDeCacadora = { Label = "Instinto de Caçadora", Color = Color3.fromRGB(208, 116, 95), Style = "Sense" },
 	MantoDeSombras = { Label = "Manto de Sombras", Color = Color3.fromRGB(100, 91, 123), Style = "Shadow" },
@@ -151,7 +207,10 @@ AssetRegistry.SurvivorPowers = {
 	PosturaInabalavel = { Label = "Postura Inabalável", Color = Color3.fromRGB(165, 175, 176), Style = "Stone" },
 	GolpeDeSorte = { Label = "Golpe de Sorte", Color = Color3.fromRGB(233, 193, 99), Style = "Gold" },
 	IntuicaoSortuda = { Label = "Intuição Sortuda", Color = Color3.fromRGB(233, 193, 99), Style = "Sense" },
-} :: { [string]: { Label: string, Color: Color3, Style: string, Icon: string?, SoundId: string?, AnimationId: string? } }
+} :: { [string]: {
+	Label: string, Color: Color3, Style: string, Icon: string?, SoundId: string?,
+	AnimationId: string?, ModelAssetId: number?,
+} }
 for _, power in AssetRegistry.SurvivorPowers do
 	power.Icon = power.Icon or "rbxassetid://0" -- generic placeholder; HUD shows a glyph until replaced
 	power.SoundId = power.SoundId or "rbxasset://sounds/impact_generic.mp3"

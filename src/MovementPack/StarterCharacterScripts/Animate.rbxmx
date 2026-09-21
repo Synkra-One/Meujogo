@@ -67,6 +67,7 @@ local pose = "Standing"
 
 local ContentProvider = game:GetService("ContentProvider")
 
+local shadowAnimationActive = false
 local currentAnim = ""
 local currentAnimInstance = nil
 local currentAnimTrack = nil
@@ -222,6 +223,10 @@ local function setAnimationSpeed(speed)
 end
 
 local function playAnimation(animName, forcedTransition)
+	-- Durante a forma sombria, o rig não deve herdar passada ou corrida.
+	local rushState = Figure:GetAttribute("ShadowRushState")
+	if rushState == "EnteringShadow" or rushState == "ShadowRush" then return end
+	if shadowAnimationActive then return end
 	local hrp = Figure:FindFirstChild("HumanoidRootPart")
 
 	-- While a landing-effects script is playing its own animation, don't let
@@ -316,6 +321,8 @@ local SPRINT_SPEED_THRESHOLD = 20
 local JOG_SPEED_THRESHOLD = 10
 
 function onRunning(speed)
+	local rushState = Figure:GetAttribute("ShadowRushState")
+	if rushState == "EnteringShadow" or rushState == "ShadowRush" then return end
 	local hrp = Figure:FindFirstChild("HumanoidRootPart")
 	if hrp and hrp:GetAttribute("IsCrouching") then return end
 	if hrp and hrp:GetAttribute("IsLanding") then return end
@@ -502,6 +509,77 @@ HumanoidRootPart:GetAttributeChangedSignal("IsCrouching"):Connect(function()
 		onRunning(horizSpeed)
 	end)
 end)
+
+-- Shadow Rush uses this existing animation owner and the server-created
+-- Animator. Only the owning client starts the track; Roblox replicates it.
+local RushConfig = require(game:GetService("ReplicatedStorage").Modules.GameConfig).Monster.ShadowRush
+local rushTrack, rushAnimation = nil, nil
+local rushLoadAttempted = false
+local rushConnections = {}
+local function resetRushJointTransforms()
+	for _, descendant in Figure:GetDescendants() do
+		if descendant:IsA("Motor6D") then
+			descendant.Transform = CFrame.new()
+		end
+	end
+end
+local function updateRushAnimation()
+	local state = Figure:GetAttribute("ShadowRushState")
+	-- A animação é exclusivamente da locomoção: a entrada ainda usa a
+	-- transição visual de sombra, sem começar um clip de corpo cedo demais.
+	local shadowActive = state == "EnteringShadow" or state == "ShadowRush"
+	local playLocomotionTrack = state == "ShadowRush"
+	if shadowActive and Humanoid.Health &gt; 0 then
+		-- Sem AnimationId própria, a forma ainda suspende a locomoção normal;
+		-- o VFX apresenta uma silhueta que flutua, sem mudar a física.
+		shadowAnimationActive = true
+		stopAllAnimations()
+		if playLocomotionTrack and RushConfig.ShadowRushAnimationId ~= "" and not rushLoadAttempted then
+			local animator = Humanoid:FindFirstChildOfClass("Animator")
+			if not animator then return end -- retry when the replicated Animator arrives
+			rushAnimation = Instance.new("Animation")
+			rushAnimation.Name, rushAnimation.AnimationId = "ShadowRushLocomotion", RushConfig.ShadowRushAnimationId
+			local ok, result = pcall(function() return animator:LoadAnimation(rushAnimation) end)
+			if ok then
+				rushTrack = result
+				rushLoadAttempted = true
+				rushTrack.Priority, rushTrack.Looped = Enum.AnimationPriority.Action, true
+			else
+				shadowAnimationActive = false
+				rushAnimation:Destroy()
+				rushAnimation = nil
+				warn("[ShadowRush] Animation unavailable: " .. tostring(result))
+			end
+		end
+		if playLocomotionTrack and rushTrack then
+			if not rushTrack.IsPlaying then rushTrack:Play(0.1, 1, 1) end
+		end
+	else
+		shadowAnimationActive = false
+		if rushTrack and rushTrack.IsPlaying then
+			rushTrack:Stop(if state == "Materializing" then RushConfig.ShadowRushMaterializeDuration else 0.1)
+		end
+		resetRushJointTransforms()
+	end
+	if not shadowAnimationActive and Humanoid.Health &gt; 0 then
+		onRunning(horizontalSpeed())
+	end
+end
+table.insert(rushConnections, Figure:GetAttributeChangedSignal("ShadowRushState"):Connect(updateRushAnimation))
+table.insert(rushConnections, Figure:GetAttributeChangedSignal("ShadowRushBusy"):Connect(updateRushAnimation))
+table.insert(rushConnections, Humanoid.ChildAdded:Connect(function(child)
+	if child:IsA("Animator") then updateRushAnimation() end
+end))
+local function destroyRushAnimation()
+	shadowAnimationActive = false
+	for _, connection in rushConnections do connection:Disconnect() end
+	table.clear(rushConnections)
+	if rushTrack then rushTrack:Stop(0); rushTrack:Destroy(); rushTrack = nil end
+	if rushAnimation then rushAnimation:Destroy(); rushAnimation = nil end
+end
+table.insert(rushConnections, Humanoid.Died:Connect(destroyRushAnimation))
+table.insert(rushConnections, script.Destroying:Connect(destroyRushAnimation))
+updateRushAnimation()
 
 playAnimation("idle", 0.3)
 pose = "Standing"

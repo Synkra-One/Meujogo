@@ -204,6 +204,7 @@ InstanceM.__index = InstanceM
 
 local CLASS_PARENTS = {
 	Part = { "BasePart", "PVInstance", "Instance" },
+	MeshPart = { "BasePart", "PVInstance", "Instance" },
 	WedgePart = { "BasePart", "PVInstance", "Instance" },
 	SpawnLocation = { "Part", "BasePart", "PVInstance", "Instance" },
 	Model = { "PVInstance", "Instance" },

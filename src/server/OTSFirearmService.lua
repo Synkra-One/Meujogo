@@ -14,6 +14,9 @@ local OTSEffects = require(ReplicatedStorage.Modules.OTSEffects)
 local DamageSystem = require(script.Parent.DamageSystem)
 local PowerStatus = require(script.Parent.SurvivorPowerStatus)
 local AmmoSystem = require(script.Parent.AmmoSystem)
+local WeaponSystem = require(script.Parent.WeaponSystem)
+local CombatRules = require(ReplicatedStorage.Modules.CombatRules)
+local pistolConfig = GameConfig.Weapons.Definitions.Glock17
 local assets = ReplicatedStorage:WaitForChild("WeaponAssets")
 local toolsFolder = assets:WaitForChild("Tools")
 local audios = assets:WaitForChild("Audios")
@@ -37,6 +40,8 @@ end
 local function equipped(player: Player, candidate: unknown): Tool?
 	if typeof(candidate) ~= "Instance" or not Rules.IsWeapon(candidate :: Instance) or not alive(player) then return nil end
 	local tool = candidate :: Tool
+	if not tool.Enabled then return nil end
+	if Rules.IsFoundation(tool) and not CombatRules.CanAttack(player) then return nil end
 	if player:GetAttribute("InWaitingRoom") == true and tool:GetAttribute("LobbyTestWeapon") ~= true then return nil end
 	return if tool.Parent == player.Character then tool else nil
 end
@@ -120,7 +125,7 @@ local function onReload(player: Player, candidate: unknown, action: unknown, mar
 		or player.Character:GetAttribute("GrabLocked") == true) then return end
 	if action ~= "Start" then return end
 	local tool = equipped(player, candidate)
-	if not tool or reloads[player] then return end
+	if not tool or not Rules.ReloadEnabled(tool) or reloads[player] then return end
 	local ammo = Rules.Value(tool, "Config", "Ammo")
 	if not ammo or not (ammo:IsA("NumberValue") or ammo:IsA("IntValue")) then return end
 	if Rules.ReloadAmount(ammo.Value, Ammo.GetMagazineMax(tool), Ammo.GetReserve(player, Ammo.TypeFor(tool))) <= 0 then
@@ -185,13 +190,17 @@ local function damageHit(player: Player, tool: Tool, part: Instance, empowered: 
 	local trainingTarget = model:GetAttribute("FirearmTestTarget") == true
 	if tool:GetAttribute("LobbyTestWeapon") == true and not trainingTarget then return end
 	local victim = Players:GetPlayerFromCharacter(model)
-	-- Lobby/sala de espera são áreas de preparação, inclusive durante outra partida.
+	-- Lobby/fila são áreas de preparação, inclusive durante outra partida.
 	if not trainingTarget and (player:GetAttribute("InRound") ~= true
-		or (victim and (victim:GetAttribute("InRound") ~= true or victim:GetAttribute("Eliminado") == true))) then return end
+		or (victim and (victim:GetAttribute("InRound") ~= true or victim:GetAttribute("Eliminado") == true
+			or victim:GetAttribute("InWaitingRoom") == true))) then return end
+	local foundation = Rules.IsFoundation(tool)
+	if foundation and (not victim or victim:GetAttribute("Role") ~= GameConfig.Roles.Monster) then return end
 	local isHead = part.Name == "Head"
 	local torso = part.Name == "Torso" or part.Name == "UpperTorso" or part.Name == "LowerTorso" or part.Name == "HumanoidRootPart"
 	local damage = Rules.Number(tool, "Damage", if isHead then "HeadDamage" elseif torso then "TorsoDamage" else "LimbsDamage", 13)
-	local armour = model:FindFirstChild("Armour")
+	if foundation then damage = pistolConfig.Damage end
+	local armour = if foundation then nil else model:FindFirstChild("Armour")
 	local health = armour and armour:FindFirstChild("Health")
 	if health and health:IsA("NumberValue") and health.Value > 0 then
 		if PowerStatus.BlockAttack(model) then return end
@@ -202,7 +211,7 @@ local function damageHit(player: Player, tool: Tool, part: Instance, empowered: 
 		Remotes.FirearmDamage:FireClient(player, if isHead then "HeadArmor" else "Armor")
 		return
 	end
-	local applied, died = DamageSystem.Apply(humanoid, damage, { Source = player, Cause = "Tiro", Empowered = empowered })
+	local applied, died = DamageSystem.Apply(humanoid, damage, { Source = player, Cause = "Tiro", Empowered = empowered, FixedDamage = foundation })
 	if applied > 0 then Remotes.FirearmDamage:FireClient(player, if isHead then "Head" else "Hit") end
 	if died then Remotes.FirearmFeed:FireClient(player, "Kill", model.Name) end
 end
@@ -225,22 +234,26 @@ local function onShoot(player: Player, candidate: unknown, target: unknown, aime
 		or not root or not root:IsA("BasePart") or not head or not head:IsA("BasePart") then return end
 	local now = os.clock()
 	-- O Framework original só dispara enquanto mira. O servidor também valida.
-	if aimed ~= true then return end
+	if not Rules.IsFoundation(tool) and aimed ~= true then return end
 	local valid = Rules.CanShoot(now, lastShot[player], ammo.Value, reloads[player] ~= nil, tool)
 	local delta = point - muzzle.Position
-	valid = valid and delta.Magnitude > 0.01 and delta.Magnitude <= Rules.Range + 40
+	valid = valid and delta.Magnitude > 0.01 and delta.Magnitude <= Rules.AttackRange(tool) + 40
 		and (muzzle.Position - root.Position).Magnitude <= 8
 	if not valid then
 		Remotes.FirearmShoot:FireClient(player, tool, sequence, false, ammo.Value)
 		return
 	end
+	if Rules.IsFoundation(tool) and not WeaponSystem.UseCooldown(player, pistolConfig.Cooldown) then
+		Remotes.FirearmShoot:FireClient(player, tool, sequence, false, ammo.Value)
+		return
+	end
 	lastShot[player] = now
-	local empowered = PowerStatus.BeginAttack(player)
+	local empowered = if Rules.IsFoundation(tool) then false else PowerStatus.BeginAttack(player)
 	ammo.Value -= 1
 	Remotes.FirearmShoot:FireClient(player, tool, sequence, true, ammo.Value)
 	local ignore: { Instance } = { character :: Model }
 	local system = Workspace:FindFirstChild("System")
-	if system then table.insert(ignore, system) end
+	if system and not Rules.IsFoundation(tool) then table.insert(ignore, system) end
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = ignore
@@ -250,8 +263,8 @@ local function onShoot(player: Player, candidate: unknown, target: unknown, aime
 	local spread = Rules.Spread(tool)
 	local direction = (CFrame.lookAt(Vector3.zero, delta.Unit)
 		* CFrame.Angles(math.rad(rng:NextNumber(-spread, spread)), math.rad(rng:NextNumber(-spread, spread)), 0)).LookVector
-	local result = obstruction or Workspace:Raycast(muzzle.Position, direction * Rules.Range, params)
-	local endpoint = if result then result.Position else muzzle.Position + direction * Rules.Range
+	local result = obstruction or Workspace:Raycast(muzzle.Position, direction * Rules.AttackRange(tool), params)
+	local endpoint = if result then result.Position else muzzle.Position + direction * Rules.AttackRange(tool)
 	if result then damageHit(player, tool, result.Instance, empowered) end
 	local ok, err = pcall(function()
 		shotEffects(tool, muzzle)
@@ -268,6 +281,18 @@ local function giveTestWeapons(player: Player)
 		local template = toolsFolder:FindFirstChild(name)
 		if template and Rules.IsWeapon(template) and not backpack:FindFirstChild(name) then template:Clone().Parent = backpack end
 	end
+end
+
+local function prepareMagazine(instance: Instance)
+	if not Rules.IsWeapon(instance) then return end
+	local tool = instance :: Tool
+	if not Rules.IsFoundation(tool) or tool:GetAttribute("CombatAmmoInitialized") == true then return end
+	local ammo = Rules.Value(tool, "Config", "Ammo")
+	local maxAmmo = Rules.Value(tool, "Config", "MaxAmmo")
+	if not ammo or not ammo:IsA("NumberValue") or not maxAmmo or not maxAmmo:IsA("NumberValue") then return end
+	maxAmmo.Value = pistolConfig.Ammo
+	ammo.Value = pistolConfig.Ammo
+	tool:SetAttribute("CombatAmmoInitialized", true)
 end
 
 function OTSFirearmService.Init()
@@ -289,6 +314,14 @@ function OTSFirearmService.Init()
 	Remotes.FirearmReload.OnServerEvent:Connect(onReload)
 	-- FirearmDamage é somente feedback Server -> Client e não tem listener OnServerEvent.
 	local function watchPlayer(player: Player)
+		for _, child in player:GetDescendants() do prepareMagazine(child) end
+		player.DescendantAdded:Connect(prepareMagazine)
+		local function watchCharacter(character: Model)
+			for _, child in character:GetChildren() do prepareMagazine(child) end
+			character.ChildAdded:Connect(prepareMagazine)
+		end
+		player.CharacterAdded:Connect(watchCharacter)
+		if player.Character then watchCharacter(player.Character) end
 		player.CharacterRemoving:Connect(function() finishReload(player, false) end)
 		player.CharacterAdded:Connect(function()
 			lastShot[player] = nil

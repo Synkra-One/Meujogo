@@ -136,6 +136,15 @@ function SmoothShiftLock:Enable()
 	self._runtimeMaid:GiveTask(RunService.RenderStepped:Connect(function(Delta: number)
 		Camera = Workspace.CurrentCamera or Camera;
 		if not Camera then return; end;
+		--// [Meujogo] CameraType ~= Custom quer dizer que outro sistema assumiu
+		--// a camera na mao (o menu inicial, por exemplo, via CameraType =
+		--// Scriptable) -- nao brigar pelo CFrame dela enquanto isso. Sem isto,
+		--// mesmo com CursorLivre travando so o mouse, este offset de ombro
+		--// continuava escrevendo em Camera.CFrame TODO frame (a cabeca do
+		--// personagem fica a milhares de studs da camera do menu, entao
+		--// Distance &gt; 1 e sempre verdadeiro) -- duas fontes escrevendo a
+		--// mesma propriedade todo frame e exatamente o tremor.
+		if Camera.CameraType ~= Enum.CameraType.Custom then return; end;
 		if self.Head.LocalTransparencyModifier &gt; 0.6 then return; end;
 
 		local CameraCFrame = Camera.CoordinateFrame;
@@ -259,7 +268,11 @@ end;
 
 --// Update the mouse behaviour
 function SmoothShiftLock:_updateMouseState()
-	UserInputService.MouseBehavior = (self:_wantsLockedCursor() and Enum.MouseBehavior.LockCenter) or Enum.MouseBehavior.Default;
+	local locked = self:_wantsLockedCursor();
+	UserInputService.MouseBehavior = (locked and Enum.MouseBehavior.LockCenter) or Enum.MouseBehavior.Default;
+	-- MouseBehavior sozinho pode deixar o ponteiro invisivel depois da tela
+	-- de selecao. Mantenha os dois estados sincronizados.
+	UserInputService.MouseIconEnabled = not locked;
 end;
 
 --// Update the mouse icon

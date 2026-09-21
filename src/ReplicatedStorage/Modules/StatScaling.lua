@@ -103,6 +103,9 @@ end
 
 --[[ Compostura -> vida máxima. ]]
 function StatScaling.MaxHealth(player: Player?): number
+	if player and player:GetAttribute("Role") == GameConfig.Roles.Monster then
+		return GameConfig.Health.MonsterMax
+	end
 	return StatScaling.Lerp(StatScaling.Of(player, "Compostura"), CFG.MaxHealth)
 end
 
@@ -189,7 +192,7 @@ function StatScaling.NoisePingInterval(player: Player?, state: string): number?
 	return stealthLerp(player, state, "Interval")
 end
 
---[[ Reparo -> multiplicador de progresso de objetivo (Jangada / Rádio). ]]
+--[[ Reparo -> multiplicador de progresso/sintonia do Rádio. ]]
 function StatScaling.RepairMultiplier(player: Player?): number
 	return StatScaling.Lerp(StatScaling.Of(player, "Reparo"), CFG.RepairSpeed) * perkMultiplier(player, "Repair")
 end

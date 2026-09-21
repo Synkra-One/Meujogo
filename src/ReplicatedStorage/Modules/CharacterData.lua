@@ -17,7 +17,7 @@
 	  Stamina      -> quanto o sprint dura e quão rápido o fôlego volta
 	  Compostura   -> vida máxima e quanto dano você ABSORVE
 	  Furtividade  -> demora mais pra tensão subir fora de Zona Segura
-	  Reparo       -> progresso da Jangada e chance de sintonizar o Rádio
+	  Reparo       -> chance de sintonizar o Rádio
 	  Força        -> dano que você CAUSA (corpo a corpo e arma de fogo)
 	  Sorte        -> quantidade e raridade do loot das caixas
 
@@ -43,6 +43,21 @@ export type Character = {
 	Stats: Stats,
 	PassivaUnica: string?,
 	Role: string?,
+	-- Presentation only; never changes the rig used in a match.
+	Description: string?,
+	Icon: string?,
+	PreviewModel: string?,
+	Background: string?,
+	IdleAnimation: string?,
+	ThemeColor: Color3?,
+	BodyColor: Color3?,
+	ShirtColor: Color3?,
+	PantsColor: Color3?,
+	Availability: string?,
+	PowerDescription1: string?,
+	PowerDescription2: string?,
+	PowerIcon1: string?,
+	PowerIcon2: string?,
 	-- Active survivor slots: Q / E. Cooldowns in seconds, enforced by the server.
 	PowerId1: string?,
 	PowerName1: string?,
@@ -86,6 +101,16 @@ CharacterData.StatLabels = {
 CharacterData.Characters = {
 	{
 		Id = "RafaelMonteiro",
+		Description = "Velocidade e fôlego para abrir caminho e escapar do perigo.",
+		Icon = "", -- asset ID or name in SelectionAssets.CharacterIcons
+		PreviewModel = "RafaelMonteiro",
+		Background = "", -- asset ID or name in SelectionAssets.Backgrounds
+		IdleAnimation = "", -- asset ID or Animation in SelectionAssets.IdleAnimations
+		ThemeColor = Color3.fromRGB(70, 196, 226),
+		BodyColor = Color3.fromRGB(204, 159, 125), ShirtColor = Color3.fromRGB(35, 111, 146), PantsColor = Color3.fromRGB(25, 42, 58),
+		Availability = "Available",
+		PowerDescription1 = "Dobra a velocidade por 5s, restaura a stamina e suspende seu gasto.",
+		PowerDescription2 = "Um salto para frente para vencer distâncias. Exige chão firme.",
 		Nome = "Rafael Monteiro",
 		Apelido = "O Atlético",
 		Stats = {
@@ -106,6 +131,16 @@ CharacterData.Characters = {
 	},
 	{
 		Id = "DiegoFerreira",
+		Description = "Reparos e improvisação para trazer a equipe de volta para casa.",
+		Icon = "", -- asset ID or name in SelectionAssets.CharacterIcons
+		PreviewModel = "DiegoFerreira",
+		Background = "", -- asset ID or name in SelectionAssets.Backgrounds
+		IdleAnimation = "", -- asset ID or Animation in SelectionAssets.IdleAnimations
+		ThemeColor = Color3.fromRGB(242, 170, 72),
+		BodyColor = Color3.fromRGB(224, 187, 151), ShirtColor = Color3.fromRGB(142, 83, 38), PantsColor = Color3.fromRGB(48, 42, 38),
+		Availability = "Available",
+		PowerDescription1 = "Acrescenta 25% de progresso à sintonia do rádio ou ao reparo em andamento.",
+		PowerDescription2 = "Prepara uma armadilha por 60s. Atordoa Monstro ou Espião por 3s.",
 		Nome = "Diego Ferreira",
 		Apelido = "O Engenheiro",
 		Stats = {
@@ -126,6 +161,16 @@ CharacterData.Characters = {
 	},
 	{
 		Id = "MarinaAlbuquerque",
+		Description = "Discreta e incansável. Encontra a ameaça antes que ela se aproxime.",
+		Icon = "", -- asset ID or name in SelectionAssets.CharacterIcons
+		PreviewModel = "MarinaAlbuquerque",
+		Background = "", -- asset ID or name in SelectionAssets.Backgrounds
+		IdleAnimation = "", -- asset ID or Animation in SelectionAssets.IdleAnimations
+		ThemeColor = Color3.fromRGB(221, 99, 92),
+		BodyColor = Color3.fromRGB(190, 132, 103), ShirtColor = Color3.fromRGB(119, 45, 53), PantsColor = Color3.fromRGB(43, 35, 42),
+		Availability = "Available",
+		PowerDescription1 = "O próximo ataque em até 8s causa dano triplo e atordoa por 2s. Errar consome o efeito.",
+		PowerDescription2 = "Revela a direção do monstro vivo mais próximo por 4s.",
 		Nome = "Marina Albuquerque",
 		Apelido = "A Caçadora",
 		Stats = {
@@ -146,6 +191,16 @@ CharacterData.Characters = {
 	},
 	{
 		Id = "KevinNakamura",
+		Description = "Move-se nas sombras e mantém a calma quando tudo dá errado.",
+		Icon = "", -- asset ID or name in SelectionAssets.CharacterIcons
+		PreviewModel = "KevinNakamura",
+		Background = "", -- asset ID or name in SelectionAssets.Backgrounds
+		IdleAnimation = "", -- asset ID or Animation in SelectionAssets.IdleAnimations
+		ThemeColor = Color3.fromRGB(142, 117, 212),
+		BodyColor = Color3.fromRGB(229, 192, 156), ShirtColor = Color3.fromRGB(61, 49, 100), PantsColor = Color3.fromRGB(27, 27, 42),
+		Availability = "Available",
+		PowerDescription1 = "Suspende a detecção e os efeitos de tensão por 8s.",
+		PowerDescription2 = "Avança até 15 studs para um destino seguro; obstáculos limitam o alcance.",
 		Nome = "Kevin Nakamura",
 		Apelido = "O Sorrateiro",
 		Stats = {
@@ -166,6 +221,16 @@ CharacterData.Characters = {
 	},
 	{
 		Id = "SofiaRibeiro",
+		Description = "Proteção e cuidados para manter os sobreviventes de pé.",
+		Icon = "", -- asset ID or name in SelectionAssets.CharacterIcons
+		PreviewModel = "SofiaRibeiro",
+		Background = "", -- asset ID or name in SelectionAssets.Backgrounds
+		IdleAnimation = "", -- asset ID or Animation in SelectionAssets.IdleAnimations
+		ThemeColor = Color3.fromRGB(89, 218, 145),
+		BodyColor = Color3.fromRGB(214, 166, 132), ShirtColor = Color3.fromRGB(42, 132, 91), PantsColor = Color3.fromRGB(33, 54, 48),
+		Availability = "Available",
+		PowerDescription1 = "Cura 50% da vida máxima de si e dos sobreviventes a até 15 studs.",
+		PowerDescription2 = "Protege o aliado visível mais próximo a até 10 studs por 4s; sem aliado, protege a si.",
 		Nome = "Sofia Ribeiro",
 		Apelido = "A Médica",
 		Stats = {
@@ -187,6 +252,16 @@ CharacterData.Characters = {
 	},
 	{
 		Id = "BrunoCarvalho",
+		Description = "Força e resistência para enfrentar o perigo de perto.",
+		Icon = "", -- asset ID or name in SelectionAssets.CharacterIcons
+		PreviewModel = "BrunoCarvalho",
+		Background = "", -- asset ID or name in SelectionAssets.Backgrounds
+		IdleAnimation = "", -- asset ID or Animation in SelectionAssets.IdleAnimations
+		ThemeColor = Color3.fromRGB(214, 145, 76),
+		BodyColor = Color3.fromRGB(151, 99, 70), ShirtColor = Color3.fromRGB(116, 65, 35), PantsColor = Color3.fromRGB(47, 37, 32),
+		Availability = "Available",
+		PowerDescription1 = "Avança e atordoa os inimigos atingidos por 3s.",
+		PowerDescription2 = "Por 5s, impede atordoamento e reduz o dano recebido pela metade.",
 		Nome = "Bruno Carvalho",
 		Apelido = "O Forte",
 		Stats = {
@@ -208,6 +283,16 @@ CharacterData.Characters = {
 	},
 	{
 		Id = "CamilaDuarte",
+		Description = "Instinto e velocidade para encontrar uma saída improvável.",
+		Icon = "", -- asset ID or name in SelectionAssets.CharacterIcons
+		PreviewModel = "CamilaDuarte",
+		Background = "", -- asset ID or name in SelectionAssets.Backgrounds
+		IdleAnimation = "", -- asset ID or Animation in SelectionAssets.IdleAnimations
+		ThemeColor = Color3.fromRGB(236, 199, 75),
+		BodyColor = Color3.fromRGB(230, 186, 150), ShirtColor = Color3.fromRGB(150, 115, 35), PantsColor = Color3.fromRGB(57, 48, 30),
+		Availability = "Available",
+		PowerDescription1 = "Uma chance de 50% de anular o próximo ataque em até 10s.",
+		PowerDescription2 = "Indica a direção do item raro disponível mais próximo por 6s.",
 		Nome = "Camila Duarte",
 		Apelido = "A Sortuda",
 		Stats = {

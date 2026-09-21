@@ -27,11 +27,8 @@
 
 	ITENS POSSÍVEIS: tudo de ItemRegistry.Items que tenha Rarity definida
 	(LancaAncestral tem Rarity = nil de propósito -- é 1 por mapa, nas
-	Ruínas, e nunca sai de caixa). São TRÊS tipos, e cada um é entregue do
-	jeito certo:
-	  Category "Tool"            -> ToolFactory.Create -> Backpack
-	  Category "MaterialJangada" -> RaftObjective.AddMaterial (estoque pessoal)
-	  Category "PecaRadio"       -> excluída do sorteio; há uma cópia fixa de cada
+	Ruínas, e nunca sai de caixa). Tools são entregues no Backpack; peças
+	únicas do rádio ficam fora do sorteio.
 
 	Isso importa muito pro peso da SORTE: materiais raros e Tools melhores
 	ficam mais prováveis para personagens com Sorte alta. As peças únicas do
@@ -52,8 +49,8 @@ local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local StatScaling = require(ReplicatedStorage.Modules.StatScaling)
 local ToolFactory = require(ReplicatedStorage.Modules.ToolFactory)
 
-local RaftObjective = require(script.Parent.RaftObjective)
 local IslandLayout = require(script.Parent.Tools.IslandLayout)
+local InteractionGuard = require(script.Parent.InteractionGuard)
 
 local LootCrateSystem = {}
 
@@ -155,11 +152,7 @@ local function grantItem(player: Player, backpack: Backpack, itemId: string): bo
 	end
 	local category = (def :: any).Category
 
-	if category == "MaterialJangada" then
-		-- Estoque pessoal de material (mesmo que tocar na Part no chão daria).
-		RaftObjective.AddMaterial(player, itemId, 1)
-		return true
-	elseif category == "PecaRadio" then
+	if category == "PecaRadio" then
 		return false -- peças únicas são criadas somente por RadioPieces.lua
 	end
 
@@ -202,6 +195,7 @@ local function onOpenRequest(player: Player, crate: unknown)
 	if (root.Position - part.Position).Magnitude > CFG.OpenRange then
 		return -- longe demais: cliente mentindo ou lag extremo
 	end
+	if not InteractionGuard.CanReach(player, part, CFG.OpenRange) then return end
 
 	local backpack = player:FindFirstChildOfClass("Backpack")
 	if not backpack then
@@ -251,10 +245,11 @@ local function attachPrompt(crate: BasePart)
 		prompt.ObjectText = "Caixa"
 		prompt.HoldDuration = 0.6
 		prompt.MaxActivationDistance = CFG.OpenRange
-		prompt.RequiresLineOfSight = false
+		prompt.RequiresLineOfSight = true
 		prompt.Parent = crate
 	end
 	prompt.Enabled = crate:GetAttribute(OPENED_ATTR) ~= true
+	prompt.RequiresLineOfSight = true
 
 	prompt.Triggered:Connect(function(player: Player)
 		onOpenRequest(player, crate)

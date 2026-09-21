@@ -10,8 +10,7 @@
 	  fase é interrompida assim que a partida termina por vitória.
 
 	CONDIÇÕES DE VITÓRIA (checadas a cada GameConfig.Round.WinCheckInterval)
-	  Sobreviventes: helicóptero do resgate decolou com alguém a bordo OU
-	                 jangada empurrada ao mar com alguém a bordo.
+	Sobreviventes: helicóptero do resgate decolou com alguém a bordo.
 	  Monstro:       nº de Sobreviventes VIVOS <= MonsterWinsAtSurvivorsAlive
 	                 antes do tempo acabar. Espião não conta como Sobrevivente.
 	  Espião:        tempo acabou, nenhuma fuga deu certo, e ele não foi
@@ -30,8 +29,9 @@
 	Ver docs/Extracao.md.
 
 	RESET: no começo de cada partida os objetivos são zerados, os Attributes
-	de estado limpos, todo mundo recebe um character novo (LoadCharacter) e
-	os papéis são sorteados de novo.
+	de estado limpos e todo mundo recebe um character novo. No fluxo normal os
+	papéis já foram sorteados antes da seleção de sobrevivente; chamadas diretas
+	de StartRound continuam recebendo um sorteio de segurança.
 
 	QUEM CHAMA StartRound(participants): WaitingRoomManager, após a contagem
 	com todos prontos. A lista fica congelada durante o preparo e não inclui
@@ -59,7 +59,6 @@ local Elimination = require(script.Parent.Elimination)
 local RadioObjective = require(script.Parent.RadioObjective)
 local RadioSiteSystem = require(script.Parent.RadioSiteSystem)
 local ExtractionSystem = require(script.Parent.ExtractionSystem)
-local RaftObjective = require(script.Parent.RaftObjective)
 local RoleAssignment = require(script.Parent.RoleAssignment)
 local CharacterPresentation = require(script.Parent.CharacterPresentation)
 
@@ -195,26 +194,6 @@ local function onExtracted(rescued: { Player })
 	finishRound(WINNER_SURVIVORS, string.format("Resgate de helicóptero: %s", table.concat(names, ", ")))
 end
 
-local function onRaftEscaped(escapedPlayers: { Player })
-	if not roundActive then
-		return
-	end
-
-	if #escapedPlayers == 0 then
-		print("[RoundManager] Jangada partiu vazia -- ninguém escapou.")
-		return
-	end
-
-	escapeSucceeded = true
-
-	local names = {}
-	for _, player in escapedPlayers do
-		table.insert(names, player.Name)
-	end
-
-	finishRound(WINNER_SURVIVORS, string.format("Fuga na jangada: %s", table.concat(names, ", ")))
-end
-
 --------------------------------------------------------------------------------
 -- Loop de checagem contínua
 --------------------------------------------------------------------------------
@@ -309,8 +288,6 @@ local function prepareRound(players: { Player })
 	else
 		warn("[RoundManager] RadioPieces falhou ao carregar; a partida vai continuar sem as pecas do radio: " .. tostring(RadioPieces))
 	end
-	RaftObjective.Reset()
-
 	escapeSucceeded = false
 	outcome = nil
 
@@ -320,7 +297,20 @@ local function prepareRound(players: { Player })
 	end
 	local minimum = if GameConfig.Testing.SoloStart then 1 else math.max(2, GameConfig.Players.Min)
 	assert(#connected >= minimum, "Jogadores insuficientes após preparar a partida.")
-	RoleAssignment.AssignRoles(connected)
+	-- WaitingRoomManager sorteia antes da tela de selecao para que apenas os
+	-- jogadores humanos a vejam. Mantemos o fallback para testes/admin que
+	-- chamem StartRound diretamente.
+	local rolesPrepared = true
+	for _, player in connected do
+		local role = player:GetAttribute("Role")
+		if role ~= GameConfig.Roles.Survivor
+			and role ~= GameConfig.Roles.Monster
+			and role ~= GameConfig.Roles.Spy then
+			rolesPrepared = false
+			break
+		end
+	end
+	if not rolesPrepared then RoleAssignment.AssignRoles(connected) end
 
 	local spawnedCharacters: { [Player]: Model } = {}
 	for _, player in connected do
@@ -442,7 +432,6 @@ end
 function RoundManager.Init()
 	RadioObjective.RescueCountdownStarted.Event:Connect(onRescueCountdownStarted)
 	ExtractionSystem.SurvivorsExtracted.Event:Connect(onExtracted)
-	RaftObjective.RaftEscaped.Event:Connect(onRaftEscaped)
 end
 
 return RoundManager

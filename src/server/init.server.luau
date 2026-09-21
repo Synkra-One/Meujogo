@@ -58,11 +58,10 @@ if not Workspace:FindFirstChild("Ilha") then
 			.. "Em MODO DE EDIÇÃO (sem Play), rode na Command Bar, um bloco por vez:\n"
 			.. "  local Gen = require(game.ServerScriptService.Server.Tools.IslandGenerator) Gen.Generate()\n"
 			.. "  local Crash = require(game.ServerScriptService.Server.Tools.PlaneCrashGenerator) Crash.Generate()\n"
-			.. "  local Abismo = require(game.ServerScriptService.Server.Tools.AbyssStationGenerator) Abismo.Build()\n"
+			.. "  local ok, result = pcall(function() return require(game.ServerScriptService.Server.Tools.AbyssStationGenerator).Build() end) print('[Abismo]', ok, result)\n"
 			.. "  local Spawner = require(game.ServerScriptService.Server.Tools.ItemSpawner) Spawner.Generate()\n"
 			.. "e então SALVE o lugar (Ctrl+S). Depois disso, é só dar Play -- não precisa gerar de novo.\n"
-			.. "(A Jangada do objetivo de fuga é montada sozinha por RaftObjective no boot, ou na\n"
-			.. " mão com Tools.RaftGenerator.Build() -- é 100% Part, não depende de asset.)"
+			.. "(O novo sistema de fuga por barco será conectado aqui quando for implementado.)"
 	)
 end
 
@@ -94,13 +93,16 @@ end
 
 safeInit("WaterRepair", script.WaterRepair)
 safeInit("AnimationRigReference", script.AnimationRigReference)
--- Duas variantes usadas por Arvore_597/Arvore_428 tem uma colisao de mesh
--- muito maior que o visual. Corrige todas as copias dessas variantes salvas.
+safeInit("MonsterAnimationRigValidation", script.MonsterAnimationRigValidation)
+-- Primeiro teste isolado: Mesh_AlpTrees4 tem colisao de copa muito maior que
+-- o tronco visual. Corrige todas as copias salvas somente dessa variante.
 safeInit("TreeCollisionFix", script.TreeCollisionFix)
 safeInit("LobbyManager", script.LobbyManager)
 
 safeInit("DataStoreManager", script.DataStoreManager)
 safeInit("RoundManager", script.RoundManager)
+-- A rodada começa no preset Night e clareia gradualmente até o amanhecer.
+safeInit("DayNightCycle", script.DayNightCycle)
 -- CharacterStatsApplier ANTES de DamageSystem: publica os Attributes "Stat_*"
 -- que o DamageSystem lê pra MaxHealth (Compostura) já no primeiro spawn.
 safeInit("CharacterStatsApplier", script.CharacterStatsApplier)
@@ -113,9 +115,17 @@ safeInit("NoiseService", script.NoiseService)
 -- ele (require no topo já resolve o módulo; Init() só liga MaxHealth + regen).
 safeInit("DamageSystem", script.DamageSystem)
 safeInit("AppearanceManager", script.AppearanceManager)
+-- Antes de SabotageSystem/RadioSiteSystem: os dois penduram os pontos
+-- reparáveis deles no minigame de precisão no Init(). O Init() daqui faz
+-- requires tardios de RoundManager/DamageSystem de propósito (o topo do
+-- arquivo fecharia ciclo com RadioSiteSystem) -- ver o cabeçalho do módulo.
+safeInit("RepairMinigameSystem", script.RepairMinigameSystem)
 safeInit("SabotageSystem", script.SabotageSystem)
 safeInit("LethalAbility", script.LethalAbility)
 safeInit("MonsterLightWeakness", script.MonsterLightWeakness)
+-- Os postes das trilhas reagem à proximidade do Monstro e replicam o pisca
+-- para todos os jogadores. O módulo encontra os postes já salvos no mapa.
+safeInit("TrailLampMonsterEffect", script.TrailLampMonsterEffect)
 -- Depois de DamageSystem + MonsterLightWeakness: roteia o golpe do Monstro
 -- pelo DamageSystem e lê IsWeakened pra dano/velocidade reduzidos na luz.
 safeInit("MonsterCombat", script.MonsterCombat)
@@ -134,6 +144,10 @@ safeInit("MonsterTeleport", script.MonsterTeleport)
 safeInit("ShadowRush", script.ShadowRush)
 safeInit("UtilityItemSystem", script.UtilityItemSystem)
 safeInit("FlashlightSystem", script.FlashlightSystem)
+-- Apagão do Abismo (Monstro). Depois de FearSystem (usa AddFear) e de
+-- FlashlightSystem (usa ForceOff pro corte imediato da luz); os requires no
+-- topo do arquivo já resolvem os dois módulos, a ordem aqui é só clareza.
+safeInit("AbyssBlackout", script.AbyssBlackout)
 safeInit("DropItemSystem", script.DropItemSystem)
 safeInit("AmmoSystem", script.AmmoSystem)
 safeInit("RadioObjective", script.RadioObjective)
@@ -149,14 +163,14 @@ safeInit("RadioSiteSystem", script.RadioSiteSystem)
 -- Fim da linha do radio: a zona de pouso na praia e o helicoptero do
 -- resgate. Fica parado ate RoundManager chamar Begin(). Ver docs/Extracao.md.
 safeInit("ExtractionSystem", script.ExtractionSystem)
-safeInit("RaftObjective", script.RaftObjective)
 safeInit("SurvivorPowerSystem", script.SurvivorPowerSystem)
 safeInit("ConfrontSystem", script.ConfrontSystem)
-safeInit("CraftingSystem", script.CraftingSystem)
 safeInit("WeaponSystem", script.WeaponSystem)
 safeInit("OTSFirearmService", script.OTSFirearmService)
 -- Depois de AmmoSystem + DropItemSystem: usa CreatePickup e PlaceInWorld.
 safeInit("WeaponSpawner", script.WeaponSpawner)
+-- Depois de RoundManager (escuta RoundPrepared): taco de beisebol ao entrar na partida.
+safeInit("StartingItems", script.StartingItems)
 safeInit("LobbyFiringRange", script.LobbyFiringRange)
 -- Portas das cabanas/lodge/celeiro (Parts com Attribute "Porta", ver
 -- Tools/Structures.lua): prompt Abrir/Fechar.
@@ -168,6 +182,34 @@ safeInit("LootCrateSystem", script.LootCrateSystem)
 -- Sobrevivente-Espião). Observa o Workspace por evento, então pega tanto o
 -- que já existe quanto o que aparecer depois (drop de jogador, etc).
 safeInit("ItemDiscovery", script.ItemDiscovery)
+-- XP / ESTATÍSTICAS / RESULTADO DA PARTIDA -- nesta ordem, e por ÚLTIMO:
+--   MatchStatsService guarda os dados e escuta RoundManager.RoundPrepared/
+--     RoundEnded (ciclo de vida) e StaminaSystem.MovementSampled (distância);
+--   MatchRewardService registra o gancho de XP no Stats e escuta os sistemas
+--     de jogo (DamageSystem.DamageApplied/Healed, ExtractionSystem,
+--     ItemDiscovery.ItemDiscovered);
+--   MatchResultsService fecha a partida e manda o relatório individual.
+-- Vêm depois de TODOS os sistemas que eles observam: se um deles falhar ao
+-- ligar, o jogo inteiro continua funcionando -- só o relatório some.
+safeInit("MatchStatsService", script.MatchStatsService)
+safeInit("MatchRewardService", script.MatchRewardService)
+safeInit("MatchResultsService", script.MatchResultsService)
 safeInit("SoundManager", script.SoundManager)
+
+-- Diagnóstico da cena editável do menu inicial: avisa no Output do
+-- SERVIDOR se Workspace.MenuSceneSet (gerado por Tools/MenuSceneGenerator)
+-- não existir NESTE momento -- assim dá pra comparar com o que o cliente vê
+-- (MenuScene.lua imprime a mesma checagem do lado dele) sem precisar rodar
+-- nada na Command Bar: as duas linhas já aparecem juntas no Output ao dar Play.
+do
+	local menuScene = workspace:FindFirstChild("MenuSceneSet")
+	if menuScene then
+		print(string.format("[Boot] Workspace.MenuSceneSet presente no SERVIDOR (%s, %d peça(s)).",
+			menuScene.ClassName, #menuScene:GetChildren()))
+	else
+		print("[Boot] Workspace.MenuSceneSet NÃO existe no servidor. "
+			.. "Rode Tools/MenuSceneGenerator.Generate() em modo de edição e salve (Ctrl+S).")
+	end
+end
 
 print("[Boot] Servidor de Náufragos pronto.")

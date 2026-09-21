@@ -6,6 +6,7 @@ files = {
   "FlashlightRules" => "src/ReplicatedStorage/Modules/FlashlightRules.lua",
   "FlashlightTargeting" => "src/server/FlashlightTargeting.lua",
   "FlashlightSystem" => "src/server/FlashlightSystem.lua",
+  "SurvivorPowerStatus" => "src/server/SurvivorPowerStatus.lua",
   "DamageSystem" => "src/server/DamageSystem.lua"
 }
 Tempfile.create(["flashlight-tests", ".luau"]) do |file|
@@ -16,7 +17,9 @@ Tempfile.create(["flashlight-tests", ".luau"]) do |file|
     separator += "=" while source.include?("]#{separator}]")
     file.write("sources[#{name.dump}] = [#{separator}[#{source}]#{separator}]\n")
   end
-  file.write(File.read(File.join(__dir__, "flashlight.luau")))
+  test = File.read(File.join(__dir__, "flashlight.luau"))
+  burst = File.read(File.join(__dir__, "flashlight_burst.luau"))
+  file.write(test.sub("modules.DamageSystem = nil\n", burst + "\nmodules.DamageSystem = nil\n"))
   file.flush
   exit(system(ARGV.fetch(0, "luau"), file.path) ? 0 : 1)
 end

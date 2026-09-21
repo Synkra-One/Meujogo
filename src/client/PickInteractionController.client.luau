@@ -6,7 +6,7 @@ local ProximityPromptService = game:GetService("ProximityPromptService")
 local SoundService = game:GetService("SoundService")
 
 local LocalPlayer = Players.LocalPlayer
-local PICK_ANIMATION_ID = "rbxassetid://103236301003312"
+local PICK_ANIMATION_ID = "rbxassetid://136848191306492"
 local PICK_SOUND_ID = "rbxassetid://619578856"
 local COOLDOWN = 0.35
 local PICK_ANIMATION_SPEED = 0.78
@@ -20,7 +20,8 @@ local currentTrack: AnimationTrack? = nil
 
 local function isPickupPrompt(prompt: ProximityPrompt): boolean
 	local action = string.lower(prompt.ActionText or "")
-	if action == "pegar" or string.find(action, "pegar", 1, true) ~= nil then
+	if action == "pegar" or string.find(action, "pegar", 1, true) ~= nil
+		or string.find(action, "colet", 1, true) ~= nil then
 		return true
 	end
 	return (prompt.KeyboardKeyCode == Enum.KeyCode.E or prompt.KeyboardKeyCode == Enum.KeyCode.F) and (
@@ -74,8 +75,10 @@ local function playPickSound()
 	Debris:AddItem(sound, 2)
 end
 
-ProximityPromptService.PromptTriggered:Connect(function(prompt: ProximityPrompt, triggeredPlayer: Player?)
-	if triggeredPlayer ~= nil and triggeredPlayer ~= LocalPlayer then return end
+-- No cliente, PromptTriggered recebe (prompt, inputType). O segundo
+-- argumento NÃO é um Player (esse formato só existe em Prompt.Triggered no
+-- servidor); comparar com LocalPlayer fazia a animação ser descartada sempre.
+ProximityPromptService.PromptTriggered:Connect(function(prompt: ProximityPrompt, _inputType: Enum.ProximityPromptInputType)
 	if not isPickupPrompt(prompt) then return end
 	playPickAnimation()
 	playPickSound()

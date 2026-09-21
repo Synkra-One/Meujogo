@@ -1,28 +1,50 @@
-# Sala de espera
+# Preparação e seleção de sobrevivente
 
-Ao dar Play, o jogador nasce no lobby sem a tela de seleção. O pilar **Entrar na sala** leva a uma área separada de preparação. A restrição de teste existente foi mantida: apenas o UserId `11555748600` abre a primeira sala; depois, qualquer jogador pode entrar enquanto houver vaga.
+O jogador entra na fila pelo botão **Jogar** do menu ou pelo prompt **Iniciar partida** do lobby. Não existe uma sala de espera física: enquanto prepara skin e perk, o avatar continua no lobby.
 
-Cada participante escolhe um personagem, uma skin e um perk e marca **Pronto**. O personagem fica reservado no servidor imediatamente; trocar ou sair libera o anterior. Com o mínimo de participantes e todos prontos, começa uma contagem de 10 segundos. Mudar uma escolha cancela o pronto; entrar, sair ou cancelar pronto reavalia a contagem. Só os participantes da sala vão à ilha.
+O fluxo autoritativo é:
 
-**Ver sala** fecha a interface para andar pela área. O botão **Preparar personagem** ou a tecla **M** reabre a seleção. **Sair da sala** volta ao lobby e libera a vaga. Após a partida e o intervalo, as reservas são limpas antes da próxima sala. Quem entra no servidor durante a rodada aguarda no lobby.
+1. `Lobby`: ninguém está na fila.
+2. `Waiting`: participantes escolhem skin/perk e marcam **Pronto**.
+3. `Selecting`: os papéis são sorteados e abre a escolha de sobrevivente por 30 segundos. O Monstro recebe Jason automaticamente.
+4. `Starting`: escolhas são congeladas e os corpos da partida são criados.
+5. `Playing`: os jogadores são enviados à ilha e as fases começam.
+6. `Intermission` / `Returning`: resultado, limpeza e retorno ao lobby.
 
-## Configuração
+Não há outra contagem entre `Waiting` e `Selecting`. O prazo único usa `Workspace:GetServerTimeNow()` e `SurvivorSelectionConfig.Duration`. Se todos os jogadores humanos confirmarem, `Selecting` termina antes dos 30 segundos. Se o prazo acabar, o servidor confirma a escolha atual e usa o primeiro sobrevivente livre como fallback em caso de conflito.
 
-- Capacidade: menor valor entre `GameConfig.Players.Max` e a quantidade de personagens em `CharacterData`. Atualmente são 7 vagas, sem repetição de personagens.
-- Mínimo: `GameConfig.Players.Min` (6); o modo `Testing.SoloStart` já existente permite testar sozinho quando `ForceRole` está definido.
-- Contagem: `GameConfig.Round.WaitingCountdown` (10 segundos).
-- Skins/perks: `Modules/LoadoutData.lua`. As opções iniciais são avatar original, colete marrom e colete azul; perks de regeneração de stamina (+10%), reparo (+10%) e resistência a dano (−5%), além de nenhum perk. Os bônus só são aplicados durante a rodada. As skins humanas não substituem o visual do Monstro.
-- A sala física é criada por `WaitingRoomManager` em `(100, 10, -400)`, fora da área da ilha. Não é necessário gerar novamente a ilha.
+## Elenco e interface
 
-## Validação
+`Modules/CharacterData.lua` é a fonte da verdade dos sobreviventes. Adicionar uma entrada em `CharacterData.Characters` cria automaticamente um cartão novo.
 
-Com o interpretador standalone do Luau disponível:
+`Modules/SurvivorSelectionConfig.lua` guarda:
+
+- duração e aviso dos últimos 10 segundos;
+- disponibilidade (`Available`, `Locked`, `Unavailable`);
+- paleta e rig de pré-visualização;
+- modo do retrato (`Viewport` ou `Image`) e `ImageId` futuro.
+
+Os cartões usam `ViewportFrame`. Se existir `ReplicatedStorage.SurvivorPreviewRigs/<CharacterId>`, o modelo é clonado apenas para um `WorldModel`; caso contrário, aparece um R6 neutro. Esses clones são ancorados, não têm scripts nem ligação com o personagem real.
+
+## Segurança e exclusividade
+
+`CharacterStatsApplier` valida no servidor:
+
+- fase e prazo ativos;
+- participação na partida;
+- papel humano;
+- ID existente;
+- estado bloqueado/indisponível;
+- exclusividade no momento da confirmação.
+
+Escolhas tentativas podem coincidir. O primeiro jogador que confirma reserva o personagem; os demais precisam selecionar outro. `FinishSelection` resolve automaticamente escolhas não confirmadas sem duplicar personagens. A escolha final publica `CharacterId`, atributos, passivas e poderes antes do spawn.
+
+## Testes
 
 ```sh
 python3 tests/run_waiting_room.py /caminho/para/luau
-rojo build -o /tmp/Meujogo-check.rbxlx
+ruby tests/run_match_tests.rb
+rojo build default.project.json --output /tmp/Meujogo-check.rbxlx
 ```
 
-Os testes executam os módulos reais com serviços Roblox simulados: exclusividade, liberações, limite de vagas, validação de escolhas, pronto, cancelamento, contagens antigas, entrada tardia, reset, mínimo, efeitos dos perks e preparação da rodada.
-
-No Studio, sincronize pelo Rojo e reinicie o Play. Para teste local com vários clientes fictícios, ajuste temporariamente a lista de host em `LobbyManager` para os UserIds do teste e restaure depois. Confira dois clientes tentando o mesmo personagem, troca durante a contagem, saída/desconexão, respawn na sala, visual do colete, interface em celular e retorno após a rodada. Os testes standalone não validam renderização, física ou replicação do motor.
+Os testes standalone cobrem prazo do servidor, seleção padrão, conflitos, bloqueios, confirmação antecipada, fallback, teste solo, entrada tardia e integração com o ciclo da rodada. Renderização, foco de gamepad e enquadramento final dos rigs ainda devem ser conferidos em Play no Studio.

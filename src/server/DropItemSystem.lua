@@ -46,9 +46,26 @@ local ToolFactory = require(ReplicatedStorage.Modules.ToolFactory)
 
 local DropItemSystem = {}
 
+--[[
+	ItemPickedUp:Fire(player, tool)
+	Gancho SÓ DE OBSERVAÇÃO -- não decide nada, só avisa que `player` acabou
+	de pegar `tool` do chão pelo ProximityPrompt "Pegar" (world-spawn OU um
+	drop de jogador, os dois passam pelo mesmo attachPickupPrompt).
+
+	Existe porque esta é a ÚNICA porta real de "pegar item do chão" pra Tools
+	do jogo (armas do WeaponSpawner, itens do ItemSpawner como o Galão de
+	Gasolina, e drops de outros jogadores). server/MatchRewardService escuta
+	isto pra conceder XP de "item importante encontrado" -- sem este gancho,
+	pegar um item nunca gerava XP nenhum: o que existia (ItemDiscovery.
+	ItemDiscovered) é só o PING do item aparecendo no mapa a distância, não a
+	posse de verdade.
+]]
+DropItemSystem.ItemPickedUp = Instance.new("BindableEvent")
+
 local DROP_LIFETIME = 180 -- s no chão antes do Debris limpar (se ninguém pegar)
 local DROP_FORWARD = 3.5 -- studs à frente do personagem
 local PICKUP_DISTANCE = 8 -- alcance do ProximityPrompt "Pegar"
+local InteractionGuard = require(script.Parent.InteractionGuard)
 local INVENTORY_SLOT_COUNT = 3 -- mesmo limite exibido pela HotbarController
 local watchedWorldTools: { [Tool]: true } = {}
 
@@ -140,7 +157,7 @@ local function attachPickupPrompt(tool: Tool)
 	prompt.ActionText = "Pegar"
 	prompt.ObjectText = tool.Name
 	prompt.MaxActivationDistance = PICKUP_DISTANCE
-	prompt.RequiresLineOfSight = false
+	prompt.RequiresLineOfSight = true
 	prompt.Parent = handle
 
 	prompt.Triggered:Connect(function(player: Player)
@@ -157,7 +174,7 @@ local function attachPickupPrompt(tool: Tool)
 		local root = character and character:FindFirstChild("HumanoidRootPart")
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		if not backpack or not root or not root:IsA("BasePart") or not humanoid or humanoid.Health <= 0
-			or (root.Position - handle.Position).Magnitude > PICKUP_DISTANCE + 2 then
+			or not InteractionGuard.CanReach(player, handle, PICKUP_DISTANCE + 2) then
 			return
 		end
         if tool:GetAttribute("PecaRadio") == true
@@ -178,6 +195,7 @@ local function attachPickupPrompt(tool: Tool)
 		prompt:Destroy()
 		restoreFromGround(tool)
 		tool.Parent = backpack
+		DropItemSystem.ItemPickedUp:Fire(player, tool)
 	end)
 end
 

@@ -4,6 +4,7 @@
     "$className": "DataModel",
 
     "ReplicatedStorage": {
+      "SelectionAssets": { "$path": "src/ReplicatedStorage/SelectionAssets" },
       "Shared": {
         "$path": "src/shared"
       },
@@ -20,7 +21,12 @@
       "RayPart": { "$path": "src/MovementPack/ReplicatedStorage/RayPart.rbxmx" },
       "ViewModel": { "$path": "src/MovementPack/ReplicatedStorage/ViewModel.rbxmx" },
       "FallDamageEvent": { "$path": "src/MovementPack/ReplicatedStorage/FallDamageEvent.rbxmx" },
-      "FallSystem": { "$path": "src/MovementPack/ReplicatedStorage/FallSystem.rbxmx" }
+      "FallSystem": { "$path": "src/MovementPack/ReplicatedStorage/FallSystem.rbxmx" },
+      "MonsterAnimationRig": { "$path": "src/Workspace/R6Monster.rbxmx" }
+    },
+
+    "ReplicatedFirst": {
+      "$path": "src/ReplicatedFirst"
     },
 
     "ServerScriptService": {
@@ -51,6 +57,7 @@
       "$properties": {
         "CameraMinZoomDistance": 6,
         "CameraMaxZoomDistance": 9,
+        "DevCameraOcclusionMode": "Zoom",
         "LoadCharacterAppearance": true,
         "EnableMouseLockOption": false
       },
@@ -100,6 +107,10 @@
         "$path": "rigR6.rbxmx"
       },
 
+      "R6 Monster Meshy": {
+        "$path": "src/Workspace/R6MonsterMeshy.rbxmx"
+      },
+
       "LobbyFloor": {
         "$className": "Part",
         "$properties": {
@@ -133,7 +144,7 @@
         "StartPrompt": {
           "$className": "ProximityPrompt",
           "$properties": {
-            "ActionText": "Entrar na sala",
+            "ActionText": "Iniciar partida",
             "ObjectText": "Preparação da partida",
             "MaxActivationDistance": 10
           }

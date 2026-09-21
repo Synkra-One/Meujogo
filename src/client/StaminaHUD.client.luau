@@ -17,6 +17,8 @@ local TweenService = game:GetService("TweenService")
 local Debris = game:GetService("Debris")
 
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
+local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
+local FearRules = require(ReplicatedStorage.Modules.FearPresentationRules)
 local DiscoveredItemsStore = require(script.Parent.DiscoveredItemsStore)
 local SurvivalMinimapHUD = require(script.Parent.SurvivalMinimapHUD)
 
@@ -41,16 +43,31 @@ local function hideCoreHealth()
 	end
 end
 
-local LEGACY_GUI_NAMES = {
-	PixelHealthGui = true,
-	PixelStaminaGui = true,
-	StaminaGui = true,
-	SprintGui = true,
-}
+-- O anel é a ÚNICA leitura de fôlego na tela. Qualquer outra barra some --
+-- inclusive as que ficaram salvas dentro do .rbxl (fora do Rojo), que é de
+-- onde vinha a "barra debaixo" que não existia em lugar nenhum do código.
+-- Casamos por nome em minúsculas pra pegar variações (StaminaBar, BarraFolego,
+-- SprintGui...), protegendo explicitamente o nosso HUD.
+local OWN_GUI_NAME = "SurvivalStatusHUD"
+local LEGACY_GUI_PATTERNS = { "stamina", "folego", "fôlego", "sprint", "pixelhealth" }
+
+local function isLegacyStatusGui(child: Instance): boolean
+	if child.Name == OWN_GUI_NAME or not child:IsA("LayerCollector") then
+		return false
+	end
+	local name = child.Name:lower()
+	for _, pattern in LEGACY_GUI_PATTERNS do
+		if name:find(pattern, 1, true) then
+			return true
+		end
+	end
+	return false
+end
 
 local function removeLegacyStatusGuis()
 	for _, child in playerGui:GetChildren() do
-		if LEGACY_GUI_NAMES[child.Name] then
+		if isLegacyStatusGui(child) then
+			warn("[StaminaHUD] removendo barra de fôlego legada: " .. child.Name)
 			child:Destroy()
 		end
 	end
@@ -58,8 +75,11 @@ end
 
 task.spawn(hideCoreHealth)
 removeLegacyStatusGuis()
+-- ChildAdded já cobre o que aparecer depois: varrer o PlayerGui todo frame
+-- (como era antes) é trabalho repetido à toa 60x por segundo.
 playerGui.ChildAdded:Connect(function(child: Instance)
-	if LEGACY_GUI_NAMES[child.Name] then
+	if isLegacyStatusGui(child) then
+		warn("[StaminaHUD] removendo barra de fôlego legada: " .. child.Name)
 		child:Destroy()
 	end
 end)
@@ -303,8 +323,18 @@ end
 LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
 
 RunService.RenderStepped:Connect(function(dt: number)
-	removeLegacyStatusGuis()
-
+	-- Enquanto a tela inicial (ReplicatedFirst/MenuBoot) estiver aberta, o
+	-- HUD de partida não pode aparecer por baixo dela. gui.Enabled é
+	-- reescrito nos dois sentidos aqui -- sem isto, fechar o menu deixaria
+	-- o HUD escondido pra sempre (nada mais neste arquivo o reabilita).
+	if LocalPlayer:GetAttribute("IntroMenuOpen") == true then
+		gui.Enabled = false
+		return
+	end
+	gui.Enabled = true
+	-- FONTE ÚNICA do fôlego: Attribute "Stamina" no Player (0..100), escrito
+	-- só pelo servidor em StaminaSystem.lua. Aqui só normaliza pra 0..1 --
+	-- ninguém mais divide por 100 depois disso.
 	local raw = LocalPlayer:GetAttribute("Stamina")
 	local target = math.clamp((if type(raw) == "number" then raw else 100) / 100, 0, 1)
 	local exhausted = LocalPlayer:GetAttribute("StaminaExausto") == true
@@ -313,7 +343,12 @@ RunService.RenderStepped:Connect(function(dt: number)
 	local health = if humanoid and humanoid.Parent
 		then humanoid.Health / math.max(humanoid.MaxHealth, 1)
 		else 1
-	statusHud:Update(dt, health, target, exhausted, holding)
+	-- Pânico apaga o painel de mapa/fôlego. Fonte única: o Attribute "Fear"
+	-- que o servidor replica -- nenhum cálculo de medo acontece aqui.
+	local fearValue = LocalPlayer:GetAttribute("Fear")
+	local fear = if type(fearValue) == "number" and fearValue == fearValue
+		then math.clamp(fearValue, 0, GameConfig.Fear.MaxFear) else 0
+	statusHud:Update(dt, health, target, exhausted, holding, FearRules.HudFade(fear, GameConfig.Fear).Vitals)
 
 	local character = currentCharacter
 	local root = character and character:FindFirstChild("HumanoidRootPart")

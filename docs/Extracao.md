@@ -73,7 +73,7 @@ então nada no resto do sistema precisa saber qual dos dois está no mapa.
 
 - **Embarcar**: prompt `Embarcar` no helicóptero (só depois do pouso). O
   personagem senta num assento — a pose acompanha o helicóptero pela mesma
-  técnica da Jangada (root ancorado + CFrame relativo por frame).
+  técnica de manter o root ancorado + CFrame relativo por frame.
 - **As duas opções** aparecem na tela ao embarcar
   (`client/ExtractionController.client.luau`):
 
@@ -98,8 +98,7 @@ final atravessa a ilha inteira. É calculado em runtime (varre ângulos em leque
 a partir do oposto, procurando areia firme acima da linha d'água), então
 **não precisa regerar o mapa** pra existir.
 
-Se o ponto cair em cima do `LocalJangada`, ele gira e procura outro: jangada e
-helicóptero são duas fugas diferentes e não deveriam dividir a mesma praia.
+Se o ponto cair em uma área inadequada, ele gira e procura outro local seguro.
 
 A pista tem raio 18 e nasce a ~18 studs da beira d'água (a praia tem 45 de
 largura), então o helipad inteiro fica na areia.
@@ -121,8 +120,8 @@ praia!"** no primeiro segundo da contagem, mais o relógio no texto da torre.
 
 ## Quem pode embarcar
 
-Qualquer um que **não seja o Monstro**, vivo e não amarrado — igual à Jangada,
-um Espião infiltrado também consegue subir. Quem decide o vencedor é o
+Qualquer um que **não seja o Monstro**, vivo e não amarrado; um Espião
+infiltrado também consegue subir. Quem decide o vencedor é o
 `RoundManager`.
 
 Vale quem está **sentado** na decolagem: ser arrastado pra fora pelo Monstro,

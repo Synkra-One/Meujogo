@@ -21,7 +21,7 @@
 		Gen.ClearAll()
 
 	Depois de gerar: PlaneCrashGenerator.Generate() e ItemSpawner.Generate(),
-	e SALVAR (Ctrl+S). A Jangada o RaftObjective monta sozinho no boot.
+	e SALVAR (Ctrl+S). Os objetivos de rádio e extração são montados no boot.
 
 	TAMANHO: ver IslandLayout.CONFIG. Diâmetro jogável ~1400-1600 studs;
 	terreno real 1920 x 1920 em chunks de 96. A geração do terreno leva
@@ -986,9 +986,9 @@ function IslandGenerator.GenerateForest(density: number?): number
 		end
 	end
 
-	-- Arvore_597 e Arvore_428 identificam duas variantes cuja colisao de mesh
-	-- vira uma parede invisivel. Usa essas referencias para corrigir todas as
-	-- copias imediatamente, inclusive ao regenerar e salvar a floresta.
+	-- Primeiro ajuste isolado: Mesh_AlpTrees4 tem uma colisao de copa que vira
+	-- parede invisivel. Corrige todas as copias dessa variante; as outras ficam
+	-- intactas ate a validacao visual deste colisor estreito no tronco.
 	local fixedTrees, fixedParts, trunkColliders = TreeCollisionFix.Apply(floresta)
 	print(string.format(
 		"[IslandGenerator] colisao corrigida em %d arvore(s): %d mesh(es), %d tronco(s)",
@@ -1100,7 +1100,7 @@ function IslandGenerator.GenerateRuins(): number
 		end
 		tool.Parent = ruinas
 	else
-		warn("[IslandGenerator] ToolFactory não criou a Lança Ancestral.")
+		warn("[IslandGenerator] ToolFactory não criou a Crowbar Ancestral.")
 	end
 
 	S.Marker(ruinas, "SpawnPOI", CFrame.new(rx + R + 6, groundY + 2, rz), { SpawnPOI = true })

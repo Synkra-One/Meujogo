@@ -17,8 +17,7 @@
 	O QUE CONTA COMO "ITEM DO MUNDO" hoje:
 	  - Pickup de Tool (Faca/Lança/Pedra/Tocha/Lanterna/Chocolate/Bandagem):
 	    Part "<itemId>_Pickup" (Tools/ItemSpawner.lua).
-	  - Material de jangada / peça de rádio: Part com Attribute
-	    MaterialJangada+TipoMaterial ou PecaRadio+TipoPeca (idem).
+	  - Peça de rádio: Part com Attribute PecaRadio+TipoPeca.
 	  - Caixa de munição: Part com Attribute MunicaoPickup==true (AmmoSystem.lua).
 	  - Caixa de loot: Part com Attribute CaixaLoot==true (LootCrateSystem.lua).
 	  - Arma de fogo ou Tool largada no mundo: a própria Tool, reconhecida
@@ -47,6 +46,20 @@ local MapMarkers = require(ReplicatedStorage.Modules.MapMarkers)
 local SafeAttribute = require(ReplicatedStorage.Modules.SafeAttribute)
 
 local ItemDiscovery = {}
+
+--[[
+	ItemDiscovered:Fire(player, entry)
+	Gancho SÓ DE SERVIDOR pro mesmo evento que o MapDiscovery manda pro
+	cliente -- `entry` é a mesma tabela, com os mesmos campos (key, x, z,
+	itemId, category, label).
+
+	Existe porque FireClient não volta pro servidor: um sistema do servidor
+	que precise saber que alguém achou um item (hoje: MatchRewardService, pro
+	XP de "item importante encontrado") não teria como escutar o remote.
+	A descoberta continua sendo por jogador -- cada um só recebe/dispara a
+	dele, e o mesmo item nunca é redescoberto pelo mesmo jogador.
+]]
+ItemDiscovery.ItemDiscovered = Instance.new("BindableEvent")
 
 local CFG = GameConfig.MapDiscovery
 
@@ -94,13 +107,6 @@ local function classifyPart(part: BasePart): Info?
 	local pickupId = string.match(part.Name, "^(.+)_Pickup$")
 	if pickupId and ItemRegistry.Items[pickupId] then
 		return { itemId = pickupId, category = MapMarkers.CategoryOf(nil, pickupId), label = labelFor(pickupId) }
-	end
-
-	if SafeAttribute.Get(part, "MaterialJangada") == true then
-		local tipo = SafeAttribute.Get(part, "TipoMaterial")
-		if type(tipo) == "string" then
-			return { itemId = tipo, category = MapMarkers.CategoryOf(nil, tipo), label = labelFor(tipo, tipo) }
-		end
 	end
 
 	if SafeAttribute.Get(part, "PecaRadio") == true then
@@ -225,14 +231,16 @@ local function scanOnce()
 			end
 			if (pos - playerPos).Magnitude <= CFG.Radius then
 				seen[instance] = true
-				Remotes.MapDiscovery:FireClient(player, {
+				local discovery = {
 					key = keyFor(instance),
 					x = pos.X,
 					z = pos.Z,
 					itemId = entry.info.itemId,
 					category = entry.info.category,
 					label = entry.info.label,
-				})
+				}
+				Remotes.MapDiscovery:FireClient(player, discovery)
+				ItemDiscovery.ItemDiscovered:Fire(player, discovery)
 			end
 		end
 	end

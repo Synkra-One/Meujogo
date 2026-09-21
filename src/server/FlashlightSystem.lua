@@ -13,12 +13,15 @@ local Remotes = require(Modules.Remotes)
 local DamageSystem = require(script.Parent.DamageSystem)
 local Round = require(script.Parent.RoundManager)
 local Targeting = require(script.Parent.FlashlightTargeting)
+local Status = require(script.Parent.SurvivorPowerStatus)
 
 local System = {}
-type Lamp = { battery: number, on: boolean, direction: Vector3, aimAt: number, drainAt: number }
+type Lamp = { battery: number, on: boolean, direction: Vector3, aimAt: number, drainAt: number, burstReadyAt: number }
 local lamps: { [Tool]: Lamp } = {}
 local exposures: { [Model]: Rules.ExposureState } = {}
-local limits: { [Player]: { aim: number, toggle: number } } = {}
+local limits: { [Player]: { aim: number, toggle: number, burst: number, sequence: number } } = {}
+local burstCooldowns: { [Player]: number } = {}
+local burstVictims: { [Model]: { player: Player, combatState: any } } = {}
 local initialized = false
 
 local function publish(instance: Instance, name: string, value: any)
@@ -51,7 +54,7 @@ local function canUse(player: Player, tool: Tool): boolean
 	if not character or tool.Parent ~= character or not alive(player)
 		or (player:GetAttribute("Role") ~= GameConfig.Roles.Survivor and not RunService:IsStudio())
 		or (player:GetAttribute("InWaitingRoom") == true and not RunService:IsStudio()) then return false end
-	for _, flag in { "GrabLocked", "ShadowRushBusy", "TeleportBusy", "PowerStunned", "Amarrado" } do
+	for _, flag in Config.BlockingFlags do
 		if character:GetAttribute(flag) == true or player:GetAttribute(flag) == true then return false end
 	end
 	return true
@@ -91,7 +94,7 @@ local function watch(tool: Instance)
 	local battery = activeTool:GetAttribute("Battery")
 	if type(battery) ~= "number" or battery ~= battery then battery = Config.BatteryMax end
 	local state: Lamp = { battery = math.clamp(battery, 0, Config.BatteryMax), on = false,
-		direction = Vector3.new(0, 0, -1), aimAt = 0, drainAt = os.clock() }
+		direction = Vector3.new(0, 0, -1), aimAt = 0, drainAt = os.clock(), burstReadyAt = 0 }
 	lamps[activeTool] = state
 	setOn(activeTool, state, false)
 	activeTool.Unequipped:Connect(function() setOn(activeTool, state, false) end)
@@ -101,6 +104,26 @@ local function watch(tool: Instance)
 		if not owner or not canUse(owner, activeTool) then setOn(activeTool, state, false) end
 	end)
 	activeTool.Destroying:Connect(function() lamps[activeTool] = nil end)
+end
+
+--[[
+	ForceOff(character)
+	Apaga AGORA toda lanterna carregada por este character, sem tocar no
+	inventário nem na bateria: a Tool continua onde estava. Existe para
+	poderes que ligam um Attribute de Config.BlockingFlags (ex: o Apagão do
+	Abismo) não precisarem esperar o próximo passo de step() pro corte.
+	Nunca LIGA nada -- religar continua sendo um pedido do dono da lanterna.
+]]
+function System.ForceOff(character: Model): number
+	if typeof(character) ~= "Instance" or not character:IsA("Model") then return 0 end
+	local count = 0
+	for tool, state in lamps do
+		if tool.Parent == character then
+			if state.on then count += 1 end
+			setOn(tool, state, false)
+		end
+	end
+	return count
 end
 
 -- Server-only recharge API. Refill never turns a light back on automatically.
@@ -116,19 +139,97 @@ function System.Recharge(tool: Tool, amount: number): number
 	return state.battery - before
 end
 
-local function request(player: Player, action: any, tool: any, value: any, direction: any, sequence: any)
-	if action ~= "Aim" and action ~= "Toggle" then return end
+local BURST_ATTRIBUTES = { "FlashStunned", "FlashPowerBlocked", "FlashBurstAt", "FlashBurstBlindUntil" }
+
+local function clearBurst(character: Model)
+	if not burstVictims[character] then return end
+	burstVictims[character] = nil
+	Status.ClearStun(character, "FlashBurst")
+	for _, name in BURST_ATTRIBUTES do Status.Clear(character, name) end
+end
+
+local function burst(player: Player, tool: Tool, state: Lamp, direction: any, sequence: any)
 	local now = os.clock()
 	local limit = limits[player]
-	if not limit then limit = { aim = -math.huge, toggle = -math.huge }; limits[player] = limit end
-	local key = if action == "Aim" then "aim" else "toggle"
-	local interval = if action == "Aim" then Config.AimSendInterval * 0.8 else Config.ToggleCooldown * 0.8
+	if type(sequence) ~= "number" or sequence ~= sequence or sequence % 1 ~= 0
+		or sequence <= limit.sequence or sequence > 2147483647 then return end
+	limit.sequence = sequence -- replayed requests cannot become valid after cooldown
+	local function reject(reason: string)
+		Remotes.Flashlight:FireClient(player, "BurstResult", tool, false, reason, sequence)
+	end
+	if not canUse(player, tool) or player:GetAttribute("Role") ~= GameConfig.Roles.Survivor
+		or not Round.IsRoundActive() or player:GetAttribute("InRound") ~= true
+		or player:GetAttribute("InWaitingRoom") == true then reject("Blocked"); return end
+	local character = player.Character :: Model
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root or not root:IsA("BasePart") or not Rules.ValidBurstAim(root, direction) then reject("Aim"); return end
+	if now < math.max(state.burstReadyAt, burstCooldowns[player] or 0) then reject("Cooldown"); return end
+	drain(tool, state, now)
+	if state.battery < Config.FlashBurstCost then reject("Battery"); return end
+	local origin, params = Targeting.Source(character, tool)
+	if not origin or not params then reject("Obstructed"); return end
+	params.RespectCanCollide, params.IgnoreWater = true, true
+	local candidates: { { player: Player, character: Model, distance: number } } = {}
+	for _, other in Players:GetPlayers() do
+		local target = other.Character
+		local part = target and target:FindFirstChild("HumanoidRootPart")
+		if other ~= player and target and part and part:IsA("BasePart") and alive(other)
+			and other:GetAttribute("Role") == GameConfig.Roles.Monster and other:GetAttribute("InRound") == true
+			and other:GetAttribute("InWaitingRoom") ~= true then
+			local distance = (part.Position - origin).Magnitude
+			if distance <= Config.FlashBurstRange then
+				table.insert(candidates, { player = other, character = target, distance = distance })
+			end
+		end
+	end
+	if #candidates == 0 then reject("Range"); return end
+	table.sort(candidates, function(a, b) return a.distance < b.distance end)
+	-- Commit once, before applying effects. Cooldown belongs to both owner
+	-- and Tool, so swapping/dropping a lamp cannot bypass it.
+	local serverNow = Workspace:GetServerTimeNow()
+	state.battery -= Config.FlashBurstCost
+	state.burstReadyAt, burstCooldowns[player] = now + Config.FlashBurstCooldown, now + Config.FlashBurstCooldown
+	drain(tool, state, now)
+	if state.battery <= 0 then setOn(tool, state, false) end
+	publish(tool, "FlashBurstReadyAt", serverNow + Config.FlashBurstCooldown)
+	publish(player, "FlashBurstReadyAt", serverNow + Config.FlashBurstCooldown)
+	publish(tool, "FlashBurstAt", serverNow)
+	local hit = false
+	for _, candidate in candidates do
+		local target = candidate.character
+		if Targeting.Hits(origin, direction.Unit, target, params, Config.FlashBurstRange, Config.FlashBurstAngle) then
+			if Status.Stun(target, Config.FlashBurstStunDuration, "FlashBurst") then
+				burstVictims[target] = { player = candidate.player, combatState = target:GetAttribute("MonsterCombatState") }
+				Status.Set(target, "FlashStunned", true, Config.FlashBurstStunDuration)
+				Status.Set(target, "FlashPowerBlocked", true, Config.FlashBurstPowerBlockDuration)
+				Status.Set(target, "FlashBurstAt", serverNow, Config.FlashBurstBlindDuration)
+				Status.Set(target, "FlashBurstBlindUntil", serverNow + Config.FlashBurstBlindDuration, Config.FlashBurstBlindDuration)
+				hit = true
+			end
+			break -- one nearest visible monster; immunity doesn't let light pierce it
+		end
+	end
+	Remotes.Flashlight:FireClient(player, "BurstResult", tool, true, if hit then "Hit" else "Miss", sequence)
+end
+
+local function request(player: Player, action: any, tool: any, value: any, direction: any, sequence: any)
+	if action ~= "Aim" and action ~= "Toggle" and action ~= "Burst" then return end
+	local now = os.clock()
+	local limit = limits[player]
+	if not limit then
+		limit = { aim = -math.huge, toggle = -math.huge, burst = -math.huge, sequence = 0 }; limits[player] = limit
+	end
+	local key = if action == "Aim" then "aim" elseif action == "Burst" then "burst" else "toggle"
+	local interval = if action == "Aim" then Config.AimSendInterval * 0.8
+		elseif action == "Burst" then Config.FlashBurstInputInterval else Config.ToggleCooldown * 0.8
 	if now - limit[key] < interval then return end
 	limit[key] = now
 	if typeof(tool) ~= "Instance" or not tool:IsA("Tool") or tool.Parent ~= player.Character then return end
 	local state = lamps[tool]
 	if not state then return end
-	if action == "Toggle" then
+	if action == "Burst" then
+		burst(player, tool, state, direction, sequence)
+	elseif action == "Toggle" then
 		if type(value) ~= "boolean" or type(sequence) ~= "number" or sequence ~= sequence
 			or sequence < 0 or sequence > 2147483647 or sequence % 1 ~= 0 then return end
 		if not value then
@@ -156,6 +257,11 @@ local function step(dt: number)
 	for _, player in Players:GetPlayers() do
 		if roundActive and player:GetAttribute("InRound") == true and player:GetAttribute("Role") == GameConfig.Roles.Monster
 			and alive(player) and player.Character then targets[player.Character] = player end
+	end
+	for character, entry in burstVictims do
+		if targets[character] ~= entry.player or not character.Parent
+			or character:GetAttribute("MonsterCombatState") ~= entry.combatState
+			or serverNow >= (character:GetAttribute("FlashBurstBlindUntil") or 0) then clearBurst(character) end
 	end
 	local hits: { [Model]: Player } = {}
 	for tool, state in lamps do
@@ -196,7 +302,15 @@ local function step(dt: number)
 end
 
 function System.Reset()
-	for tool, state in lamps do setOn(tool, state, false) end
+	for tool, state in lamps do
+		setOn(tool, state, false)
+		state.burstReadyAt = 0
+		publish(tool, "FlashBurstReadyAt", nil)
+		publish(tool, "FlashBurstAt", nil)
+	end
+	for character in burstVictims do clearBurst(character) end
+	for _, player in Players:GetPlayers() do publish(player, "FlashBurstReadyAt", nil) end
+	table.clear(burstCooldowns)
 	for character in exposures do clearExposure(character) end
 	table.clear(limits)
 end
@@ -236,6 +350,7 @@ local function watchPlayer(player: Player)
 	removeInitialFlashlights(player)
 	player.CharacterAdded:Connect(watchContainer)
 	player.CharacterRemoving:Connect(function(character)
+		clearBurst(character)
 		clearExposure(character)
 		for _, child in character:GetChildren() do
 			local state = lamps[child :: Tool]
@@ -258,11 +373,22 @@ end
 
 function System.Init()
 	if initialized then return end
+	assert(Config.FlashBurstCost > 0 and Config.FlashBurstCost <= Config.BatteryMax
+		and Config.FlashBurstCooldown > 0 and Config.FlashBurstRange > 0
+		and Config.FlashBurstAngle > 0 and Config.FlashBurstAngle < 180
+		and Config.FlashBurstStunDuration > 0
+		and Config.FlashBurstPowerBlockDuration >= Config.FlashBurstStunDuration
+		and Config.FlashBurstBlindDuration > Config.FlashBurstPowerBlockDuration,
+		"FlashBurst: invalid cost/range/cooldown/durations")
 	initialized = true
+	Status.Init()
 	normalizeStarterPack()
 	Remotes.Flashlight.OnServerEvent:Connect(request)
 	Players.PlayerAdded:Connect(watchPlayer)
-	Players.PlayerRemoving:Connect(function(player) limits[player] = nil end)
+	Players.PlayerRemoving:Connect(function(player)
+		if player.Character then clearBurst(player.Character) end
+		limits[player], burstCooldowns[player] = nil, nil
+	end)
 	for _, player in Players:GetPlayers() do watchPlayer(player) end
 	Round.RoundEnded.Event:Connect(System.Reset)
 	Round.RoundPrepared.Event:Connect(System.Reset)

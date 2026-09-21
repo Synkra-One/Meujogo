@@ -10,11 +10,13 @@
 	HOJE quem usa:
 	  - OTSFirearmService.lua  (dano da Glock17 -- a armadura continua lá,
 	    só o TakeDamage final + a morte passam por aqui)
-	  - WeaponSystem.lua   (Faca/Lança/Pedra: só se GameConfig.Weapons.*Damage
-	    for > 0 -- por padrão continuam sendo só empurrão)
+	  - WeaponSystem.lua   (chave inglesa e pé de cabra; configuração central)
 	  - UtilityItemSystem.lua (Chocolate cura pelo Heal)
 
-	MORTE: quando Health chega a 0, o character ganha um BoolValue "Dead"
+	MONSTRO: nasce com 1000 HP e Apply/Execute limitam o dano antes de chegar
+	a zero. Derrota temporária não dispara Dead/Elimination/PlayerKilled.
+
+	MORTE DOS HUMANOS: quando Health chega a 0, o character ganha um BoolValue "Dead"
 	(mesmo marcador que o sistema OTS usa), e se for um Player:
 	Elimination.Eliminate + Remotes.PlayerKilled:FireAllClients(vítima, autor,
 	causa). Apply devolve (danoAplicado, morreuAgora) pra quem chamou poder
@@ -30,7 +32,8 @@
 	REGENERAÇÃO: a do Roblox (script "Health", 1%/s) é desligada no spawn
 	(GameConfig.Health.DisableRobloxDefaultRegen). Em vez dela, um loop aqui
 	regenera GameConfig.Health.RegenPerSecond por segundo, mas só depois de
-	RegenDelayAfterDamage segundos sem tomar dano.
+	RegenDelayAfterDamage segundos sem tomar dano. O Monstro não regenera
+	passivamente nesta etapa, para permitir o teste até 1 HP.
 
 	Uso (uma vez no boot do servidor, ANTES de OTSFirearmService/WeaponSystem):
 		local DamageSystem = require(script.DamageSystem)
@@ -40,19 +43,49 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Debris = game:GetService("Debris")
 
 local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
+local MonsterAnimationConfig = require(ReplicatedStorage.Modules.MonsterAnimationConfig)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local StatScaling = require(ReplicatedStorage.Modules.StatScaling)
 local Elimination = require(script.Parent.Elimination)
 local PowerStatus = require(script.Parent.SurvivorPowerStatus)
 
 local DamageSystem = {}
+local initialized = false
+
+--[[
+	GANCHOS DE OBSERVAÇÃO (só leitura -- não alteram dano nem cura)
+
+	Existem porque o DamageSystem já é a PORTA ÚNICA de dano e cura: golpe do
+	Monstro, faca/lança/pedra, tiro da Glock, chocolate e bandagem passam
+	todos por aqui. Um sistema que queira SABER de combate (hoje:
+	MatchRewardService, pras estatísticas e o XP da partida) escuta estes dois
+	eventos em vez de cada sistema de arma ter que avisá-lo -- que seria o
+	mesmo registro copiado em quatro arquivos, divergindo no primeiro que
+	alguém esquecesse de atualizar.
+
+	DamageApplied:Fire(attacker: Player?, victim: Player?, applied: number,
+	                   died: boolean, cause: string?)
+	  Só dispara quando dano foi REALMENTE aplicado (applied > 0). Guardas
+	  (invulnerável, já morto, ForceField) não disparam nada.
+	  attacker/victim são nil quando não há Player por trás (ambiente, NPC).
+
+	Healed:Fire(healer: Player?, target: Player?, healed: number)
+	  Só dispara quando vida foi REALMENTE devolvida (healed > 0).
+
+	São BindableEvents: os listeners rodam DEPOIS do dano/cura já aplicado, e
+	um erro num listener não quebra o combate.
+]]
+DamageSystem.DamageApplied = Instance.new("BindableEvent")
+DamageSystem.Healed = Instance.new("BindableEvent")
 
 export type DamageInfo = {
 	Source: Player?, -- quem causou (pra PlayerKilled e futuras regras de time)
 	Cause: string?, -- texto da causa ("Tiro", "Monstro", "Ambiente"...)
 	Empowered: boolean?, -- server-only token consumed when a validated attack begins
+	FixedDamage: boolean?, -- Parte 1: valores exatos da arma, sem multiplicadores
 	MaxDamage: number?, -- server-only ceiling after stat multipliers (utility effects)
 }
 
@@ -103,8 +136,9 @@ local function stopReaction(model: Model, fadeTime: number)
 	stopReactionTrack(model, fadeTime)
 end
 
-local function playReaction(model: Model, humanoid: Humanoid, animationId: string, priority: Enum.AnimationPriority, looped: boolean?): boolean
-	if animationId == "" or animationId == "rbxassetid://0" then
+local function playReaction(model: Model, humanoid: Humanoid, animationId: string, priority: Enum.AnimationPriority, looped: boolean?, allowWhenGlobalDisabled: boolean?): boolean
+	if (GameConfig.Health.CombatAnimationsEnabled == false and allowWhenGlobalDisabled ~= true)
+		or not MonsterAnimationConfig.IsUsableAnimationId(animationId) then
 		return false
 	end
 
@@ -161,11 +195,16 @@ local function isHurtMoving(model: Model, wasMoving: boolean?): boolean
 end
 
 local function playHurtReaction(model: Model, humanoid: Humanoid)
+	local owner = Players:GetPlayerFromCharacter(model)
+	local isMonster = owner ~= nil and owner:GetAttribute("Role") == GameConfig.Roles.Monster
+	if GameConfig.Health.CombatAnimationsEnabled == false
+		and (not isMonster or not MonsterAnimationConfig.IsUsableAnimationId(MonsterAnimationConfig.AnimationIds.Damage)) then
+		return
+	end
 	local moving = isHurtMoving(model, hurtMovingStates[model])
-	local animationId = if moving
-		then GameConfig.Health.HurtWalkAnimationId
-		else GameConfig.Health.HurtIdleAnimationId
-	if playReaction(model, humanoid, animationId, Enum.AnimationPriority.Action2, true) then
+	local animationId = if isMonster then MonsterAnimationConfig.AnimationIds.Damage else if moving
+		then GameConfig.Health.HurtWalkAnimationId else GameConfig.Health.HurtIdleAnimationId
+	if playReaction(model, humanoid, animationId, Enum.AnimationPriority.Action2, true, isMonster) then
 		hurtMovingStates[model] = moving
 		model:SetAttribute("CombatAnimationState", "Hurt")
 		if not hurtHealthConnections[model] then
@@ -185,7 +224,10 @@ end
 local function playDeathReaction(model: Model, humanoid: Humanoid)
 	stopReaction(model, 0.05)
 	model:SetAttribute("CombatAnimationState", "Death")
-	playReaction(model, humanoid, GameConfig.Health.DeathAnimationId, Enum.AnimationPriority.Action4)
+	local owner = Players:GetPlayerFromCharacter(model)
+	local isMonster = owner ~= nil and owner:GetAttribute("Role") == GameConfig.Roles.Monster
+	local animationId = if isMonster then MonsterAnimationConfig.AnimationIds.Death else GameConfig.Health.DeathAnimationId
+	playReaction(model, humanoid, animationId, Enum.AnimationPriority.Action4, nil, isMonster)
 end
 
 local function refreshHurtReactions()
@@ -291,6 +333,50 @@ end
 -- API
 --------------------------------------------------------------------------------
 
+-- Estado futuro de vulnerabilidade é independente do debuff de luz existente.
+-- Apenas estas funções no servidor escrevem MonsterCombatState.
+function DamageSystem.GetMonsterState(target: unknown): string?
+	local _, model = resolveHumanoid(target)
+	local owner = model and Players:GetPlayerFromCharacter(model)
+	if not model or not owner or owner:GetAttribute("Role") ~= GameConfig.Roles.Monster then return nil end
+	local state = model:GetAttribute("MonsterCombatState")
+	local states = GameConfig.Monster.CombatStates
+	return if state == states.Weakened or state == states.Vulnerable then state :: string else states.Normal
+end
+
+function DamageSystem.SetMonsterState(target: unknown, state: string): boolean
+	local _, model = resolveHumanoid(target)
+	if not model or not DamageSystem.GetMonsterState(model) then return false end
+	local states = GameConfig.Monster.CombatStates
+	if state ~= states.Normal and state ~= states.Weakened and state ~= states.Vulnerable then return false end
+	model:SetAttribute("MonsterCombatState", state)
+	return true
+end
+
+local function protectMonster(model: Model, humanoid: Humanoid, amount: number): number
+	if not DamageSystem.GetMonsterState(model) then return amount end
+	local floor = GameConfig.Health.MonsterMinimum
+	if amount >= humanoid.Health and model:GetAttribute("MonsterTemporarilyDefeated") ~= true then
+		model:SetAttribute("MonsterTemporarilyDefeated", true)
+		print(string.format("[DamageSystem] %s foi derrotado temporariamente; Monstro mantido com pelo menos %d de vida.", model.Name, floor))
+	end
+	-- Nunca passa por zero: impede Humanoid.Died, eliminação e fim da rodada.
+	return math.min(amount, math.max(0, humanoid.Health - floor))
+end
+
+local function hitFeedback(model: Model)
+	local old = model:FindFirstChild("CombatHitFeedback")
+	if old then old:Destroy() end
+	local flash = Instance.new("Highlight")
+	flash.Name = "CombatHitFeedback"
+	flash.Adornee = model
+	flash.DepthMode = Enum.HighlightDepthMode.Occluded
+	flash.FillColor = Color3.fromRGB(255, 65, 55)
+	flash.FillTransparency, flash.OutlineTransparency = 0.45, 1
+	flash.Parent = model
+	Debris:AddItem(flash, 0.18)
+end
+
 --[[
 	Apply(target, amount, info?)
 	Tira `amount` de vida do alvo (Humanoid | Model | Player | BasePart do
@@ -319,24 +405,24 @@ function DamageSystem.Apply(target: unknown, amount: number, info: DamageInfo?):
 	end
 	if model:GetAttribute("Imune") == true then return 0, false, true end
 	if info and info.Source and PowerStatus.BlockAttack(model) then return 0, false, true end
-	if info and info.Empowered then
+	if info and info.Empowered and not info.FixedDamage then
 		amount *= 3
 		PowerStatus.Stun(model, 2)
 		local root = model:FindFirstChild("HumanoidRootPart")
 		if root and root:IsA("BasePart") then PowerStatus.Emit("TiroCerteiro", model, root.Position, 0.6, "Impact") end
 	end
-	if PowerStatus.Active(model, "PowerDamageReduction") then amount *= 0.5 end
+	if not (info and info.FixedDamage) and PowerStatus.Active(model, "PowerDamageReduction") then amount *= 0.5 end
 
 	-- ATRIBUTOS DE PERSONAGEM (CharacterStatsApplier publica; StatScaling
 	-- converte). Quem não escolheu personagem cai no fator neutro 1.
 	--   FORÇA do autor      -> multiplica o dano CAUSADO
 	--   COMPOSTURA da vítima -> multiplica o dano RECEBIDO (alta = absorve)
 	local source = info and info.Source
-	if source then
+	if source and not (info and info.FixedDamage) then
 		amount *= StatScaling.DamageDealtMultiplier(source)
 	end
 	local victimPlayer = Players:GetPlayerFromCharacter(model)
-	if victimPlayer then
+	if victimPlayer and not (info and info.FixedDamage) then
 		amount *= StatScaling.DamageTakenMultiplier(victimPlayer)
 	end
 	local cap = info and info.MaxDamage
@@ -347,6 +433,8 @@ function DamageSystem.Apply(target: unknown, amount: number, info: DamageInfo?):
 		return 0, false
 	end
 
+	amount = protectMonster(model, humanoid, amount)
+	if amount <= 0 then return 0, false end
 	local before = humanoid.Health
 	local expectedLethal = amount >= before
 	if expectedLethal then
@@ -360,10 +448,15 @@ function DamageSystem.Apply(target: unknown, amount: number, info: DamageInfo?):
 		return 0, false
 	end
 
+	hitFeedback(model)
 	lastDamageAt[model] = os.clock()
+
+	local attacker = info and info.Source
+	local cause = info and info.Cause
 
 	if humanoid.Health <= 0 then
 		handleDeath(model, humanoid, info)
+		DamageSystem.DamageApplied:Fire(attacker, victimPlayer, applied, true, cause)
 		return applied, true
 	end
 
@@ -374,6 +467,11 @@ function DamageSystem.Apply(target: unknown, amount: number, info: DamageInfo?):
 		stopReaction(model, 0.05)
 	end
 	playHurtReaction(model, humanoid)
+
+	-- Por último, com a reação de dano já disparada: listener de BindableEvent
+	-- roda no mesmo instante, e avisar antes deixaria um observador lento
+	-- atrasando o feedback do golpe.
+	DamageSystem.DamageApplied:Fire(attacker, victimPlayer, applied, false, cause)
 
 	return applied, false
 end
@@ -389,19 +487,38 @@ function DamageSystem.Execute(target: unknown, info: DamageInfo?): boolean
 		return false
 	end
 
+	if DamageSystem.GetMonsterState(model) then
+		DamageSystem.Apply(model, humanoid.Health, { Source = info and info.Source, Cause = info and info.Cause, FixedDamage = true })
+		return false
+	end
+	local before = humanoid.Health
 	playDeathReaction(model, humanoid)
 	humanoid.Health = 0
 	handleDeath(model, humanoid, info)
+
+	DamageSystem.DamageApplied:Fire(
+		info and info.Source,
+		Players:GetPlayerFromCharacter(model),
+		before,
+		true,
+		info and info.Cause
+	)
 	return true
 end
 
 --[[
-	Heal(target, amount)
+	Heal(target, amount, healer?)
 	Devolve vida (respeita MaxHealth). Não ressuscita: alvo já morto/eliminado
 	é ignorado. Devolve a vida efetivamente recuperada.
+
+	`healer` é OPCIONAL e serve só pra observação (evento Healed): quem
+	aplicou a cura. Toda cura do jogo hoje é em si mesmo, então quem chama
+	pode passar o próprio jogador ou omitir -- o comportamento é idêntico.
+	Ele existe pra que, quando cura de ALIADO passar a existir, o relatório de
+	partida consiga separar "curou o time" de "se curou" sem mudar nada aqui.
 ]]
-function DamageSystem.Heal(target: unknown, amount: number): number
-	if type(amount) ~= "number" or amount <= 0 then
+function DamageSystem.Heal(target: unknown, amount: number, healer: Player?): number
+	if type(amount) ~= "number" or amount ~= amount or math.abs(amount) == math.huge or amount <= 0 then
 		return 0
 	end
 	local humanoid, model = resolveHumanoid(target)
@@ -411,7 +528,14 @@ function DamageSystem.Heal(target: unknown, amount: number): number
 
 	local before = humanoid.Health
 	humanoid.Health = math.min(humanoid.MaxHealth, humanoid.Health + amount)
-	return humanoid.Health - before
+	local healed = humanoid.Health - before
+
+	if healed > 0 then
+		local targetPlayer = Players:GetPlayerFromCharacter(model)
+		DamageSystem.Healed:Fire(healer or targetPlayer, targetPlayer, healed)
+	end
+
+	return healed
 end
 
 --------------------------------------------------------------------------------
@@ -540,6 +664,9 @@ local function onCharacterAdded(character: Model)
 		local maxHealth = if owner then StatScaling.MaxHealth(owner) else GameConfig.Health.Max
 		humanoid.MaxHealth = maxHealth
 		humanoid.Health = maxHealth
+		if owner and owner:GetAttribute("Role") == GameConfig.Roles.Monster then
+			character:SetAttribute("MonsterCombatState", GameConfig.Monster.CombatStates.Normal)
+		end
 		if owner then
 			monitorFall(owner, character, humanoid)
 		end
@@ -554,6 +681,17 @@ local function onCharacterAdded(character: Model)
 end
 
 local function watchPlayer(player: Player)
+	player:GetAttributeChangedSignal("Role"):Connect(function()
+		local character = player.Character
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if not character or not humanoid or humanoid.Health <= 0 then return end
+		local maxHealth = StatScaling.MaxHealth(player)
+		humanoid.MaxHealth = maxHealth
+		humanoid.Health = maxHealth
+		character:SetAttribute("MonsterTemporarilyDefeated", nil)
+		character:SetAttribute("MonsterCombatState", if player:GetAttribute("Role") == GameConfig.Roles.Monster
+			then GameConfig.Monster.CombatStates.Normal else nil)
+	end)
 	player.CharacterAdded:Connect(onCharacterAdded)
 	if player.Character then
 		onCharacterAdded(player.Character)
@@ -572,7 +710,7 @@ local function regenStep(dt: number)
 		local character = player.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		if character and humanoid and humanoid.Health > 0 and humanoid.Health < humanoid.MaxHealth then
-			if not DamageSystem.IsDamageable(character) then
+			if DamageSystem.GetMonsterState(character) or not DamageSystem.IsDamageable(character) then
 				continue
 			end
 			local hurtAt = lastDamageAt[character]
@@ -603,6 +741,8 @@ end
 	dano de queda. Chame uma vez no boot, ANTES de OTSFirearmService/WeaponSystem.
 ]]
 function DamageSystem.Init()
+	if initialized then return end
+	initialized = true
 	local fallEvent = ReplicatedStorage:FindFirstChild("FallDamageEvent")
 		or ReplicatedStorage:WaitForChild("FallDamageEvent", 10)
 	if fallEvent and fallEvent:IsA("RemoteEvent") then

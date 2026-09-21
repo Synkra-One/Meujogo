@@ -19,8 +19,8 @@
 	  - 3 faixas de queda pela altura: pouso normal / queda curta / queda longa
 	  - toca as animações de pouso do pacote SE elas carregarem (pcall); se
 	    não, só pula -- nunca trava
-	  - NUNCA zera WalkSpeed. A "cambaleada" no pouso forte é uma lentidão
-	    temporária que se restaura sozinha por `task.delay` com teto de tempo,
+	  - O pouso trava a locomoção por menos de um segundo. A "cambaleada" no
+	    pouso forte é uma lentidão temporária que se restaura sozinha por `task.delay` com teto de tempo,
 	    e respeita quem já é dono do WalkSpeed (o script Crouching do pacote)
 	  - shake de câmera leve
 	  - dano de queda: manda a DISTÂNCIA pro servidor (ReplicatedStorage.
@@ -50,6 +50,7 @@ local SPAWN_GRACE = 0.35 -- s de Freefall abaixo disso = não conta (assentando 
 
 local STAGGER_SLOWDOWN = 0.45 -- fração da velocidade durante a cambaleada da queda longa
 local STAGGER_TIME = 0.9 -- s de cambaleada (com teto -- ver applyStagger)
+local LANDING_LOCK_MIN = 0.32 -- reação curta mesmo em pousos pequenos
 
 -- A queda no ar ja e controlada pelo Animate. Este script assume apenas o
 -- pouso, sempre com o clipe de aterrissagem escolhido pelo jogo.
@@ -105,6 +106,7 @@ local freefallStartY = 0
 local freefallPeakY = 0
 local staggerToken = 0
 local landingToken = 0
+local movementLockToken = 0
 
 -- onLanded é chamado por onCharacter (StateChanged) mas o corpo vem depois.
 local onLanded: () -> ()
@@ -184,6 +186,22 @@ local function playOnce(track: AnimationTrack?, stopAfter: number)
 	if landingRoot then
 		landingRoot:SetAttribute("IsLanding", true)
 	end
+	-- A animação de pouso precisa ter alguns frames de peso antes de aceitar
+	-- outra direção. WalkSpeed zero é temporário e restaurado com guarda, para
+	-- não atropelar Crouching ou outro sistema que tenha assumido o controle.
+	local landingHumanoid = humanoid
+	local landingCharacter = landingHumanoid and landingHumanoid.Parent
+	local previousSpeed = if landingHumanoid then landingHumanoid.WalkSpeed else 0
+	local previousRotate = if landingHumanoid then landingHumanoid.AutoRotate else true
+	movementLockToken += 1
+	local lockToken = movementLockToken
+	if landingHumanoid and previousSpeed > 0.1 then
+		landingHumanoid.WalkSpeed = 0
+		landingHumanoid.AutoRotate = false
+	end
+	if landingCharacter and landingCharacter:IsA("Model") then
+		landingCharacter:SetAttribute("LandingLocked", true)
+	end
 	pcall(function()
 		track:Stop(0)
 		track:Play(0.1)
@@ -194,6 +212,14 @@ local function playOnce(track: AnimationTrack?, stopAfter: number)
 		end)
 		if landingToken == myToken and landingRoot and landingRoot.Parent then
 			landingRoot:SetAttribute("IsLanding", false)
+		end
+		if movementLockToken == lockToken and humanoid == landingHumanoid and landingHumanoid
+			and landingHumanoid.Parent and math.abs(landingHumanoid.WalkSpeed) < 0.01 then
+			landingHumanoid.WalkSpeed = previousSpeed
+			landingHumanoid.AutoRotate = previousRotate
+		end
+		if movementLockToken == lockToken and landingCharacter and landingCharacter.Parent then
+			landingCharacter:SetAttribute("LandingLocked", nil)
 		end
 	end)
 end
@@ -304,7 +330,7 @@ function onLanded()
 	local fallDistance = math.max(freefallStartY, freefallPeakY) - hrp.Position.Y
 	freefallPeakY = 0
 	if fallDistance <= MIN_DAMAGE_HEIGHT then
-		playOnce(tracks.Land, 0.5)
+		playOnce(tracks.Land, math.max(0.5, LANDING_LOCK_MIN))
 		return
 	end
 
@@ -313,7 +339,7 @@ function onLanded()
 		if soundSmall and soundSmall:IsA("Sound") then
 			soundSmall:Play()
 		end
-		playOnce(tracks.Land, 0.7)
+		playOnce(tracks.Land, math.max(0.7, LANDING_LOCK_MIN))
 		spawnDust()
 		shakeCamera(0.15, 0.35)
 		return
@@ -323,7 +349,7 @@ function onLanded()
 	if soundLarge and soundLarge:IsA("Sound") then
 		soundLarge:Play()
 	end
-	playOnce(tracks.Land, 0.9)
+	playOnce(tracks.Land, math.max(0.9, LANDING_LOCK_MIN))
 	spawnDust()
 	shakeCamera(math.min(0.2 + fallDistance / 10, 2), math.min(0.3 + fallDistance / 50, 0.7))
 	applyStagger()
@@ -339,13 +365,30 @@ end
 RunService.Heartbeat:Connect(function()
 	local currentHumanoid = humanoid
 	local hrp = rootPart
-	if freefallStart == 0 or not currentHumanoid or not hrp then
+	if not currentHumanoid or not hrp then
+		return
+	end
+	local state = currentHumanoid:GetState()
+	local floor = currentHumanoid.FloorMaterial
+	local airborneState = state == Enum.HumanoidStateType.Freefall
+		or state == Enum.HumanoidStateType.Jumping
+		or state == Enum.HumanoidStateType.FallingDown
+	-- StateChanged pode não emitir Freefall ao sair de uma quina. O contato
+	-- físico e a velocidade vertical são a fonte de verdade nesse caso.
+	if freefallStart == 0 and floor == Enum.Material.Air
+		and state ~= Enum.HumanoidStateType.Swimming
+		and state ~= Enum.HumanoidStateType.Climbing
+		and state ~= Enum.HumanoidStateType.Seated
+		and (airborneState or math.abs(hrp.AssemblyLinearVelocity.Y) > 1) then
+		freefallStart = os.clock()
+		freefallStartY = hrp.Position.Y
+		freefallPeakY = freefallStartY
+	end
+	if freefallStart == 0 then
 		return
 	end
 	freefallPeakY = math.max(freefallPeakY, hrp.Position.Y)
-	if currentHumanoid.FloorMaterial ~= Enum.Material.Air
-		and currentHumanoid.FloorMaterial ~= Enum.Material.Water
-		and currentHumanoid:GetState() ~= Enum.HumanoidStateType.Freefall then
+	if floor ~= Enum.Material.Air and floor ~= Enum.Material.Water then
 		onLanded()
 	end
 end)

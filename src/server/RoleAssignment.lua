@@ -89,24 +89,24 @@ function RoleAssignment.AssignRoles(players: { Player })
 		forcedRole = nil
 	end
 
-	if #players == 1 and GameConfig.Testing.SoloStart and forcedRole then
-		for _, player in players do
-			player:SetAttribute("Role", forcedRole)
+	if #players == 1 and GameConfig.Testing.SoloStart then
+		-- A escolha explicita do painel dev vence o padrao de teste. Sem ela,
+		-- ForceRole pode manter o teste solo previsivel (Sobrevivente por
+		-- padrao, para a tela de selecao sempre poder ser validada).
+		local soloRole = devForcedRole(players[1]) or forcedRole
+		if not soloRole then
+			-- Espiao precisa de uma equipe para sabotar. No teste solo o sorteio
+			-- alterna apenas entre os dois papéis jogáveis: humano ou Monstro.
+			local roles = { GameConfig.Roles.Survivor, GameConfig.Roles.Monster }
+			soloRole = roles[rng:NextInteger(1, #roles)]
 		end
-		print(string.format("[RoleAssignment] MODO DE TESTE: %d jogador(es) forçado(s) em '%s'.", #players, forcedRole))
+		players[1]:SetAttribute("Role", soloRole)
+		print(string.format("[RoleAssignment] MODO DE TESTE SOLO: %s caiu como '%s'.", players[1].Name, soloRole))
 		return
 	end
 
 	if forcedRole and #players >= 2 then
 		warn("[RoleAssignment] ForceRole ignorado em partida multiplayer: 2+ jogadores sempre precisam de exatamente 1 Monstro.")
-	end
-
-	if #players == 1 and GameConfig.Testing.SoloStart then
-		local roles = { GameConfig.Roles.Survivor, GameConfig.Roles.Monster, GameConfig.Roles.Spy }
-		local role = devForcedRole(players[1]) or roles[rng:NextInteger(1, #roles)]
-		players[1]:SetAttribute("Role", role)
-		print(string.format("[RoleAssignment] MODO DE TESTE SOLO: %s caiu como '%s'.", players[1].Name, role))
-		return
 	end
 
 	assert(#players >= 2, "AssignRoles precisa de pelo menos 2 jogadores (1 Monstro + 1 Sobrevivente)")

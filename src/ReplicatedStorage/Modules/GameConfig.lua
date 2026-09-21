@@ -210,7 +210,10 @@ GameConfig.Noise = {
 -- vida (StarterGui/Ui, do pacote de movimento) só lê Humanoid.Health/MaxHealth.
 
 GameConfig.Health = {
-	Max = 100, -- MaxHealth aplicado ao Humanoid no spawn
+	Max = 100, -- referência dos Sobreviventes; Compostura mantém a faixa existente
+	MonsterMax = 1000,
+	MonsterMinimum = 1, -- Parte 1: nunca executar/eliminar por dano
+	CombatAnimationsEnabled = false, -- assets existentes ficam reservados para outra etapa
 
 	-- Reações de combate são tocadas pelo SERVIDOR. Assim vítima, Monstro e
 	-- espectadores veem a mesma animação, sem depender do HealthChanged local.
@@ -266,10 +269,26 @@ GameConfig.Bandagem = {
 --------------------------------------------------------------------------------
 GameConfig.Fear = {
 	MaxFear = 100,
-	MaxFearDistance = 300,
+	-- RAMPA: o Fear é uma BARRA que sobe com o tempo, nunca um estouro.
+	-- MaxFearDistance é a fronteira dos dois regimes: mais perto que isso a
+	-- barra sobe, mais longe ela desce (depois de FearRecoveryDelay). Era 300
+	-- studs -- quase a ilha toda --, então dava pra acumular medo lentamente
+	-- sem NUNCA recuperar. Com 160 a "zona de perigo" é o entorno do Monstro.
+	MaxFearDistance = 160,
 	MinFearDistance = 20,
-	MaxProximityFearPerSecond = 10,
-	ProximityCurveExponent = 2, -- smoothstep(t ^ expoente); maior = menos medo à distância
+	-- Teto de ganho por segundo ANTES dos multiplicadores. Com 3,5: colado no
+	-- Monstro, com linha de visão e Compostura média, a barra vai de 0 a 100
+	-- em ~21 s; sendo perseguido, em ~15 s; no pior caso possível (Compostura
+	-- 0 + visão + perseguição, limitado por MaxFearGainPerSecond) ~12,5 s.
+	MaxProximityFearPerSecond = 3.5,
+	-- smoothstep(t ^ expoente); maior = menos medo à distância. Com 2 a curva
+	-- virava um penhasco (quase nada além de 100 studs); 1,4 dá presença ao
+	-- meio da zona de perigo -- ~1,5/s a 80 studs -- sem estourar de perto.
+	ProximityCurveExponent = 1.4,
+	-- Recuperação: some da zona de perigo (>= MaxFearDistance), espere
+	-- FearRecoveryDelay e a barra desce. 3,5/s = 100 -> 0 em ~29 s com
+	-- Compostura média; descer é de propósito mais lento que subir sob
+	-- perseguição, senão fugir em círculos apagaria a tensão.
 	FearRecoveryDelay = 4,
 	BaseFearRecoveryPerSecond = 3.5,
 	FearUpdateInterval = 0.2,
@@ -289,7 +308,7 @@ GameConfig.Fear = {
 	ChaseAwayDot = 0, -- vítima não pode estar avançando contra o monstro
 	ChaseRequiresLineOfSight = true,
 	ChaseConfirmTime = 0.6, -- evita classificar um movimento passageiro como perseguição
-	MaxFearGainPerSecond = 20, -- teto DEPOIS de Compostura, LOS e Chase
+	MaxFearGainPerSecond = 8, -- teto DEPOIS de Compostura, LOS e Chase
 	FearStates = { Nervous = 25, Scared = 50, Panicked = 75, ExtremePanic = 90 },
 	StaminaPenaltyStartFear = 25,
 	MinStaminaRegenMultiplier = 0.5,
@@ -325,6 +344,24 @@ GameConfig.Fear = {
 	VignetteMaxFear = 100,
 	VignetteMaxOpacity = 0.22,
 	VignetteEdgeSize = 0.2, -- centro livre; fração da largura/altura de cada borda
+	-- ESCURECIMENTO ANIMADO (tela "meia escura" em pânico). Camada de tela
+	-- cheia POR BAIXO da vinheta, com respiração lenta pra não virar um filtro
+	-- estático. Some sozinha quando o Fear cai.
+	DarkenStartFear = 68,
+	DarkenMaxFear = 100,
+	DarkenMaxOpacity = 0.42, -- teto duro de 0,6 no código: a tela nunca apaga
+	DarkenPulseSpeed = 1.15, -- ciclos por segundo da respiração
+	DarkenPulseAmount = 0.22, -- fração da opacidade que oscila
+	-- HUD SUMINDO EM PÂNICO. Em pânico o Sobrevivente perde a leitura calma da
+	-- tela: o widget de mapa+fôlego (um CanvasGroup só) apaga entre estes dois
+	-- valores, o inventário desliza pra fora depois, e o mapa grande (M) trava.
+	-- Nada disso muda gameplay: o fôlego, os itens e o mapa continuam lá.
+	HudFadeStartFear = 70,
+	HudFadeFullFear = 86,
+	HotbarFadeStartFear = 78,
+	HotbarFadeFullFear = 92,
+	HotbarSlideOffset = 96, -- pixels que a barra de itens desce ao sumir
+	FullMapBlockFear = 86, -- acima disso o mapa grande não abre e fecha sozinho
 	BlurStartFear = 75,
 	BlurMaxSize = 4,
 	EnableFearFOV = false, -- reservado: movimento/mira já controlam o tween de FOV
@@ -345,15 +382,51 @@ GameConfig.Fear = {
 	LookAroundMaxDuration = 3,
 }
 
+-- POSTES DAS TRILHAS -- apresentação ambiental ligada à proximidade do Monstro.
+-- O servidor alterna as luzes dos modelos marcados por Structures.TrailLamp,
+-- então o efeito aparece igual para todos os jogadores.
+GameConfig.TrailLamps = {
+	MonsterRadius = 70,
+	UpdateInterval = 0.08,
+	ScanInterval = 0.75,
+	FlickerMinInterval = 0.055,
+	FlickerMaxInterval = 0.16,
+}
+
 --------------------------------------------------------------------------------
 -- MONSTRO -- combate e locomoção
 --------------------------------------------------------------------------------
 -- MonsterCombat.lua valida o golpe, roteia dano pelo DamageSystem e publica
 -- MonsterSpeedMul, lido pelo Crouching do pacote de movimento.
 GameConfig.Monster = {
+	CombatStates = { Normal = "Normal", Weakened = "Enfraquecido", Vulnerable = "Vulneravel" },
 	-- Velocidade: multiplicador sobre a do Sobrevivente (andar 12 / sprint 23).
 	SpeedMultiplier = 1.16, -- Monstro ~16% mais rápido -> alcança quem foge
 	WeakenedSpeedMultiplier = 0.7, -- enquanto fraco pela luz (Zona Segura / Tocha)
+
+	-- Visão local do Monstro: clareia apenas o suficiente para ler o chão e
+	-- silhuetas em curta/média distância, sem transformar a noite em dia.
+	Vision = {
+		Brightness = 0.08,
+		Contrast = 0.14,
+		Saturation = -0.16,
+		TintColor = Color3.fromRGB(207, 192, 255),
+		BloomIntensity = 0.10,
+		BloomSize = 18,
+		BloomThreshold = 1.25,
+		CornerOpacity = 0.13,
+		CornerSize = 0.20,
+		-- Perfil do Desaparecer: a visão fica mais aberta e luminosa durante
+		-- o deslocamento, inclusive para leitura de pontos mais distantes.
+		ShadowRushBrightness = 0.20,
+		ShadowRushContrast = 0.22,
+		ShadowRushSaturation = -0.08,
+		ShadowRushTintColor = Color3.fromRGB(225, 214, 255),
+		ShadowRushBloomIntensity = 0.16,
+		ShadowRushBloomSize = 22,
+		ShadowRushBloomThreshold = 1.10,
+		ShadowRushCornerOpacity = 0.05,
+	},
 
 	Attack = {
 		Damage = 34, -- 3 golpes limpos matam um Sobrevivente de 100 HP
@@ -364,12 +437,12 @@ GameConfig.Monster = {
 		KnockbackUp = 8, -- componente vertical (tira o pé do chão de leve)
 		LungeForce = 20, -- dash pra frente do PRÓPRIO Monstro ao golpear (0 = sem dash)
 		WeakenedDamageMul = 0.45, -- golpe enfraquecido enquanto fraco pela luz
-		MaxHitsPerSwing = 3, -- teto de vítimas por golpe (anti-abuso em aglomeração)
+		MaxHitsPerSwing = 1, -- Parte 1: um único alvo por golpe
 	},
 
-	-- Animação de golpe (R6). 129967390 = "tool slash" padrão da Roblox,
-	-- pública. Trocar por uma sua depois é só mudar aqui.
-	SwingAnimationId = "rbxassetid://129967390",
+	-- Legado: o golpe agora lê MonsterAnimationConfig.AnimationIds.Attack.
+	-- Mantido vazio para que nenhuma animação R6 genérica seja aplicada ao rig.
+	SwingAnimationId = "",
 
 	-- Grab: E / ButtonX. O servidor escolhe a vitima, alinha os rigs e usa os
 	-- markers da animacao para matar, soltar e encerrar a execucao.
@@ -403,6 +476,7 @@ GameConfig.Monster = {
 		ShadowRushDuration = 5,
 		ShadowRushMaxSpeed = 75,
 		ShadowRushAcceleration = 0.28, -- aceleração, direção usa o controle normal
+		ShadowRushTurnResponse = 0.12, -- constante de suavização de direção usada por ShadowRushRules.Velocity
 		ShadowRushExitDeceleration = 0.24,
 		ShadowRushMaterializeDuration = 0.24,
 		ShadowRushRecovery = 0.12, -- apenas combate; pode continuar andando
@@ -411,13 +485,48 @@ GameConfig.Monster = {
 		ShadowPassDistance = 12,
 		ShadowPassFear = 8, -- pontos finais; FearSystem.AddFear aplica o teto
 		ShadowPassCooldown = 6, -- por vítima por ativação (padrão: uma vez)
+		-- 9120699200 foi identificado no Studio como Sound, não Animation.
+		ShadowRushAnimationId = "", -- a locomoção é apresentada pela fumaça viva, sem deformar o rig
+		-- Áudio espacial autorizado do projeto. Vazio desativa; substitua aqui.
 		ShadowRushEnterSoundId = "",
-		ShadowRushLoopSoundId = "",
+		ShadowRushLoopSoundId = "rbxassetid://9120699200",
 		ShadowRushExitSoundId = "",
 		ShadowPassSoundId = "",
 		SoundMaxDistance = 90,
 		SoundVolume = 0.65,
-		FOVOffset = 24, -- 70 -> 94 (sprint normal já usa 90); mesmo dono de FOV
+		EnterSoundPlaybackSpeed = 0.72, -- ataque grave; Equalizer no cliente
+		FOVOffset = 8, -- aumento sutil, composto pelo Crouching existente
+		Visual = { -- somente apresentação; nenhum destes valores altera gameplay
+			NearDistance = 75,
+			DetailDistance = 170,
+			FarUpdateInterval = 0.15,
+			ParticleRate = 72, -- fumaça principal; reduzida no LOD médio/mobile
+			SmokeDensity = 1.85,
+			SmokeDrag = 3.5,
+			SmokeLift = 2.4,
+			TrailLifetime = 0.22,
+			WaveRadius = 7,
+			WaveDuration = 0.32, -- cauda visual pode ultrapassar a entrada de 0.16 s
+			LightBrightness = 2.2,
+			LightRange = 16,
+			CancelFadeDuration = 0.24,
+			ShadowColor = Color3.fromRGB(9, 8, 16),
+			EnergyColor = Color3.fromRGB(237, 72, 28),
+			-- Durante o Desaparecer a visão é clara, fria e de longo alcance.
+			-- O corpo continua invisível; estes valores são só apresentação local.
+			VisionTint = Color3.fromRGB(225, 218, 255),
+			VisionBrightness = 0.15,
+			VisionContrast = 0.28,
+			VisionSaturation = -0.22,
+			BlurSize = 0.28,
+			VignetteOpacity = 0.07,
+			ShakeDegrees = 0.48,
+			ShakeDuration = 0.22,
+			FloatHeight = 0.38, -- elevação visual; não altera colisão ou física
+			FloatAmplitude = 0.12,
+			FloatFrequency = 2.15,
+			FloatLeanDegrees = 2.2,
+		},
 		InputInterval = 0.05,
 		ServerInterval = 1 / 30,
 		ReplicationSlack = 0.5, -- tolerância de rajadas na replicação física
@@ -425,6 +534,60 @@ GameConfig.Monster = {
 		CollisionRadius = 0.8, -- somente margem da borda da ilha
 		MinGroundNormalY = 0.65,
 		BoundsMargin = 6,
+	},
+
+	----------------------------------------------------------------------------
+	-- APAGÃO DO ABISMO -- server/AbyssBlackout.lua + client/AbyssBlackout
+	-- Controller + Modules/AbyssBlackoutRules.lua. Grito de escuridão: a área
+	-- só é lida UMA vez, no instante da ativação. Quem estava dentro carrega o
+	-- efeito pelos 12 s inteiros mesmo saindo; quem entra depois não é pego.
+	-- NÃO dá velocidade ao Monstro, NÃO causa dano e NÃO teleporta.
+	----------------------------------------------------------------------------
+	AbyssBlackout = {
+		-- GAMEPLAY (o servidor é o único que lê estes valores)
+		Radius = 150, -- studs, centro a centro, medido no instante da ativação
+		Duration = 12, -- segundos de lanterna bloqueada, fixos, a partir do disparo
+		WorldLightOffDuration = 18, -- todas as luzes do mapa, sem limite de distância
+		Cooldown = 75, -- faixa pedida: 60..90; contado da ativação aceita
+		Fear = 35, -- pontos FINAIS na escala 0..100 do GameConfig.Fear (35% do teto)
+		-- Reaproveita a Compostura EXISTENTE via StatScaling.FearGainMultiplier
+		-- (0 -> 1.5x, 100 -> 0.55x). Influence mistura esse fator com 1, pra
+		-- Compostura alta sofrer "um pouco menos" em vez de quase nada:
+		--   efetivo = 1 + (FearGainMultiplier - 1) * ComposureInfluence
+		-- Com 0.5: Compostura 0 = ~43.8 pts, 50 = ~35 pts, 100 = ~27.1 pts.
+		ComposureInfluence = 0.5,
+		RequireLineOfSight = false, -- o grito atravessa parede; só a distância conta
+		ActivationLockout = 0.4, -- trava anti-duplo-clique antes mesmo do cooldown
+		ServerInterval = 0.2, -- passo do expirador; nada de Fear por frame
+		-- APRESENTAÇÃO / ANIMAÇÃO (nenhum destes altera gameplay)
+		-- CastDuration só mantém o Attribute "AbyssBlackoutCasting" ligado por
+		-- esse tempo: é a janela reservada pra animação de conjuração entrar
+		-- depois. O registro dos alvos continua no instante 0 da ativação.
+		CastDuration = 0.45,
+		CastSoundDelay = 1, -- instante do grito; o apagão global começa junto dele
+		CastAnimationId = "", -- rbxassetid:// da animação do Monstro (vazio = sem animação)
+		VictimAnimationId = "", -- reação do Sobrevivente atingido (vazio = sem animação)
+		AnimationFadeTime = 0.12,
+		CastSoundId = "rbxassetid://113309977574893", -- grito do Monstro, 1 s após o disparo (3D)
+		HitSoundId = "rbxasset://sounds/impact_explosion_03.mp3", -- 2D, só na vítima
+		HitSoundVolume = 0.55,
+		HitSoundPlaybackSpeed = 0.42, -- rebaixado: vira estrondo grave do Abismo
+		SoundMaxDistance = 220,
+		CastSoundVolume = 0.7,
+		PulseColor = Color3.fromRGB(96, 8, 10), -- pulso escuro/vermelho na tela
+		SustainColor = Color3.fromRGB(4, 3, 8), -- escuridão sustentada durante o efeito
+		PulseOpacity = 0.72, -- pico do pulso inicial
+		SustainOpacity = 0.3, -- nível mantido enquanto a lanterna está bloqueada
+		PulseAttack = 0.12, -- subida do pulso, em segundos
+		PulseDecay = 0.9, -- queda do pico até o nível sustentado
+		PulseRelease = 1.2, -- alívio nos últimos segundos, antes de liberar
+		EdgeSize = 0.26, -- fração da tela usada pela moldura escura
+		Blur = 2.6,
+		-- R / R1: livres para o Monstro (E = Grab, F = Shadow Rush, Q = mapa,
+		-- R2 = golpe). R do recarregamento é só do Sobrevivente com arma.
+		InputKey = Enum.KeyCode.R,
+		GamepadKey = Enum.KeyCode.ButtonR1,
+		InputInterval = 0.1,
 	},
 
 	----------------------------------------------------------------------------
@@ -444,6 +607,11 @@ GameConfig.Monster = {
 		GroundSnapDown = 140, -- ...e desce até isto procurando chão
 		MaxSlopeCos = 0.55, -- cos do ângulo máx. da rampa no destino (~57°)
 		BoundsMargin = 30, -- fica pelo menos isto pra dentro da borda do mapa
+		-- Se o ponto exato estiver dentro de uma árvore, parede ou outro
+		-- obstáculo, o servidor procura automaticamente uma posição vizinha.
+		DestinationSearchRadius = 96,
+		DestinationSearchStep = 6,
+		DestinationSearchSamples = 16,
 		-- Medidas-base para escala 1. MonsterTeleport multiplica ambas pelo
 		-- Model:GetScale() real (1.2 para o Monstro atual).
 		ClearanceRadius = 2.6, -- meia-largura da checagem de "cabe o rig?"
@@ -550,7 +718,7 @@ GameConfig.Characters = {
 	-- GameConfig.Noise.States, e a conta é StatScaling.NoiseRadius /
 	-- StatScaling.NoisePingInterval.
 
-	-- Reparo -> progresso da Jangada e chance de sintonizar o Rádio.
+	-- Reparo -> chance de sintonizar o Rádio.
 	RepairSpeed = { Min = 0.55, Max = 1.6 },
 
 	-- Força -> dano CAUSADO (corpo a corpo, arma de fogo) e empurrão.
@@ -611,22 +779,27 @@ GameConfig.Roles = {
 --------------------------------------------------------------------------------
 -- DURAÇÃO TOTAL DA PARTIDA
 --------------------------------------------------------------------------------
--- Alvo de design: 8 a 12 minutos por partida.
+-- A rodada completa dura 20 minutos. O amanhecer chega no trecho final:
+-- com 19:30 decorridos, a iluminação já está totalmente de dia.
 
 GameConfig.Match = {
-	DurationMin = 8 * MINUTE, -- 480s
-	DurationMax = 12 * MINUTE, -- 720s
-	DurationDefault = 10 * MINUTE + 30, -- 630s (soma das fases padrão abaixo)
+	DurationMin = 20 * MINUTE,
+	DurationMax = 20 * MINUTE,
+	DurationDefault = 20 * MINUTE, -- soma das fases padrão abaixo
+}
+
+GameConfig.DayNight = {
+	DawnStartsAt = 14 * MINUTE, -- começa a clarear nos últimos 6 minutos
+	FullDayAt = 19 * MINUTE + 30, -- 30s antes do fim já está completamente de dia
+	StartClockTime = 0.3,
+	FullDayClockTime = 8,
+	UpdateInterval = 0.5,
 }
 
 --------------------------------------------------------------------------------
 -- FASES DA PARTIDA
 --------------------------------------------------------------------------------
--- ATENÇÃO: a soma dos `Default` das 4 fases deve ficar dentro da janela
--- Match.DurationMin .. Match.DurationMax.
---   Soma atual: 30 + 210 + 300 + 90 = 630s  (10min30s) -> OK
---   Se você usar todos os Max: 30 + 240 + 360 + 120 = 750s (12min30s) -> estoura
---   a janela. Nesse caso, aumente Match.DurationMax ou reduza algum Max.
+-- ATENÇÃO: a soma dos `Default` das 4 fases deve fechar os 1200 segundos.
 
 GameConfig.Phases = {
 	-- 1) Queda: jogadores caem/aterrissam na ilha. Tempo fixo, sem variação.
@@ -638,16 +811,16 @@ GameConfig.Phases = {
 
 	-- 2) Exploração: procurar recursos, descobrir o mapa. (3 a 4 min)
 	Exploracao = {
-		Min = 3 * MINUTE, -- 180s
-		Max = 4 * MINUTE, -- 240s
-		Default = 210, -- 3min30s
+		Min = 6 * MINUTE,
+		Max = 6 * MINUTE,
+		Default = 6 * MINUTE,
 	},
 
 	-- 3) Corrida: correr para o objetivo/extração, pressão máxima. (4 a 6 min)
 	Corrida = {
-		Min = 4 * MINUTE, -- 240s
-		Max = 6 * MINUTE, -- 360s
-		Default = 5 * MINUTE, -- 300s
+		Min = 12 * MINUTE,
+		Max = 12 * MINUTE,
+		Default = 12 * MINUTE,
 	},
 
 	-- 4) Desfecho: resolução, revelação de papéis, placar. (1 a 2 min)
@@ -840,24 +1013,51 @@ GameConfig.RadioSite = {
 	-- os outros (abastecer, fusível, partida, painel) são "segurou o prompt
 	-- ou não", não tem o que acelerar.
 	PowerBoostPercent = 25,
+
+	-- SOM 3D DO ERRO DO GERADOR ------------------------------------------------
+	-- Quando alguém erra QUALQUER minigame de reparo (nota vermelha ou teste
+	-- ignorado: instalar peça, ligar gerador, painel, fio cortado), o servidor
+	-- manda tocar um som de choque na posição física do GERADOR (a Part com o
+	-- atributo MotorGerador) SÓ pra quem errou e pro(s) Monstro(s) ao alcance
+	-- -- os outros sobreviventes não ouvem. Quem erra longe do gerador (além de
+	-- RollOffMaxDistance) não ouve nada: o som vem do gerador, não de quem errou. É áudio
+	-- espacial nativo do Roblox: a direção e o volume vêm da posição do gerador
+	-- em relação à câmera/ouvido de quem ouve -- gerador atrás soa atrás,
+	-- à esquerda soa à esquerda, e o volume cai com a distância.
+	--
+	-- O ID do som fica em AssetRegistry.Sounds.RadioSite.ErroGerador.
+	ErroGerador = {
+		-- Liga/desliga o sistema inteiro.
+		Enabled = true,
+
+		-- true = imprime no Output (servidor E cliente) cada envio e o motivo de
+		-- o som NÃO ter tocado (cooldown, sem gerador, áudio que não carregou,
+		-- gerador longe demais). Ligue se "errei e não tocou".
+		Debug = false,
+
+		-- VOLUME (0 a 10; 1 = normal). Suba pra o choque "estourar" mais.
+		Volume = 1,
+
+		-- DISTÂNCIA MÁXIMA em studs: além disso o Monstro não ouve nada (e o
+		-- servidor nem envia o som pra ele). Quem errou está ao lado do gerador
+		-- e sempre ouve. É o valor pra editar primeiro.
+		RollOffMaxDistance = 100,
+
+		-- Até esta distância o volume fica no máximo; depois cai (modo
+		-- InverseTapered) até zero em RollOffMaxDistance.
+		RollOffMinDistance = 12,
+
+		-- Tamanho do emissor em studs. Maior = o som soa "espalhado" e a
+		-- direção fica mais suave quando o Monstro está perto do gerador;
+		-- menor = som pontual e direcional.
+		EmitterSize = 8,
+
+		-- COOLDOWN em segundos por gerador: erros seguidos dentro dessa janela
+		-- não tocam o choque de novo. Use algo entre 2 e 4.
+		Cooldown = 3,
+	},
 }
 
---------------------------------------------------------------------------------
--- OBJETIVO: JANGADA
---------------------------------------------------------------------------------
-
-GameConfig.RaftObjective = {
-	-- % de progresso ganho por material entregue em LocalJangada. Ajuste
-	-- pra bater ~100% com a quantidade de materiais que você colocar no mapa.
-	ProgressPerMaterial = 12,
-
-	-- % extra de progresso por cada ajudante entregando material AO MESMO
-	-- TEMPO (além de quem está entregando agora). Ex: 3 jogadores entregando
-	-- juntos rendem mais progresso por entrega do que 1 sozinho.
-	SimultaneousHelperBonus = 3,
-}
-
---------------------------------------------------------------------------------
 -- CONFRONTO (detectar / amarrar / executar)
 --------------------------------------------------------------------------------
 
@@ -888,8 +1088,8 @@ GameConfig.Confront = {
 --------------------------------------------------------------------------------
 
 GameConfig.Round = {
-	-- A contagem só corre com o mínimo de participantes e todos prontos.
-	WaitingCountdown = 10,
+	-- A unica contagem antes da rodada e a selecao autoritativa definida em
+	-- SurvivorSelectionConfig (30s). Nao existe um segundo timer de espera.
 	-- Monstro vence quando a quantidade de Sobreviventes VIVOS chega a este
 	-- número (0 = precisa eliminar todos). Espião não conta como Sobrevivente.
 	MonsterWinsAtSurvivorsAlive = 0,
@@ -922,30 +1122,42 @@ GameConfig.Tension = {
 }
 
 --------------------------------------------------------------------------------
--- ARMAS FRACAS (Faca Improvisada, Lança de Bambu, Pedra Afiada)
+-- ARMAS / FUNDAÇÃO DO COMBATE (distâncias em studs, tempos em segundos)
 --------------------------------------------------------------------------------
--- O empurrão no Monstro continua (juice). Além dele, se o *Damage abaixo for
--- > 0, a arma também tira vida de verdade pelo DamageSystem. Deixei tudo em 0
--- pra não mudar o balanço atual sem você pedir -- suba os números quando
--- quiser que essas armas machuquem/matem.
-
 GameConfig.Weapons = {
-	KnifeRange = 6, -- Faca Improvisada
-	SpearRange = 10, -- Lança de Bambu (mais alcance que a faca)
-	MeleePushForce = 35,
-
-	KnifeDamage = 0, -- dano da Faca Improvisada por acerto (0 = só empurra)
-	SpearDamage = 0, -- dano da Lança de Bambu por acerto
-	RockDamage = 0, -- dano da Pedra Afiada no ponto de impacto (hoje nem mira alvo)
-
-	-- Cosseno do meio-ângulo do cone de acerto à frente do jogador
-	-- (0.5 = 60°, ou seja, cone total de 120°). Precisa mirar, não só
-	-- estar perto de qualquer jeito.
 	MeleeConeCos = 0.5,
-
-	-- Pedra Afiada: distância do arremesso (na direção que o jogador olha).
-	ThrowDistance = 25,
+	-- IDs antigos preservados para inventário, drops, crafting e pickups.
+	Definitions = {
+		PedraAfiada = { DisplayName = "Chave inglesa", Kind = "Melee", Damage = 8, Range = 6, Cooldown = 1, PushForce = 12 },
+		LancaDeBambu = { DisplayName = "Pé de cabra", Kind = "Melee", Damage = 15, Range = 7, Cooldown = 1.5, StunDuration = 0.4 },
+		Sinalizador = { DisplayName = "Sinalizador", Kind = "Signal", Damage = 0, Range = 35, Cooldown = 2,
+			RevealMonster = false, RepelMonster = false }, -- somente pontos de extensão
+		Glock17 = { DisplayName = "Pistola", Kind = "Firearm", Damage = 25, Range = 300, Cooldown = 0.4,
+			Ammo = 12, ReloadEnabled = false, AnimationsEnabled = false, Recoil = 0, Spread = 0 },
+		-- Item legado continua disponível, sem se tornar uma quinta arma nova.
+		FacaImprovisada = { DisplayName = "Faca Improvisada", Kind = "Melee", Damage = 0, Range = 6, Cooldown = 1, PushForce = 35 },
+		-- Clique = golpe leve (Hit). Segurar o clique = Heavy (Finish): mais
+		-- dano, empurrão e atordoamento, mas cooldown maior -- o DPS dos dois
+		-- é parecido de propósito, então forçar Heavy via cliente não rende
+		-- vantagem. ClientDriven: o BatController dispara o remote (não o
+		-- WeaponController), no momento do impacto da animação.
+		TacoBeisebol = {
+			DisplayName = "Taco de Beisebol", Kind = "Melee", Damage = 12, Range = 7, Cooldown = 1.1,
+			PushForce = 22, ClientDriven = true,
+			Heavy = { Damage = 26, Range = 7.5, Cooldown = 2.2, PushForce = 48, StunDuration = 0.6 },
+		},
+	},
 }
+
+--------------------------------------------------------------------------------
+-- ITENS INICIAIS (server/StartingItems.lua)
+--------------------------------------------------------------------------------
+-- Ids de ItemRegistry.Items entregues ao Backpack quando a partida começa,
+-- por papel. Papel ausente (Monstro) não recebe nada.
+GameConfig.StartingItems = {
+	[GameConfig.Roles.Survivor] = { "TacoBeisebol" },
+	[GameConfig.Roles.Spy] = { "TacoBeisebol" },
+} :: { [string]: { string } }
 
 --------------------------------------------------------------------------------
 -- DIGITAL'S OTS PATCH2 (somente Glock17)
@@ -989,8 +1201,8 @@ GameConfig.Firearms = {
 -- AMBIENTE / CLIMA
 --------------------------------------------------------------------------------
 -- Ver ReplicatedStorage/Modules/LightingPresets.lua pros valores de cada um.
--- "Night" fica salvo para voltar ao clima de jogo depois. "CloudyMorning"
--- está ativo agora para o Play nascer de dia enquanto depuramos mapa/gameplay.
+-- "Night" é aplicado ao começar uma rodada. "CloudyMorning" fica para lobby,
+-- intervalo e fora da partida; o DayNightCycle faz a transição durante o jogo.
 
 GameConfig.Environment = {
 	LightingPreset = "CloudyMorning",
@@ -1011,16 +1223,17 @@ GameConfig.Testing = {
 
 	-- Força o papel apenas em teste solo. Em partida com 2+ jogadores,
 	-- RoleAssignment sempre sorteia exatamente 1 Monstro.
-	-- nil = sorteio normal.
+	-- Sobrevivente = abre sempre a selecao nova no teste solo. O painel dev
+	-- ainda pode sobrescrever para Monstro/Espiao quando voce quiser.
 	--
 	-- Em teste solo, nil sorteia entre Sobrevivente/Monstro/Espião para
-	-- facilitar testar todos os fluxos sem abrir múltiplos clients.
-	-- Troque pra "Monstro" ou "Espiao" se quiser forçar um papel específico.
-	-- Atualmente fica nil para você testar o sorteio real, inclusive podendo
-	-- cair como Jason/Monstro.
+	-- facilitar testar todos os fluxos sem abrir múltiplos clients. Um valor
+	-- fixo aqui fazia todo Play solo nascer sempre como Sobrevivente.
+	-- Defina manualmente "Monstro"/"Sobrevivente"/"Espiao" apenas durante
+	-- uma sessão de diagnóstico específica.
 	ForceRole = nil,
 
-	-- Painel dev dentro da sala de espera para escolher o papel da próxima
+	-- Painel dev na preparação da partida para escolher o papel da próxima
 	-- partida sem depender da sorte. O servidor valida por UserId.
 	DevRoleChooser = true,
 	DevRoleUserIds = { 11555748600 } :: { number },
@@ -1039,10 +1252,6 @@ GameConfig.Testing = {
 	-- Arma de treino só causa dano no alvo. false remove a bancada no próximo Play.
 	LobbyPistol = true,
 
-	-- Larga material de jangada suficiente pra fechar 100% ao lado da própria
-	-- LocalJangada (RaftObjective.lua). Pra testar montar/empurrar a jangada
-	-- sem catar Madeira/Corda/Lona pela ilha. false = tira o kit.
-	RaftKit = true,
 }
 
 return GameConfig

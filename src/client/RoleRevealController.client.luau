@@ -9,9 +9,10 @@
 	texto estático). Toda a UI é construída aqui em código pra ter controle
 	fino da animação; nada de model.json.
 
-	GATILHO: Remotes.RoundStateChanged com a 1ª fase (GameConfig.PhaseOrder[1],
-	"Queda"). Espera o Attribute "Role" do jogador local chegar (o servidor
-	sorteia em RoleAssignment, replica sozinho) e então roda a sequência.
+	GATILHO: Attribute "RoleRevealOpen". O servidor sorteia os papéis e abre
+	essa janela antes da selecao de sobrevivente; assim a animacao nao compete
+	com os cards. RoundStateChanged nao dispara mais esta tela para evitar uma
+	segunda revelacao quando a partida comeca.
 	Reaparece toda rodada -- o papel muda entre partidas.
 
 	SEQUÊNCIA (~7s):
@@ -47,7 +48,7 @@ local ROLE_INFO: { [string]: { Label: string, Title: string, Color: Color3, Obje
 		Label = "SOBREVIVENTE",
 		Title = "VOCÊ É SOBREVIVENTE",
 		Color = Color3.fromRGB(80, 195, 165),
-		Objective = "Fuja da ilha: monte o Rádio ou a Jangada antes que o tempo acabe.",
+		Objective = "Fuja da ilha: conclua o Rádio e alcance a extração antes que o tempo acabe.",
 	},
 	[GameConfig.Roles.Monster] = {
 		Label = "JASON",
@@ -328,14 +329,16 @@ local function waitForRole(): string?
 	return nil
 end
 
-Remotes.RoundStateChanged.OnClientEvent:Connect(function(phase: string)
-	if phase ~= GameConfig.PhaseOrder[1] then
-		return
-	end
+local function startFromAttribute()
+	if LocalPlayer:GetAttribute("RoleRevealOpen") ~= true then return end
 	task.spawn(function()
 		local role = waitForRole()
-		if role and ROLE_INFO[role] then
+		if LocalPlayer:GetAttribute("RoleRevealOpen") == true and role and ROLE_INFO[role] then
 			playReveal(role)
 		end
 	end)
-end)
+end
+
+LocalPlayer:GetAttributeChangedSignal("RoleRevealOpen"):Connect(startFromAttribute)
+-- Cobre cliente lento que entrou depois do servidor ter publicado o atributo.
+startFromAttribute()

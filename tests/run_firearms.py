@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise actual firearm/lobby/pickup modules with simulated Roblox services.
+"""Exercise actual combat/health/firearm/lobby modules with simulated Roblox services.
 
 Usage: python3 tests/run_firearms.py /path/to/luau
 This checks gameplay contracts, not Studio physics, rendering or asset permissions.
@@ -13,10 +13,18 @@ import xml.etree.ElementTree as ET
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 MODULES = {
     "GameConfig": "src/ReplicatedStorage/Modules/GameConfig.lua",
+    "MonsterAnimationConfig": "src/ReplicatedStorage/Modules/MonsterAnimationConfig.lua",
+    "CombatRules": "src/ReplicatedStorage/Modules/CombatRules.lua",
+    "WeaponCombatConfig": "src/ReplicatedStorage/Modules/WeaponCombatConfig.lua",
+    "WeaponSystem": "src/server/WeaponSystem.lua",
+    "MonsterCombat": "src/server/MonsterCombat.lua",
+    "DamageSystem": "src/server/DamageSystem.lua",
+    "StatScaling": "src/ReplicatedStorage/Modules/StatScaling.lua",
     "OTSRules": "src/ReplicatedStorage/Modules/OTSRules.lua",
     "OTSAmmo": "src/ReplicatedStorage/Modules/OTSAmmo.lua",
     "AmmoSystem": "src/server/AmmoSystem.lua",
     "DropItemSystem": "src/server/DropItemSystem.lua",
+    "InteractionGuard": "src/server/InteractionGuard.lua",
     "OTSFirearmService": "src/server/OTSFirearmService.lua",
     "LobbyFiringRange": "src/server/LobbyFiringRange.lua",
 }

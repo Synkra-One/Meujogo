@@ -14,6 +14,7 @@ local Rules = require(ReplicatedStorage.Modules.OTSRules)
 local HUD = require(script.Parent.OTSHUD)
 
 local player = Players.LocalPlayer
+local lastFire = -math.huge
 local hud = HUD.new(player:WaitForChild("PlayerGui") :: PlayerGui)
 local assets = ReplicatedStorage:WaitForChild("WeaponAssets")
 local pistolAnimations = assets:WaitForChild("Animations"):WaitForChild("PistolAnimations")
@@ -124,23 +125,24 @@ local function aimPoint(): Vector3?
 	local ignore: { Instance } = {}
 	if character then table.insert(ignore, character) end
 	local system = Workspace:FindFirstChild("System")
-	if system then table.insert(ignore, system) end
+	if system and (not tool or not Rules.IsFoundation(tool)) then table.insert(ignore, system) end
 	params.FilterDescendantsInstances = ignore
-	local hit = Workspace:Raycast(ray.Origin, ray.Direction * Rules.Range, params)
-	return if hit then hit.Position else ray.Origin + ray.Direction * Rules.Range
+	local hit = Workspace:Raycast(ray.Origin, ray.Direction * (if tool then Rules.AttackRange(tool) else Rules.Range), params)
+	return if hit then hit.Position else ray.Origin + ray.Direction * (if tool then Rules.AttackRange(tool) else Rules.Range)
 end
 
 local function fire()
 	local current = tool
-	if not current or not aiming or blocked() or reloading or reloadRequested
+	if not current or (not Rules.IsFoundation(current) and not aiming) or blocked() or reloading or reloadRequested
 		or current:GetAttribute("FirearmReloading") == true then return end
-	if shownAmmo <= 0 then return end
+	if shownAmmo <= 0 or os.clock() - lastFire < Rules.ShotInterval(current) then return end
 	local point = aimPoint()
 	if not point then return end
+	lastFire = os.clock()
 	sequence += 1
 	pending[sequence] = os.clock()
 	shownAmmo = math.max(0, shownAmmo - 1)
-	Remotes.FirearmShoot:FireServer(current, point, true, sequence)
+	Remotes.FirearmShoot:FireServer(current, point, aiming, sequence)
 	local fireTrack = tracks.Fire
 	if fireTrack then
 		fireTrack:Stop(0)
@@ -153,7 +155,7 @@ end
 
 local function tryReload()
 	local current = tool
-	if not current or reloading or reloadRequested or blocked() then return end
+	if not current or not Rules.ReloadEnabled(current) or reloading or reloadRequested or blocked() then return end
 	if shownAmmo >= Ammo.GetMagazineMax(current) or Ammo.GetReserve(player, Ammo.TypeFor(current)) <= 0 then return end
 	setAim(false)
 	reloadRequested = true
@@ -194,9 +196,10 @@ local function equip(current: Tool)
 	if character then character:SetAttribute("FirearmAimFOV", Rules.AimFOV(current)) end
 	shownAmmo = Ammo.GetMagazine(current)
 	hud:SetEnabled(true)
+	hud.Buttons.Reload.Visible = Rules.ReloadEnabled(current)
 	local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
 	if not animator and humanoid then animator = Instance.new("Animator", humanoid) end
-	if animator then
+	if animator and Rules.AnimationsEnabled(current) then
 		loadTrack(animator, "Holster", Enum.AnimationPriority.Action, true)
 		loadTrack(animator, "Aim", Enum.AnimationPriority.Action2, true)
 		loadTrack(animator, "Fire", Enum.AnimationPriority.Action3, false)
@@ -346,6 +349,6 @@ RunService:BindToRenderStep("DigitalOTSFeedback", Enum.RenderPriority.Camera.Val
 		Remotes.FirearmReload:FireServer(current, "Cancel")
 		reloading = false
 	end
-	hud:Update(shownAmmo, Ammo.GetReserve(player, Ammo.TypeFor(current)), reloading,
+	hud:Update(shownAmmo, if Rules.ReloadEnabled(current) then Ammo.GetReserve(player, Ammo.TypeFor(current)) else 0, reloading,
 		UserInputService.TouchEnabled, blocked())
 end)

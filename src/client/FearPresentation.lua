@@ -32,6 +32,14 @@ function Presentation.Init()
 	gui.Name, gui.ResetOnSpawn, gui.IgnoreGuiInset = "FearPresentation", false, true
 	gui.DisplayOrder, gui.Enabled = 1, false
 	gui.Parent = playerGui
+	-- Escurecimento de tela cheia, POR BAIXO da vinheta (ZIndex menor): em
+	-- pânico a tela inteira perde luz e respira devagar.
+	local darken = Instance.new("Frame")
+	darken.Name, darken.Size = "FearDarken", UDim2.fromScale(1, 1)
+	darken.BackgroundColor3 = Color3.fromRGB(3, 4, 7)
+	darken.BackgroundTransparency, darken.BorderSizePixel = 1, 0
+	darken.Active, darken.ZIndex = false, 0
+	darken.Parent = gui
 	local edges: { Frame } = {}
 	local width = math.clamp(CFG.VignetteEdgeSize, 0.05, 0.3)
 	for _, data in {
@@ -44,6 +52,7 @@ function Presentation.Init()
 		edge.Name, edge.Position, edge.Size = data[1] :: string, data[2] :: UDim2, data[3] :: UDim2
 		edge.BackgroundColor3 = Color3.new(0,0,0)
 		edge.BackgroundTransparency, edge.BorderSizePixel, edge.Active = 1, 0, false
+		edge.ZIndex = 1
 		edge.Parent = gui
 		local gradient = Instance.new("UIGradient")
 		gradient.Rotation = data[4] :: number
@@ -77,6 +86,7 @@ function Presentation.Init()
 		heartbeat:Stop(); heartbeat.Volume = 0
 		breathing:Stop(); breathing.Volume = 0
 		gui.Enabled = false
+		darken.BackgroundTransparency = 1
 		for _, edge in edges do edge.BackgroundTransparency = 1 end
 		blur.Size, blur.Enabled = 0, false
 		if animationPlayer then animationPlayer.Reset() end
@@ -168,19 +178,29 @@ function Presentation.Init()
 		local targets = Rules.Targets(smoothedFear, CFG)
 		updateSound(heartbeat, CFG.HeartbeatSoundId, targets.HeartbeatVolume, targets.HeartbeatPlaybackSpeed)
 		updateSound(breathing, CFG.BreathingSoundId, targets.BreathingVolume, targets.BreathingPlaybackSpeed)
-		gui.Enabled = targets.VignetteOpacity > 0.001
+		-- Um relógio próprio (soma dos passos) em vez de os.clock(): a
+		-- respiração não pula se um frame atrasar e o teste reproduz o valor.
+		local darkness = Rules.Darken(smoothedFear, presentationTime, CFG)
+		gui.Enabled = targets.VignetteOpacity > 0.001 or darkness > 0.001
+		darken.BackgroundTransparency = 1 - darkness
 		for _, edge in edges do edge.BackgroundTransparency = 1 - targets.VignetteOpacity end
 		blur.Size, blur.Enabled = targets.BlurSize, targets.BlurSize > 0.001
 		if animationPlayer then
-			animationPlayer.SetInteracting(heldPrompt ~= nil or presentationTime < interactionUntil)
+			-- "Reparando" é marcado pelo servidor durante o reparo de precisão
+			-- (RepairMinigameSystem): esse prompt tem HoldDuration 0, então nenhum
+			-- PromptButtonHoldBegan acontece e a pose viria só do grace de 0,4s.
+			local repairing = character ~= nil and character:GetAttribute("Reparando") == true
+			animationPlayer.SetInteracting(heldPrompt ~= nil or presentationTime < interactionUntil or repairing)
 			animationPlayer.Step(fear, stepDt)
 		end
 		debugElapsed = if CFG.DebugMode then debugElapsed + stepDt else 0
 		if CFG.DebugMode and debugElapsed >= CFG.DebugPrintInterval then
 			debugElapsed = 0
-			print(string.format("[FearPresentation] Fear: %.1f | FearState: %s | HeartbeatVolume: %.2f | HeartbeatPlaybackSpeed: %.2f | BreathingVolume: %.2f | VignetteOpacity: %.2f | BlurSize: %.2f | FearFOVOffset: 0 | CurrentFearAnimation: %s",
+			local hud = Rules.HudFade(fear, CFG)
+			print(string.format("[FearPresentation] Fear: %.1f | FearState: %s | HeartbeatVolume: %.2f | HeartbeatPlaybackSpeed: %.2f | BreathingVolume: %.2f | VignetteOpacity: %.2f | Darken: %.2f | BlurSize: %.2f | HudFadeVitals: %.2f | HudFadeHotbar: %.2f | FullMapBlocked: %s | FearFOVOffset: 0 | CurrentFearAnimation: %s",
 				fear, tostring(player:GetAttribute("FearState")), heartbeat.Volume, heartbeat.PlaybackSpeed,
-				breathing.Volume, targets.VignetteOpacity, blur.Size, if animationPlayer then animationPlayer.CurrentName else "None"))
+				breathing.Volume, targets.VignetteOpacity, darkness, blur.Size, hud.Vitals, hud.Hotbar,
+				tostring(hud.FullMapBlocked), if animationPlayer then animationPlayer.CurrentName else "None"))
 		end
 	end))
 	function Presentation.Destroy()
@@ -189,7 +209,7 @@ function Presentation.Init()
 		clearCharacter()
 		for _, connection in connections do connection:Disconnect() end
 		table.clear(connections)
-		heartbeat:Destroy(); breathing:Destroy(); blur:Destroy(); gui:Destroy()
+		heartbeat:Destroy(); breathing:Destroy(); blur:Destroy(); gui:Destroy() -- darken/edges vão com o gui
 		initialized = false
 	end
 end

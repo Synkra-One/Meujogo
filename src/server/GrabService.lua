@@ -2,6 +2,8 @@
 -- Server authority for Monster Grab requests, cooldowns and active sessions.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local PowerStatus = require(script.Parent.SurvivorPowerStatus)
+local FlashlightRules = require(ReplicatedStorage.Modules.FlashlightRules)
 local Workspace = game:GetService("Workspace")
 
 local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
@@ -43,7 +45,7 @@ local function canStart(player: Player, character: Model): (boolean, string?)
 		return false, "Apenas o Monstro pode usar Grab."
 	end
 	if player:GetAttribute("Amarrado") == true or character:GetAttribute("Amarrado") == true
-		or character:GetAttribute("PowerStunned") == true then
+		or FlashlightRules.PowerBlocked(character) then
 		return false, "O Monstro esta impedido de agir."
 	end
 	if character:GetAttribute("TeleportBusy") == true or character:GetAttribute("ShadowRushBusy") == true
@@ -161,6 +163,10 @@ function GrabService.Init()
 		return
 	end
 	initialized = true
+	PowerStatus.RegisterStunInterruptor(function(character)
+		local owner = Players:GetPlayerFromCharacter(character)
+		if owner then cancelPlayerSession(owner, "flash burst") end
+	end)
 
 	assert(CFG.GrabRange > 0 and CFG.GrabAngle > 0 and CFG.GrabAngle < 180
 		and CFG.GrabCooldown >= 0 and CFG.AlignDuration >= 0 and CFG.SafetyTimeout > 0,

@@ -3,6 +3,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ContextActionService = game:GetService("ContextActionService")
 local SoundService = game:GetService("SoundService")
+local UserInputService = game:GetService("UserInputService")
 local Modules = game:GetService("ReplicatedStorage"):WaitForChild("Modules")
 local Config = require(Modules.FlashlightConfig)
 local GameConfig = require(Modules.GameConfig)
@@ -31,15 +32,20 @@ local toolConnections: { RBXScriptConnection } = {}
 local characterConnections: { [Player]: { RBXScriptConnection } } = {}
 local playerConnections: { [Player]: { RBXScriptConnection } } = {}
 local ACTION = "ToggleSurvivorFlashlight"
+local BURST_ACTION = "BurstSurvivorFlashlight"
+local burstSequence, lastBurstRequest = 0, -math.huge
+local burstPendingAt: number? = nil
+local burstReadyAt = 0
 local switch = Instance.new("Sound")
 switch.Name, switch.SoundId, switch.Volume, switch.Parent = "FlashlightSwitch", Config.SwitchSound, 0.25, SoundService
 local empty = Instance.new("Sound")
 empty.Name, empty.SoundId, empty.Volume, empty.Parent = "FlashlightEmpty", Config.EmptySound, 0.3, SoundService
 empty.PlaybackSpeed = 0.55
+local burstFeedbackSound = Instance.new("Sound")
+burstFeedbackSound.Name, burstFeedbackSound.SoundId = "FlashBurstConfirmation", Config.SwitchSound
+burstFeedbackSound.Volume, burstFeedbackSound.Parent = 0.16, SoundService
 local aimParams = RaycastParams.new()
 aimParams.FilterType = Enum.RaycastFilterType.Exclude
-local aimPoint: Vector3? = nil
-local nextCameraRay = 0
 
 local function battery(): number
 	local value = equipped and equipped:GetAttribute("Battery")
@@ -56,8 +62,8 @@ local function blockedReason(): string?
 	if not character or not humanoid or humanoid.Health <= 0 or not equipped or equipped.Parent ~= character
 		or player:GetAttribute("Eliminado") == true then return "sem personagem vivo ou lanterna equipada" end
 	if not canUseRole() then return "papel atual nao pode usar lanterna" end
-	if player:GetAttribute("InWaitingRoom") == true and not RunService:IsStudio() then return "sala de espera" end
-	for _, flag in { "GrabLocked", "ShadowRushBusy", "TeleportBusy", "PowerStunned", "Amarrado" } do
+	if player:GetAttribute("InWaitingRoom") == true and not RunService:IsStudio() then return "fila de preparação" end
+	for _, flag in Config.BlockingFlags do
 		if character:GetAttribute(flag) == true or player:GetAttribute(flag) == true then return flag end
 	end
 	return nil
@@ -91,12 +97,33 @@ local function toggle()
 	Remotes.Flashlight:FireServer("Toggle", tool, predicted, aimDirection, toggleSequence)
 end
 
+local function burstCooldown(): number
+	return math.max(burstReadyAt, player:GetAttribute("FlashBurstReadyAt") or 0,
+		if equipped then equipped:GetAttribute("FlashBurstReadyAt") or 0 else 0)
+end
+
+local function fireBurst()
+	if not equipped or not eligible() or UserInputService:GetFocusedTextBox()
+		or player:GetAttribute("CursorLivre") == true then return end
+	local now = os.clock()
+	if burstPendingAt and now - burstPendingAt < 1.5 then return end
+	if now - lastBurstRequest < Config.FlashBurstInputInterval then return end
+	lastBurstRequest = now
+	if workspace:GetServerTimeNow() < burstCooldown() then hud:BurstFeedback("Cooldown", false); return end
+	if battery() < Config.FlashBurstCost then hud:BurstFeedback("Battery", false); empty:Play(); return end
+	burstSequence += 1
+	burstPendingAt = now
+	Remotes.Flashlight:FireServer("Burst", equipped, nil, aimDirection, burstSequence)
+end
+
 local function unequip()
 	local old = equipped
 	equipped, predicted, pendingAt = nil, false, nil
 	for _, connection in toolConnections do connection:Disconnect() end
 	table.clear(toolConnections)
 	ContextActionService:UnbindAction(ACTION)
+	ContextActionService:UnbindAction(BURST_ACTION)
+	burstPendingAt = nil
 	if old then Visuals.Remove(old) end
 	pose:SetTool(nil)
 	hud:Update(false, 0, false, 0)
@@ -109,7 +136,7 @@ local function equip(tool: Tool)
 	if duplicatePose then duplicatePose:Destroy(); remotePoses[tool] = nil end
 	equipped = tool
 	predicted = tool:GetAttribute("FlashlightOn") == true
-	lastAim, lastDirection, aimPoint = -math.huge, nil, nil
+	lastAim, lastDirection = -math.huge, nil
 	pose:SetTool(tool)
 	print(string.format("[Lanterna] Sistema novo equipado. Use clique, toque, R2, T ou Y. Bateria: %.0f%%.", battery()))
 	local camera = workspace.CurrentCamera
@@ -135,6 +162,13 @@ local function equip(tool: Tool)
 	ContextActionService:SetImage(ACTION, if tool.TextureId ~= "" then tool.TextureId
 		else `rbxthumb://type=Asset&id={ItemRegistry.Items.Lanterna.AssetId}&w=150&h=150`)
 	ContextActionService:SetPosition(ACTION, UDim2.fromScale(0.72, 0.56))
+	ContextActionService:BindAction(BURST_ACTION, function(_, state)
+		if not eligible() then return Enum.ContextActionResult.Pass end
+		if state == Enum.UserInputState.Begin then fireBurst() end
+		return Enum.ContextActionResult.Sink
+	end, true, Enum.KeyCode[Config.FlashBurstKey], Enum.KeyCode[Config.FlashBurstGamepadKey])
+	ContextActionService:SetTitle(BURST_ACTION, "Clarão")
+	ContextActionService:SetPosition(BURST_ACTION, UDim2.fromScale(0.85, 0.56))
 end
 
 local function unwatchCharacter(owner: Player)
@@ -188,9 +222,24 @@ local function watchPlayer(owner: Player)
 	if owner.Character then watchCharacter(owner, owner.Character) end
 end
 
-Remotes.Flashlight.OnClientEvent:Connect(function(kind, tool, enabled, _, sequence)
+Remotes.Flashlight.OnClientEvent:Connect(function(kind, tool, enabled, result, sequence)
+	if kind == "BurstResult" then
+		if tool ~= equipped or sequence ~= burstSequence then return end
+		burstPendingAt = nil
+		hud:BurstFeedback(result, enabled == true)
+		if enabled then
+			burstReadyAt = workspace:GetServerTimeNow() + Config.FlashBurstCooldown
+			pose:PlayBurst()
+			burstFeedbackSound.PlaybackSpeed = if result == "Hit" then 1.8 else 0.65
+			burstFeedbackSound:Play()
+		else empty:Play() end
+		return
+	end
 	if kind ~= "State" or tool ~= equipped or sequence ~= toggleSequence then return end
 	predicted, pendingAt = enabled == true, nil
+end)
+player:GetAttributeChangedSignal("FlashBurstReadyAt"):Connect(function()
+	if player:GetAttribute("FlashBurstReadyAt") == nil then burstReadyAt = 0 end
 end)
 Players.PlayerAdded:Connect(watchPlayer)
 Players.PlayerRemoving:Connect(function(owner)
@@ -210,6 +259,25 @@ player:GetAttributeChangedSignal("Role"):Connect(function()
 	end
 end)
 
+-- Transform is batched after PreSimulation; RenderStep writes get replaced
+-- by Animator before they move the arm. Remove the previous layer first so
+-- unkeyed joints and throttled remote animators cannot accumulate rotation.
+local beforeAnimation = RunService.PreAnimation:Connect(function()
+	pose:Reset()
+	for _, remotePose in remotePoses do remotePose:Reset() end
+end)
+local beforeSimulation = RunService.PreSimulation:Connect(function(dt)
+	pose:Update(aimDirection, equipped ~= nil and eligible(), dt)
+	for tool, remotePose in remotePoses do
+		local direction = tool:GetAttribute("FlashlightDirection")
+		local character = tool.Parent
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		local fallback = if root and root:IsA("BasePart") then root.CFrame.LookVector else Vector3.new(0, 0, -1)
+		remotePose:Update(if typeof(direction) == "Vector3" then direction else fallback,
+			tool:GetAttribute("FlashlightOn") == true, dt)
+	end
+end)
+
 RunService:BindToRenderStep("SurvivorFlashlight", Enum.RenderPriority.Camera.Value + 2, function(dt)
 	local now, camera = os.clock(), workspace.CurrentCamera
 	local allowed = eligible()
@@ -219,46 +287,40 @@ RunService:BindToRenderStep("SurvivorFlashlight", Enum.RenderPriority.Camera.Val
 			pendingAt, predicted = nil, equipped:GetAttribute("FlashlightOn") == true
 		end
 		if not allowed or battery() <= 0 then predicted = false end
-		if now >= nextCameraRay then
-			nextCameraRay = now + Config.VisualRayInterval
-			aimParams.FilterDescendantsInstances = { character }
-			local ray = camera.CFrame.LookVector * (Config.FlashlightRange + 16)
-			local hit = workspace:Raycast(camera.CFrame.Position, ray, aimParams)
-			aimPoint = if hit then hit.Position else camera.CFrame.Position + ray
-		end
+		-- Sample the camera every frame: a cached WORLD point jumps sideways
+		-- when the shoulder camera turns or changes its collision offset.
+		aimParams.FilterDescendantsInstances = { character }
+		local ray = camera.CFrame.LookVector * (Config.LightRange + 16)
+		local hit = workspace:Raycast(camera.CFrame.Position, ray, aimParams)
+		local aimPoint = if hit then hit.Position else camera.CFrame.Position + ray
 		local origin = equipped:FindFirstChild("FlashlightOrigin", true)
-		local offset = if origin and origin:IsA("Attachment") and aimPoint then aimPoint - origin.WorldPosition else camera.CFrame.LookVector
-		aimDirection = if offset.Magnitude > 0.1 then offset.Unit else camera.CFrame.LookVector
+		local offset = if origin and origin:IsA("Attachment") then aimPoint - origin.WorldPosition else camera.CFrame.LookVector
+		aimDirection = if offset.Magnitude > 0.1 and offset.Unit:Dot(camera.CFrame.LookVector) > 0.1
+			then offset.Unit else camera.CFrame.LookVector
 		if predicted and now - lastAim >= Config.AimSendInterval
 			and (not lastDirection or lastDirection:Dot(aimDirection) < 0.9998 or now - lastAim >= Config.AimTimeout / 2) then
 			lastAim, lastDirection = now, aimDirection
 			Remotes.Flashlight:FireServer("Aim", equipped, aimDirection)
 		end
 	end
-	-- Apply shoulders before reading the Tool attachments so the held model and
-	-- emitter are evaluated from the same rendered arm pose in this frame.
-	pose:Update(aimDirection, equipped ~= nil and allowed, dt)
 	for tool, owner in visibleTools do
 		local isLocal = owner == player
 		local on = if isLocal then predicted and allowed else tool:GetAttribute("FlashlightOn") == true
-		local direction = if isLocal then aimDirection else tool:GetAttribute("FlashlightDirection")
-		local finalDirection = if typeof(direction) == "Vector3" then direction else Vector3.new(0, 0, -1)
-		if not isLocal then
-			local remotePose = remotePoses[tool]
-			if remotePose then remotePose:Update(finalDirection, on, dt) end
-		end
-		Visuals.Update(tool, finalDirection, on, dt)
+		Visuals.Update(tool, on)
 	end
+	Visuals.UpdateImpacts(Players:GetPlayers())
 	if now - lastHUD >= 0.05 then
 		lastHUD = now
 		hud:Update(equipped ~= nil and canUseRole(),
-			battery(), predicted and allowed, now)
+			battery(), predicted and allowed, now, math.max(0, burstCooldown() - workspace:GetServerTimeNow()))
 	end
 	fx:Update(dt)
 end)
 
 script.Destroying:Connect(function()
 	RunService:UnbindFromRenderStep("SurvivorFlashlight")
+	beforeAnimation:Disconnect()
+	beforeSimulation:Disconnect()
 	unequip()
 	pose:Destroy()
 	for tool, remotePose in remotePoses do
@@ -269,6 +331,8 @@ script.Destroying:Connect(function()
 	for _, connections in playerConnections do for _, connection in connections do connection:Disconnect() end end
 	hud.Gui:Destroy()
 	fx:Destroy()
+	Visuals.ClearImpacts()
 	switch:Destroy()
 	empty:Destroy()
+	burstFeedbackSound:Destroy()
 end)

@@ -22,8 +22,8 @@ Q ativa o primeiro poder; E ativa o segundo. Os botões também aceitam clique/t
 | --- | --- |
 | Rajada Final | Multiplicador de velocidade 2 por 5s no controlador existente; stamina cheia e sem gasto durante o efeito. |
 | Salto Longo | LinearVelocity inicial para frente/cima, seguido de queda normal; poeira na saída e aterrissagem. Exige chão firme. |
-| Conserto Relâmpago | +25 pontos percentuais na jangada enquanto está dentro de `LocalJangada`, ou na sintonia durante a interação do rádio. |
-| Armadilha Improvisada | Gatilho invisível 5×1×5; consulta de proximidade no servidor, sem aceitar `Touched` do cliente. Primeiro Monstro/Espião dispara stun de 3s; expira em 60s. |
+| Conserto Relâmpago | +25 pontos percentuais, no reparo de precisão em andamento (e cancela o travamento de um erro) ou na sintonia durante a interação do rádio. No minigame os pontos são crus, sem passar pelo atributo Reparo — ver [ReparoMinigame.md](ReparoMinigame.md). |
+| Armadilha Improvisada | Toca `114151976975575`; no meio da animação cria o gatilho invisível e o modelo visual. Consulta de proximidade no servidor, sem aceitar `Touched` do cliente. Primeiro Monstro/Espião dispara stun de 3s; expira em 60s. |
 | Tiro Certeiro | Próximo ataque validado em até 8s: dano 3× e stun de 2s. Um disparo/swing que erra também consome o efeito. Integra pistola, armadura e armas corpo a corpo; não inventa dano base para armas configuradas com dano zero. |
 | Instinto de Caçadora | Direção relativa do monstro vivo mais próximo por 4s; pulsação/indicador na borda da tela. |
 | Manto de Sombras | Suspende a detecção e os efeitos de tensão por 8s, preservando o valor acumulado; apresentação semitransparente e partículas de sombra. |
@@ -35,7 +35,7 @@ Q ativa o primeiro poder; E ativa o segundo. Os botões também aceitam clique/t
 | Golpe de Sorte | Uma tentativa de 50% de anular o próximo ataque em até 10s; a tentativa é consumida também quando o sorteio falha. |
 | Intuição Sortuda | Direção do item raro disponível mais próximo por 6s, incluindo a lança ancestral; ignora itens carregados/equipados e removidos do mundo. |
 
-O rádio ainda usa o minigame de sorteio existente. Agora acumula `RadioSintonia` em percentuais: o bônus de reparo melhora a chance existente e atingir 100% conclui a sintonia. Continua exigindo as três peças. Segure F no prompt de sintonia e pressione Q durante os 2 segundos da interação. A jangada continua usando sua zona de entrega por toque, e o bônus participa da montagem visual e conclusão existentes.
+O rádio ainda usa o minigame de sorteio existente. Agora acumula `RadioSintonia` em percentuais: o bônus de reparo melhora a chance existente e atingir 100% conclui a sintonia. Continua exigindo as três peças. Segure F no prompt de sintonia e pressione Q durante os 2 segundos da interação.
 
 `SurvivorPowerStatus` gerencia efeitos temporários, stun e restauração de velocidade/pulo/network ownership. O controlador de movimento e o watchdog respeitam esses estados. As entradas de ataque do Monstro, Espião, armas e teleporte não aceitam uso durante stun. Escudo/sorte também bloqueiam as execuções existentes; redução de dano atua no dano numérico, não transforma execução em ataque comum.
 

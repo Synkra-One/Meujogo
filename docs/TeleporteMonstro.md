@@ -102,7 +102,9 @@ Estados no **character** (Attributes, replicam sozinhos): `TeleportState`
   `DestRiftLeadTime`, `ExitDuration`, `RiftCloseDuration`,
   `PostTeleportRecovery`, `TeleportCooldown`, `FailureCooldown`, `SafetyTimeout`.
 - **Alcance/destino**: `MaxRange`, `MinRange`, `MaxSlopeCos`, `BoundsMargin`,
-  `ClearanceRadius`, `ClearanceHeight`, `GroundSnapUp/Down`.
+  `ClearanceRadius`, `ClearanceHeight`, `GroundSnapUp/Down`,
+  `DestinationSearchRadius/Step/Samples` (busca automática de uma posição
+  livre próxima quando o ponto exato estiver bloqueado).
 - **Escala**: `RiftScale` (multiplicador extra), `RiftWidthFactor` (a fenda é
   ~`RiftWidthFactor` × a altura REAL do rig, medida em runtime), `SinkDepth`.
 - **Orientação do asset**: `RiftAssetFaceAxis` (`"auto"` mede e deita a menor
@@ -142,8 +144,9 @@ o mais funciona igual. Trocar o visual = trocar o `AssetId`, nada mais.
 
 ## Autoridade / rede
 
-- **Servidor**: ativação, destino permitido (clamp de alcance + raycast pro
-  chão + rampa + limites do mapa + água + espaço livre pro rig), cooldown,
+- **Servidor**: ativação, destino permitido (clamp de alcance + raycast no
+  terreno real + rampa + limites do mapa + água + espaço livre pro rig),
+  busca lateral automática quando o ponto exato está bloqueado, cooldown,
   posição final, estado. O cliente **nunca** teleporta sozinho — ele só manda
   um ponto mirado como sugestão.
 - **Cliente**: os VFX. O servidor manda "beats" (`open`/`enter`/`emerge`/
@@ -156,8 +159,10 @@ o mais funciona igual. Trocar o visual = trocar o `AssetId`, nada mais.
 
 - Uma sessão por vez (só existe um Monstro); reativar durante a habilidade é
   ignorado.
-- Destino inválido → `cancel` com motivo, cooldown curto (`FailureCooldown`),
-  nenhuma sessão iniciada.
+- Ponto inválido sem coordenadas utilizáveis ou sem qualquer terreno seguro
+  dentro das margens → `cancel` com motivo, cooldown curto
+  (`FailureCooldown`), nenhuma sessão iniciada. Obstáculos pontuais são
+  resolvidos pela busca lateral antes de chegar neste caso.
 - Aborta e restaura (desancorar, transparência, AutoRotate, assentar no chão)
   se: Monstro morre/é eliminado, character removido, partida termina, jogador
   sai, ou `SafetyTimeout` estoura.
@@ -185,18 +190,21 @@ o mais funciona igual. Trocar o visual = trocar o `AssetId`, nada mais.
    - o Monstro emergindo **exatamente no ponto clicado**, a fenda fechando
      (encolhe + perde intensidade + recolhe partículas), e o controle/golpe
      voltando.
-5. HUD: `MonsterCooldownFrame` mostra "Teleporte (Q): 00:30". O próprio mapa
+5. Clique em árvore, parede ou outro ponto obstruído: o servidor procura uma
+   posição segura próxima, mantendo o teleporte ativo. A altura é sempre
+   calculada pelo terreno, nunca pela copa de uma árvore.
+6. HUD: `MonsterCooldownFrame` mostra "Teleporte (Q): 00:30". O próprio mapa
    mostra "recarregando: Ns" enquanto estiver em cooldown.
-6. **Multiplayer** (2+ clientes): com um segundo cliente perto do destino,
+7. **Multiplayer** (2+ clientes): com um segundo cliente perto do destino,
    confirme que ele vê a fenda surgir e ouve os sons (quando houver ids), e que
    o Monstro aparece sincronizado. Com o segundo cliente longe (> `VFXBroadcastRadius`),
    ele não recebe nada.
-7. **Casos**: clicar no mar / numa parede / num teto baixo → aviso "destino
-   inválido", sem teleporte, mapa fecha. Matar/eliminar o Monstro no meio →
+8. **Casos**: clicar no mar / numa parede / num teto baixo → o servidor tenta
+   um ponto seguro próximo ou retorna pela direção do salto. Matar/eliminar o Monstro no meio →
    tudo limpa, sem fenda presa, sem Monstro invisível.
-8. Se a fenda renderizar de lado/em pé, ajuste `RiftAssetFaceAxis` /
+9. Se a fenda renderizar de lado/em pé, ajuste `RiftAssetFaceAxis` /
    `RiftExtraRotationDeg` / `RiftUpright` no GameConfig.
-9. Se você regerar a ilha com outra seed, rode
+10. Se você regerar a ilha com outra seed, rode
    `require(game.ServerScriptService.Server.IslandMap).Generate()` na Command
    Bar pra o mapa acompanhar (ou só reinicie o servidor).
 

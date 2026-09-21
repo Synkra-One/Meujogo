@@ -936,6 +936,13 @@ RunService.Heartbeat:Connect(function(dt)
 		Humanoid.Jump = false
 		return
 	end
+	if Character:GetAttribute("LandingLocked") == true then
+		stopSprint()
+		stopJog()
+		Humanoid.WalkSpeed = 0
+		Humanoid.Jump = false
+		return
+	end
 	if Character:GetAttribute("ShadowRushBusy") == true then
 		stopSprint()
 		stopJog()

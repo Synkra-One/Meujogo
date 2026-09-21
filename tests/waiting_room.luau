@@ -12,6 +12,7 @@ local function object(class)
 	function result:SetAttribute(key, value) attributes[key] = value end
 	function result:GetAttribute(key) return attributes[key] end
 	function result:FindFirstChild(name) return children[name] end
+	function result:WaitForChild(name) return children[name] end
 	function result:FindFirstChildOfClass(name)
 		for _, child in children do if child.ClassName == name then return child end end
 		return nil
@@ -57,7 +58,11 @@ local lobby = object("Part")
 lobby.Name = "LobbySpawn"
 lobby.CFrame = Vector3Mock.new(0, 10, -400)
 lobby.Parent = workspaceMock
-local services = { Players = players, ReplicatedStorage = storage, Workspace = workspaceMock }
+-- IsStudio = false: este teste simula um servidor PUBLICADO de verdade, onde
+-- isDevRoleTester continua exigindo o UserId da lista (a válvula de
+-- RunService:IsStudio() só relaxa isso dentro do Studio).
+local runService = { IsStudio = function() return false end }
+local services = { Players = players, ReplicatedStorage = storage, Workspace = workspaceMock, RunService = runService }
 local remotes = setmetatable({}, { __index = function(t, key)
 	local remote = { OnServerEvent = signal(), events = {} }
 	function remote:FireClient(player, ...) table.insert(self.events, { player = player, args = { ... } }) end
@@ -66,13 +71,28 @@ local remotes = setmetatable({}, { __index = function(t, key)
 	return remote
 end })
 local started = {}
+local roundActive = false
 local roundStub = { RoundPrepared = { Event = signal() }, RoundEnded = { Event = signal() } }
-function roundStub.IsRoundActive() return false end
+function roundStub.IsRoundActive() return roundActive end
 function roundStub.StartRound(participants)
 	table.insert(started, table.clone(participants))
+	roundActive = true
+	-- Mirrors what the real RoundManager.prepareRound() does before firing
+	-- RoundPrepared: CharacterStatsApplier's canSelectDuringRound gate needs
+	-- InRound=true on each participant, or character selection never opens.
+	for _, p in participants do p:SetAttribute("InRound", true) end
 	roundStub.RoundPrepared.Event:Fire(participants)
 end
-local modules = { Remotes = remotes, RoundManager = roundStub }
+local spawnGameCharacterHook = nil
+local modules = { Remotes = remotes, RoundManager = roundStub,
+	CharacterPresentation = { SpawnLobbyAvatar = function() end, SpawnGameCharacter = function(p)
+		local character = object("Model")
+		local root = object("Part"); root.Name = "HumanoidRootPart"; root.Parent = character
+		local humanoid = object("Humanoid"); humanoid.Parent = character
+		p.Character = character
+		if spawnGameCharacterHook then spawnGameCharacterHook(p) end
+		return character
+	end, AwaitGameCharacterReady = function() end } }
 local environment = setmetatable({
 	game = { GetService = function(_, name) return assert(services[name], name) end },
 	script = { Parent = storage.Modules },
@@ -85,8 +105,9 @@ local environment = setmetatable({
 	end },
 	Color3 = Color3Mock, Vector3 = Vector3Mock,
 	UDim2 = { fromScale = function(...) return { ... } end },
-	CFrame = { new = function(value) return value end },
-	Enum = { Material = { WoodPlanks = "Wood" }, NormalId = { Back = "Back" }, Font = { GothamBold = "Bold" } },
+	CFrame = { new = function(value) return value end, Angles = function() return setmetatable({}, { __mul = function(a) return a end }) end },
+	Enum = { Material = { WoodPlanks = "Wood" }, NormalId = { Back = "Back" }, Font = { GothamBold = "Bold" },
+		KeyCode = { E = "E", X = "X", ButtonX = "ButtonX", ButtonB = "ButtonB" } },
 	Random = { new = function() return { NextInteger = function(_, min) return min end } end },
 	task = Tasks, os = { clock = function() return clock end, time = function() return clock end },
 	warn = function(...) print("WARN", ...) end,
@@ -115,10 +136,25 @@ local function request(p, action, value)
 	clock += 0.2
 	remotes.WaitingRoom.OnServerEvent:Fire(p, action, value)
 end
-local function pick(p, id) remotes.SelectCharacter.OnServerEvent:Fire(p, id) end
+local function pick(p, id)
+	clock += 0.1
+	remotes.SelectCharacter.OnServerEvent:Fire(p, "Select", id)
+end
+local function confirm(p)
+	clock += 0.1
+	remotes.SelectCharacter.OnServerEvent:Fire(p, "Confirm")
+end
+local function flushSpawned()
+	while #spawned > 0 do
+		local pending = spawned
+		spawned = {}
+		for _, callback in pending do callback() end
+	end
+end
 local function snapshot() return remotes.WaitingRoom.events[#remotes.WaitingRoom.events].args[1] end
 local config = loadModule("GameConfig")
 local data = loadModule("CharacterData")
+local selectionConfig = loadModule("SurvivorSelectionConfig")
 local selection = loadModule("CharacterStatsApplier")
 local room = loadModule("WaitingRoomManager")
 selection.Init()
@@ -128,17 +164,28 @@ local alice, bob, outsider = player(1), player(2), player(3)
 
 pick(alice, first)
 assert(selection.GetChoice(alice) == nil, "Lobby must not accept character selections")
-room.Join(alice, false)
-assert(alice:GetAttribute("InWaitingRoom") == nil, "Test host restriction must remain")
-room.Join(alice, true)
-room.Join(bob, false)
-assert(alice.Character.LastPivot.X ~= 0, "Joining must teleport to the waiting room")
+room.Join(alice)
+room.Join(bob)
+assert(alice.Character.LastPivot == nil, "Joining must keep the player in the lobby")
+-- Character choice now opens only after the round is prepared (InRound +
+-- CharacterSelectOpen); being in the waiting room alone must not be enough.
 pick(alice, first)
-pick(bob, first)
-assert(selection.GetChoice(alice) == first and selection.GetChoice(bob) == nil, "Simultaneous claims must have one winner")
-pick(alice, second)
-pick(bob, first)
-assert(selection.GetChoice(bob) == first, "Switching must release the previous character")
+assert(selection.GetChoice(alice) == nil, "Waiting room alone must not open character selection")
+
+-- Acesso rápido (MenuBoot.client.luau): o botão só APARECE para
+-- GameConfig.Testing.DevRoleUserIds, mas qualquer sessão de teste do Studio
+-- (inclusive multi-cliente, onde cada cliente recebe um UserId falso) tem de
+-- FUNCIONAR -- por isso o servidor relaxa via RunService:IsStudio().
+assert(alice.UserId ~= config.Testing.DevRoleUserIds[1], "sanity: alice não está na lista de UserIds")
+request(alice, "DevRole", "Monstro")
+assert(alice:GetAttribute("DevForceRole") == nil, "fora do Studio, só a lista de UserId vale")
+runService.IsStudio = function() return true end
+request(alice, "DevRole", "Monstro")
+assert(alice:GetAttribute("DevForceRole") == config.Roles.Monster,
+	"dentro do Studio, qualquer cliente de teste pode forçar o papel")
+request(alice, "DevRole", "Random")
+assert(alice:GetAttribute("DevForceRole") == nil, "\"Random\" limpa a forçagem")
+runService.IsStudio = function() return false end
 request(alice, "Skin", "Explorador")
 request(alice, "Perk", "Folego")
 request(alice, "Perk", "FAKE")
@@ -154,47 +201,60 @@ assert(snapshot().endsAt == 0 and not alice:GetAttribute("MatchReady"), "Loadout
 advance(11)
 assert(#started == 0, "A canceled timer cannot start the round")
 request(alice, "Ready")
+-- AssignMissing is the one entry point that populates a reservation without
+-- going through the round-gated remote; used here to give bob something for
+-- leaving to release.
+assert(selection.AssignMissing({ bob }))
+assert(selection.GetChoice(bob) == first, "AssignMissing must hand out the first free character")
 request(bob, "Leave")
 assert(selection.GetChoice(bob) == nil and selection.GetRoster()[first] == nil, "Leaving releases the reservation")
-assert(bob.Character.LastPivot.Z == -400, "Leaving returns to lobby")
-room.Join(bob, false)
-pick(bob, first)
+assert(bob.Character.LastPivot == nil, "Leaving must keep the player in the lobby")
+room.Join(bob)
 request(bob, "Ready")
-advance(11)
+advance(11 + selectionConfig.RoleRevealDuration)
 assert(#started == 1 and #started[1] == 2, "Only room members start the round")
 assert(started[1][1] ~= outsider and started[1][2] ~= outsider)
+-- The round is now active: CharacterStatsApplier opened CharacterSelectOpen
+-- for alice and bob (neither had chosen yet), so selection finally works.
+assert(alice:GetAttribute("InRound") and bob:GetAttribute("InRound"), "Starting the round must set InRound")
 pick(alice, first)
+pick(bob, first)
+assert(selection.GetChoice(alice) == first and selection.GetChoice(bob) == nil, "Simultaneous claims must have one winner")
+-- A rejected claim leaves the window open (CharacterSelectOpen only closes
+-- on an accepted pick), so bob can still claim a different character.
+pick(bob, second)
+assert(selection.GetChoice(bob) == second, "A rejected claim can still pick a free character")
+pick(alice, second)
 request(alice, "Skin", "Padrao")
-assert(selection.GetChoice(alice) == second and alice:GetAttribute("SkinId") == "Noturno", "Loadout is locked after countdown")
-room.Join(outsider, true)
+assert(selection.GetChoice(alice) == first and alice:GetAttribute("SkinId") == "Noturno", "Selection window closes after the first accepted pick")
+room.Join(outsider)
 assert(outsider:GetAttribute("InWaitingRoom") == nil, "Late joins stay in lobby")
 request(outsider, "Sync")
 assert(snapshot().state == "Playing" and #snapshot().members == 2, "Late client handshake gets current state")
 room.Reset()
 assert(next(selection.GetRoster()) == nil and alice:GetAttribute("SkinId") == nil, "Reset clears loadout and reservations")
-room.Join(outsider, true)
+room.Join(outsider)
 assert(outsider:GetAttribute("InWaitingRoom") == nil, "Returning respawns cannot overlap the next round")
 room.OpenLobby()
 
 -- Capacity is bounded by the actual roster, even though Players.Max is 10.
 local full = { alice, bob, outsider }
 for i = 4, 8 do table.insert(full, player(i)) end
-for _, p in full do room.Join(p, true) end
+for _, p in full do room.Join(p) end
 assert(#snapshot().members == 7 and full[8]:GetAttribute("InWaitingRoom") == nil)
 assert(not selection.AssignMissing(full), "No fallback may assign duplicate characters")
-pick(alice, first)
+assert(selection.AssignMissing({ alice }))
 players.PlayerRemoving:Fire(alice)
 assert(selection.GetRoster()[first] == nil, "Disconnect releases a character")
-room.Join(full[8], true)
-pick(full[8], first)
+room.Join(full[8])
+assert(selection.AssignMissing({ full[8] }))
 assert(selection.GetChoice(full[8]) == first, "Disconnected player's slot is reusable")
 room.Reset()
 room.OpenLobby()
 
 -- The production minimum must be respected independently of server population.
 config.Testing.SoloStart = false
-room.Join(bob, true)
-pick(bob, first)
+room.Join(bob)
 request(bob, "Ready")
 advance(11)
 assert(#started == 1 and snapshot().endsAt == 0, "Below minimum cannot start")
@@ -216,23 +276,29 @@ print("PASS: lobby gates, exclusivity, switching, loadout validation, ready/canc
 -- Exercise the real round entry point: snapshot isolation and preparation guard.
 modules.Elimination = { Reset = function() end, IsEliminated = function() return false end }
 modules.RadioObjective = { Reset = function() end, RescueCountdownStarted = { Event = signal() } }
-modules.RaftObjective = { Reset = function() end, RaftEscaped = { Event = signal() } }
+modules.RadioSiteSystem = { Reset = function() end }
+modules.ExtractionSystem = { Reset = function() end, Begin = function() return true end,
+	SurvivorsExtracted = { Event = signal() } }
 modules.RoleAssignment = { AssignRoles = function(list)
 	for _, p in list do p:SetAttribute("Role", config.Roles.Survivor) end
 end }
 modules.RoundManager = nil
 local realRound = loadModule("RoundManager")
 realRound.Init()
+realRound.SetSpawnHandler(function() end)
 config.Testing.SoloStart = true
 for _, phase in config.Phases do phase.Default = 0 end
 local prepared = nil
 realRound.RoundPrepared.Event:Connect(function(list) prepared = list end)
-bob:SetAttribute("CharacterId", first)
-outsider:SetAttribute("CharacterId", first)
-assert(not pcall(realRound.StartRound, { bob, outsider }), "Round must independently reject duplicates")
-outsider:SetAttribute("CharacterId", second)
+-- Character choice now happens only after the round starts (see the
+-- CharacterStatsApplier scenario above), so RoundManager no longer guards
+-- StartRound against duplicate CharacterId attributes -- that check was
+-- deliberately removed when the redesign moved exclusivity into setChoice.
+-- CharacterPresentation.SpawnGameCharacter (not Player:LoadCharacter, which
+-- RoundManager no longer calls) is the current yield point during prep.
 local raced = false
-function bob:LoadCharacter()
+spawnGameCharacterHook = function(p)
+	if p ~= bob then return end
 	raced = true
 	assert(not pcall(realRound.StartRound, { bob, outsider }), "A yield during preparation must not permit a second round")
 	player(99) -- Arrives while the participants are loading.
@@ -244,4 +310,4 @@ for _, event in remotes.RoundStateChanged.events do
 	assert(event.player == bob or event.player == outsider, "Lobby players must not receive gameplay UI events")
 end
 assert(not realRound.IsRoundActive(), "Round state must be cleaned up at completion")
-print("PASS: real round duplicate rejection, concurrent preparation guard, late arrival isolation, participant-only HUD events")
+print("PASS: real round concurrent preparation guard, late arrival isolation, participant-only HUD events")

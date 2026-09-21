@@ -46,6 +46,8 @@
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local PowerStatus = require(script.Parent.SurvivorPowerStatus)
+local FlashlightRules = require(ReplicatedStorage.Modules.FlashlightRules)
 local TweenService = game:GetService("TweenService")
 local InsertService = game:GetService("InsertService")
 
@@ -231,6 +233,25 @@ local function allCharacters(): { Instance }
 	return list
 end
 
+-- Vegetação, pedras e arbustos não são chão. Se o raycast puder acertar uma
+-- dessas peças primeiro, o Monstro pode nascer no topo de uma árvore e cair.
+-- O terreno continua sendo a fonte de verdade da altura; essas pastas só são
+-- ignoradas nos raycasts verticais (a checagem de espaço ainda vê as peças e
+-- evita nascer dentro de um tronco/rocha).
+local function groundRaycastIgnore(): { Instance }
+	local ignore = allCharacters()
+	local ilha = Workspace:FindFirstChild("Ilha")
+	if ilha then
+		for _, name in { "Floresta", "Vegetacao", "Rochas" } do
+			local folder = ilha:FindFirstChild(name)
+			if folder then
+				table.insert(ignore, folder)
+			end
+		end
+	end
+	return ignore
+end
+
 --------------------------------------------------------------------------------
 -- Validação do destino (servidor É a autoridade)
 --------------------------------------------------------------------------------
@@ -249,74 +270,166 @@ local function resolveDestination(monsterRoot: BasePart, hrpAboveFeet: number, r
 	local origin = monsterRoot.Position
 	local flat = Vector3.new(point.X - origin.X, 0, point.Z - origin.Z)
 	local dist = flat.Magnitude
-	if dist < 1 then
-		return nil, "muito perto"
-	end
-	local clamped = math.clamp(dist, CFG.MinRange, CFG.MaxRange)
-	local targetXZ = origin + flat.Unit * clamped
+	local facing = monsterRoot.CFrame.LookVector * Vector3.new(1, 0, 1)
+	facing = if facing.Magnitude > 0.1 then facing.Unit else Vector3.new(0, 0, 1)
+	-- Clicar perto do próprio marcador não cancela mais o poder: usa a direção
+	-- que o Monstro está olhando e aplica a distância mínima normalmente.
+	local direction = if dist > 0.1 then flat.Unit else facing
+	local clamped = math.clamp(math.max(dist, CFG.MinRange), CFG.MinRange, CFG.MaxRange)
+	local targetXZ = origin + direction * clamped
 
-	local ignore = allCharacters()
-
+	-- O chão vem primeiro do Terrain, não da primeira peça encontrada no caminho.
+	-- Isso elimina o caso clássico de acertar a copa de uma árvore. Se o ponto
+	-- estiver numa ponte/plataforma sem Terrain por baixo, há um fallback para
+	-- uma superfície sólida do mundo, ainda ignorando a vegetação.
 	local downParams = RaycastParams.new()
-	downParams.FilterType = Enum.RaycastFilterType.Exclude
-	downParams.FilterDescendantsInstances = ignore
+	downParams.FilterType = Enum.RaycastFilterType.Include
+	downParams.FilterDescendantsInstances = { Workspace.Terrain }
 	downParams.IgnoreWater = true
-	local from = Vector3.new(targetXZ.X, origin.Y + CFG.GroundSnapUp, targetXZ.Z)
-	local hit = Workspace:Raycast(from, Vector3.new(0, -(CFG.GroundSnapUp + CFG.GroundSnapDown), 0), downParams)
-	if not hit then
-		return nil, "sem chão no destino"
-	end
-	local groundPos = hit.Position
-	local normal = hit.Normal
-
-	if normal.Y < CFG.MaxSlopeCos then
-		return nil, "terreno muito inclinado"
-	end
-
-	local half = IslandLayout.AreaHalf() - CFG.BoundsMargin
-	if math.abs(groundPos.X) > half or math.abs(groundPos.Z) > half then
-		return nil, "fora dos limites do mapa"
-	end
-	if groundPos.Y < IslandLayout.CONFIG.SeaLevel + 1 then
-		return nil, "destino na água"
-	end
+	local rayTop = math.max(origin.Y + CFG.GroundSnapUp, IslandLayout.CONFIG.MaxY + CFG.GroundSnapUp)
+	local rayLength = rayTop - IslandLayout.CONFIG.MinY + CFG.GroundSnapDown
+	local ignore = groundRaycastIgnore()
+	local surfaceParams = RaycastParams.new()
+	surfaceParams.FilterType = Enum.RaycastFilterType.Exclude
+	surfaceParams.FilterDescendantsInstances = ignore
+	surfaceParams.IgnoreWater = true
+	surfaceParams.RespectCanCollide = true
 
 	-- Cabe o rig? A configuracao descreve um R6 de escala 1; a caixa acompanha
 	-- o ScaleTo real do Monstro para nao aprovar um destino onde o corpo 1.2x
 	-- atravessaria parede ou teto.
 	local clearanceRadius = CFG.ClearanceRadius * rigScale
 	local clearanceHeight = CFG.ClearanceHeight * rigScale
-	local boxCenter = groundPos + Vector3.new(0, clearanceHeight / 2 + 0.3, 0)
 	local overlap = OverlapParams.new()
 	overlap.FilterType = Enum.RaycastFilterType.Exclude
-	local overlapIgnore = table.clone(ignore)
+	local overlapIgnore = table.clone(allCharacters())
 	table.insert(overlapIgnore, Workspace.Terrain)
 	overlap.FilterDescendantsInstances = overlapIgnore
-	local parts = Workspace:GetPartBoundsInBox(
-		CFrame.new(boxCenter),
-		Vector3.new(clearanceRadius * 2, clearanceHeight, clearanceRadius * 2),
-		overlap
-	)
-	for _, p in parts do
-		if p.CanCollide then
-			return nil, "espaço bloqueado no destino"
-		end
-	end
 
-	-- Dentro de terreno / teto muito baixo? Raio pra cima tem que passar limpo.
+	-- Dentro de terreno / teto muito baixo? Vegetação é ignorada aqui porque
+	-- copa não é teto. Construções, rochas e paredes continuam bloqueando.
 	local upParams = RaycastParams.new()
 	upParams.FilterType = Enum.RaycastFilterType.Exclude
 	upParams.FilterDescendantsInstances = ignore
 	upParams.IgnoreWater = true
-	local upHit = Workspace:Raycast(groundPos + Vector3.new(0, 0.4, 0), Vector3.new(0, clearanceHeight, 0), upParams)
-	if upHit then
-		return nil, "teto baixo no destino"
+	upParams.RespectCanCollide = true
+
+	local lastReason = "sem chão no destino"
+	local function tryPoint(candidateXZ: Vector3): CFrame?
+		local from = Vector3.new(candidateXZ.X, rayTop, candidateXZ.Z)
+		local hit = Workspace:Raycast(from, Vector3.new(0, -rayLength, 0), downParams)
+		if not hit then
+			hit = Workspace:Raycast(from, Vector3.new(0, -rayLength, 0), surfaceParams)
+		end
+		if not hit then
+			lastReason = "sem chão no destino"
+			return nil
+		end
+		local groundPos = hit.Position
+		if hit.Normal.Y < CFG.MaxSlopeCos then
+			lastReason = "terreno muito inclinado"
+			return nil
+		end
+
+		local half = IslandLayout.AreaHalf() - CFG.BoundsMargin
+		if math.abs(groundPos.X) > half or math.abs(groundPos.Z) > half then
+			lastReason = "fora dos limites do mapa"
+			return nil
+		end
+		if groundPos.Y < IslandLayout.CONFIG.SeaLevel + 1 then
+			lastReason = "destino na água"
+			return nil
+		end
+
+		local boxCenter = groundPos + Vector3.new(0, clearanceHeight / 2 + 0.3, 0)
+		local parts = Workspace:GetPartBoundsInBox(
+			CFrame.new(boxCenter),
+			Vector3.new(clearanceRadius * 2, clearanceHeight, clearanceRadius * 2),
+			overlap
+		)
+		for _, p in parts do
+			if p.CanCollide then
+				lastReason = "espaço bloqueado no destino"
+				return nil
+			end
+		end
+
+		local upHit = Workspace:Raycast(
+			groundPos + Vector3.new(0, 0.4, 0),
+			Vector3.new(0, clearanceHeight, 0),
+			upParams
+		)
+		if upHit then
+			lastReason = "teto baixo no destino"
+			return nil
+		end
+
+		local hrpPos = groundPos + Vector3.new(0, hrpAboveFeet, 0)
+		return CFrame.lookAt(hrpPos, hrpPos + facing)
 	end
 
-	local facing = monsterRoot.CFrame.LookVector * Vector3.new(1, 0, 1)
-	facing = if facing.Magnitude > 0.1 then facing.Unit else Vector3.new(0, 0, 1)
-	local hrpPos = groundPos + Vector3.new(0, hrpAboveFeet, 0)
-	return CFrame.lookAt(hrpPos, hrpPos + facing), nil
+	local tried: { [string]: boolean } = {}
+	local function tryUnique(candidateXZ: Vector3): CFrame?
+		local key = string.format("%.1f:%.1f", candidateXZ.X, candidateXZ.Z)
+		if tried[key] then
+			return nil
+		end
+		tried[key] = true
+		return tryPoint(candidateXZ)
+	end
+
+	local function tryAround(center: Vector3): CFrame?
+		local exact = tryUnique(center)
+		if exact then
+			return exact
+		end
+		local step = math.max(CFG.DestinationSearchStep, 2)
+		local radius = math.max(CFG.DestinationSearchRadius, step)
+		local rings = math.ceil(radius / step)
+		local samples = math.max(CFG.DestinationSearchSamples, 8)
+		local phase = math.atan2(direction.Z, direction.X)
+		for ring = 1, rings do
+			local r = math.min(ring * step, radius)
+			for sample = 1, samples do
+				local angle = phase + (sample - 1) * math.pi * 2 / samples
+				local candidate = center + Vector3.new(math.cos(angle) * r, 0, math.sin(angle) * r)
+				local distance = (candidate - origin).Magnitude
+				if distance >= CFG.MinRange * 0.9 and distance <= CFG.MaxRange then
+					local result = tryUnique(candidate)
+					if result then
+						return result
+					end
+				end
+			end
+		end
+		return nil
+	end
+
+	local result = tryAround(targetXZ)
+	if result then
+		return result, nil
+	end
+
+	-- Se o clique caiu no mar, numa construção grande ou fora da costa, volta
+	-- pelo caminho até a posição atual e tenta os pontos intermediários. Assim o
+	-- poder ainda encontra terra firme em vez de simplesmente ser recusado.
+	for i = 1, 12 do
+		local alpha = i / 13
+		local candidate = targetXZ:Lerp(origin + direction * CFG.MinRange, alpha)
+		local fallback = tryUnique(candidate)
+		if fallback then
+			return fallback, nil
+		end
+	end
+
+	-- Última margem de segurança: a área logo à frente do Monstro é sempre uma
+	-- alternativa melhor do que cancelar uma habilidade válida por causa de um
+	-- obstáculo pontual.
+	local nearby = tryAround(origin + direction * CFG.MinRange)
+	if nearby then
+		return nearby, nil
+	end
+	return nil, lastReason
 end
 
 --------------------------------------------------------------------------------
@@ -711,7 +824,7 @@ end
 --------------------------------------------------------------------------------
 
 local function onTeleportRequest(player: Player, rawPoint: unknown)
-	if player.Character and player.Character:GetAttribute("PowerStunned") == true then return end
+	if FlashlightRules.PowerBlocked(player.Character) then return end
 	if not RoundManager.IsRoundActive() or not isMonster(player) then
 		return
 	end
@@ -797,7 +910,15 @@ end
 -- Init
 --------------------------------------------------------------------------------
 
+local initialized = false
 function MonsterTeleport.Init()
+	if initialized then return end
+	initialized = true
+	PowerStatus.RegisterStunInterruptor(function(character)
+		if activeSession and activeSession.character == character then
+			abortSession(activeSession, "flash burst")
+		end
+	end)
 	task.spawn(publishRiftAsset)
 
 	Remotes.MonsterTeleport.OnServerEvent:Connect(onTeleportRequest)

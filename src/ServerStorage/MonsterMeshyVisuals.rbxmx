@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="utf-8"?>
+<roblox xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+	<Item class="Model" referent="RBX61ee419f2d864597bbda7f5a84c9c8d2">
+		<Properties>
+			<string name="Name">MonsterMeshyVisuals</string>
+		</Properties>
+		<Item class="MeshPart" referent="RBXa2f00b92dbb94d7ea30c28597a4484ac">
+			<Properties>
+				<bool name="Anchored">true</bool>
+				<CoordinateFrame name="CFrame">
+					<X>15.00409</X>
+					<Y>14.54901</Y>
+					<Z>-388.5521</Z>
+					<R00>1</R00>
+					<R01>0</R01>
+					<R02>0</R02>
+					<R10>0</R10>
+					<R11>1</R11>
+					<R12>0</R12>
+					<R20>0</R20>
+					<R21>0</R21>
+					<R22>1</R22>
+				</CoordinateFrame>
+				<bool name="CanCollide">false</bool>
+				<bool name="CanQuery">false</bool>
+				<bool name="CanTouch">false</bool>
+				<bool name="Massless">true</bool>
+				<token name="Material">256</token>
+				<token name="CollisionFidelity">2</token>
+				<token name="RenderFidelity">1</token>
+				<Content name="MeshId"><null></null></Content>
+				<Content name="TextureID"><null></null></Content>
+				<Vector3 name="size"><X>1.030932</X><Y>1.221897</Y><Z>1.043397</Z></Vector3>
+				<string name="Name">Head</string>
+			</Properties>
+		</Item>
+		<Item class="MeshPart" referent="RBX498eca7ce9864535ab955f645995c3b7">
+			<Properties>
+				<bool name="Anchored">true</bool>
+				<CoordinateFrame name="CFrame">
+					<X>15</X>
+					<Y>13.21632</Y>
+					<Z>-388.5</Z>
+					<R00>1</R00>
+					<R01>0</R01>
+					<R02>0</R02>
+					<R10>0</R10>
+					<R11>1</R11>
+					<R12>0</R12>
+					<R20>0</R20>
+					<R21>0</R21>
+					<R22>1</R22>
+				</CoordinateFrame>
+				<bool name="CanCollide">false</bool>
+				<bool name="CanQuery">false</bool>
+				<bool name="CanTouch">false</bool>
+				<bool name="Massless">true</bool>
+				<token name="Material">256</token>
+				<token name="CollisionFidelity">2</token>
+				<token name="RenderFidelity">1</token>
+				<Content name="MeshId"><null></null></Content>
+				<Content name="TextureID"><null></null></Content>
+				<Vector3 name="size"><X>2.011133</X><Y>1.857883</Y><Z>0.9544891</Z></Vector3>
+				<string name="Name">Torso</string>
+			</Properties>
+		</Item>
+		<Item class="MeshPart" referent="RBXf32cb04b644644c4ba97fe441d90f627">
+			<Properties>
+				<bool name="Anchored">true</bool>
+				<CoordinateFrame name="CFrame">
+					<X>13.56751</X>
+					<Y>13.07756</Y>
+					<Z>-388.5389</Z>
+					<R00>1</R00>
+					<R01>0</R01>
+					<R02>0</R02>
+					<R10>0</R10>
+					<R11>1</R11>
+					<R12>0</R12>
+					<R20>0</R20>
+					<R21>0</R21>
+					<R22>1</R22>
+				</CoordinateFrame>
+				<bool name="CanCollide">false</bool>
+				<bool name="CanQuery">false</bool>
+				<bool name="CanTouch">false</bool>
+				<bool name="Massless">true</bool>
+				<token name="Material">256</token>
+				<token name="CollisionFidelity">2</token>
+				<token name="RenderFidelity">1</token>
+				<Content name="MeshId"><null></null></Content>
+				<Content name="TextureID"><null></null></Content>
+				<Vector3 name="size"><X>0.8875816</X><Y>2.081726</Y><Z>0.8530272</Z></Vector3>
+				<string name="Name">Left Arm</string>
+			</Properties>
+		</Item>
+		<Item class="MeshPart" referent="RBXffaa4e3fe00a46b493bb11c919883aa4">
+			<Properties>
+				<bool name="Anchored">true</bool>
+				<CoordinateFrame name="CFrame">
+					<X>16.4315</X>
+					<Y>13.08069</Y>
+					<Z>-388.5389</Z>
+					<R00>1</R00>
+					<R01>0</R01>
+					<R02>0</R02>
+					<R10>0</R10>
+					<R11>1</R11>
+					<R12>0</R12>
+					<R20>0</R20>
+					<R21>0</R21>
+					<R22>1</R22>
+				</CoordinateFrame>
+				<bool name="CanCollide">false</bool>
+				<bool name="CanQuery">false</bool>
+				<bool name="CanTouch">false</bool>
+				<bool name="Massless">true</bool>
+				<token name="Material">256</token>
+				<token name="CollisionFidelity">2</token>
+				<token name="RenderFidelity">1</token>
+				<Content name="MeshId"><null></null></Content>
+				<Content name="TextureID"><null></null></Content>
+				<Vector3 name="size"><X>0.9065435</X><Y>2.075717</Y><Z>0.8530897</Z></Vector3>
+				<string name="Name">Right Arm</string>
+			</Properties>
+		</Item>
+		<Item class="MeshPart" referent="RBX36ef24e910fb4c4c9a4c5ec40dec04a1">
+			<Properties>
+				<bool name="Anchored">true</bool>
+				<CoordinateFrame name="CFrame">
+					<X>14.49392</X>
+					<Y>11.16007</Y>
+					<Z>-388.538</Z>
+					<R00>1</R00>
+					<R01>0</R01>
+					<R02>0</R02>
+					<R10>0</R10>
+					<R11>1</R11>
+					<R12>0</R12>
+					<R20>0</R20>
+					<R21>0</R21>
+					<R22>1</R22>
+				</CoordinateFrame>
+				<bool name="CanCollide">false</bool>
+				<bool name="CanQuery">false</bool>
+				<bool name="CanTouch">false</bool>
+				<bool name="Massless">true</bool>
+				<token name="Material">256</token>
+				<token name="CollisionFidelity">2</token>
+				<token name="RenderFidelity">1</token>
+				<Content name="MeshId"><null></null></Content>
+				<Content name="TextureID"><null></null></Content>
+				<Vector3 name="size"><X>1.033614</X><Y>2.320136</Y><Z>0.8511685</Z></Vector3>
+				<string name="Name">Left Leg</string>
+			</Properties>
+		</Item>
+		<Item class="MeshPart" referent="RBXb134cd2e8e834205b3aeda55495371f1">
+			<Properties>
+				<bool name="Anchored">true</bool>
+				<CoordinateFrame name="CFrame">
+					<X>15.50114</X>
+					<Y>11.15719</Y>
+					<Z>-388.538</Z>
+					<R00>1</R00>
+					<R01>0</R01>
+					<R02>0</R02>
+					<R10>0</R10>
+					<R11>1</R11>
+					<R12>0</R12>
+					<R20>0</R20>
+					<R21>0</R21>
+					<R22>1</R22>
+				</CoordinateFrame>
+				<bool name="CanCollide">false</bool>
+				<bool name="CanQuery">false</bool>
+				<bool name="CanTouch">false</bool>
+				<bool name="Massless">true</bool>
+				<token name="Material">256</token>
+				<token name="CollisionFidelity">2</token>
+				<token name="RenderFidelity">1</token>
+				<Content name="MeshId"><null></null></Content>
+				<Content name="TextureID"><null></null></Content>
+				<Vector3 name="size"><X>1.039486</X><Y>2.314372</Y><Z>0.8513967</Z></Vector3>
+				<string name="Name">Right Leg</string>
+			</Properties>
+		</Item>
+	</Item>
+</roblox>

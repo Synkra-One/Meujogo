@@ -19,8 +19,21 @@ local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local DropItemSystem = require(script.Parent.DropItemSystem)
 local RadioObjective = require(script.Parent.RadioObjective)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
+local InteractionGuard = require(script.Parent.InteractionGuard)
 
 local RadioPieces = {}
+
+--[[
+	PiecePickedUp:Fire(player, pieceType)
+	Gancho de observação: `player` acabou de guardar a peça `pieceType`
+	("Antena" | "Bateria" | "Transmissor") no inventário -- pelo toque OU
+	pelo ProximityPrompt, os dois caem em partToInventoryTool, único lugar
+	que dispara isto. server/MatchRewardService escuta pra conceder o XP de
+	"item importante encontrado" (com UniqueBy: cada peça só existe uma vez
+	por partida, então só paga uma vez mesmo se ela for largada e pega nas
+	mãos de outro sobrevivente depois).
+]]
+RadioPieces.PiecePickedUp = Instance.new("BindableEvent")
 
 local MANAGED_ATTRIBUTE = "_RadioPiecesManaged"
 local PICKUP_PROMPT_NAME = "PegarPecaRadio"
@@ -165,13 +178,13 @@ local function addWorldPresentation(part: Part, definition: PieceDefinition)
 	highlight.FillTransparency = 0.72
 	highlight.OutlineColor = Color3.fromRGB(235, 245, 255)
 	highlight.OutlineTransparency = 0.05
-	highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	highlight.DepthMode = Enum.HighlightDepthMode.Occluded
 	highlight.Parent = part
 
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "NomePecaRadio"
 	billboard.Adornee = part
-	billboard.AlwaysOnTop = true
+	billboard.AlwaysOnTop = false
 	billboard.LightInfluence = 0
 	billboard.MaxDistance = 55
 	billboard.Size = UDim2.fromOffset(180, 48)
@@ -209,7 +222,7 @@ local function addWorldPresentation(part: Part, definition: PieceDefinition)
 	prompt.ClickablePrompt = true
 	prompt.HoldDuration = 0
 	prompt.MaxActivationDistance = PICKUP_DISTANCE
-	prompt.RequiresLineOfSight = false
+	prompt.RequiresLineOfSight = true
 	prompt.Parent = part
 	return prompt
 end
@@ -250,6 +263,7 @@ local function partToInventoryTool(part: BasePart, player: Player): boolean
 	watchInventoryTool(tool)
 	tool.Parent = backpack
 	RadioObjective.RefreshPieceProgress()
+	RadioPieces.PiecePickedUp:Fire(player, tipo)
 	return true
 end
 
@@ -262,6 +276,7 @@ local function tryCollect(part: BasePart, hit: BasePart)
 		or not humanoid or humanoid.Health <= 0 or not DropItemSystem.HasInventorySpace(player) then
 		return
 	end
+	if not InteractionGuard.CanReach(player, part, PICKUP_DISTANCE + 2) then return end
 
 	collecting[part] = true
 	if not partToInventoryTool(part, player) then
@@ -281,7 +296,7 @@ local function tryCollectForPlayer(part: BasePart, player: Player)
 		return
 	end
 	if not humanoid or humanoid.Health <= 0 or not root or not root:IsA("BasePart")
-		or (root.Position - part.Position).Magnitude > PICKUP_DISTANCE + 2 then
+		or not InteractionGuard.CanReach(player, part, PICKUP_DISTANCE + 2) then
 		return
 	end
 	if not DropItemSystem.HasInventorySpace(player) then

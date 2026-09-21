@@ -26,6 +26,7 @@ vectorMeta.__sub = function(a, b) return V.new(a.X - b.X, a.Y - b.Y, a.Z - b.Z) 
 vectorMeta.__mul = function(a, b) return V.new(a.X * b, a.Y * b, a.Z * b) end
 vectorMeta.__index = function(a, key)
 	if key == "Magnitude" then return math.sqrt(a.X^2 + a.Y^2 + a.Z^2) end
+	if key == "Dot" then return function(_, b) return a.X*b.X + a.Y*b.Y + a.Z*b.Z end end
 	if key == "Unit" then return a * (1 / a.Magnitude) end
 end
 V.zero = V.new()
@@ -39,10 +40,10 @@ cfMeta.__mul = function(a, b) local cf = CF.new(a.Position + b.Position); cf.Loo
 cfMeta.__index = { Inverse = function(a) return CF.new(a.Position * -1) end }
 
 local function object(class, name, parent)
-	local props = { ClassName = class, Name = name or class, _kind = "Instance", CFrame = CF.new(), Size = V.new(1, 1, 1) }
+	local props = { ClassName = class, Name = name or class, _kind = "Instance", CFrame = CF.new(), Size = V.new(1, 1, 1), Enabled = true, AssemblyLinearVelocity = V.zero }
 	local children, attributes, attributeSignals = {}, {}, {}
 	local methods = {}
-	for _, key in { "Changed", "AncestryChanged", "ChildAdded", "ChildRemoved", "DescendantAdded", "Destroying", "Died", "HealthChanged", "Triggered", "CharacterAdded", "CharacterRemoving", "PlayerAdded", "PlayerRemoving" } do
+	for _, key in { "Changed", "AncestryChanged", "ChildAdded", "ChildRemoved", "DescendantAdded", "Destroying", "Died", "HealthChanged", "StateChanged", "Triggered", "CharacterAdded", "CharacterRemoving", "PlayerAdded", "PlayerRemoving" } do
 		props[key] = signal()
 	end
 	local self
@@ -72,6 +73,14 @@ local function object(class, name, parent)
 			current = current.Parent
 		end
 		return false
+	end
+	function methods:FindFirstAncestorOfClass(kind)
+		local current = props.Parent
+		while current do
+			if current:IsA(kind) then return current end
+			current = current.Parent
+		end
+		return nil
 	end
 	function methods:GetAttribute(key) return attributes[key] end
 	function methods:SetAttribute(key, value)
@@ -146,6 +155,7 @@ local function object(class, name, parent)
 end
 
 local now, delayed = 100, {}
+local combatHeartbeat = nil
 local function delay(seconds, callback, ...)
 	table.insert(delayed, { at = now + seconds, callback = callback, args = table.pack(...) })
 end
@@ -156,8 +166,10 @@ local function advance(seconds)
 		local first = delayed[1]
 		if not first or first.at > limit then break end
 		table.remove(delayed, 1); now = first.at; first.callback(table.unpack(first.args, 1, first.args.n))
+		if combatHeartbeat then combatHeartbeat:Fire(1 / 60) end
 	end
 	now = limit
+	if combatHeartbeat then combatHeartbeat:Fire(1 / 60) end
 end
 local workspace = object("Workspace")
 local players = object("Players")
@@ -170,47 +182,73 @@ function players:GetPlayerFromCharacter(model)
 	return nil
 end
 local rayCalls, traces, hits = 0, 0, 0
+local stuns, lastStunDuration = 0, 0
 local rayResult, obstruction = nil, nil
-function workspace:Raycast(_, direction)
+function workspace:Raycast(_, direction, params)
 	rayCalls += 1
+	if params and params.RespectCanCollide then return obstruction end
 	return if direction.Magnitude < 8 then obstruction else rayResult
+end
+function workspace:GetPartBoundsInBox()
+	-- A simulacao nao reproduz OBB; devolve as partes de personagens e deixa
+	-- WeaponSystem validar caixa, frente, alcance e linha de visao.
+	local result = {}
+	for _, player in playerList do
+		if player.Character then
+			for _, part in player.Character:GetDescendants() do
+				if part:IsA("BasePart") then table.insert(result, part) end
+			end
+		end
+	end
+	return result
 end
 local remotes = setmetatable({}, { __index = function(t, key)
 	local r = { OnServerEvent = signal(), events = {} }
+	function r:FireAllClients(...) table.insert(self.events, { args = {...} }) end
 	function r:FireClient(player, ...) table.insert(self.events, { player = player, args = { ... } }) end
 	rawset(t, key, r); return r
 end })
 local modules = {
+	LoadoutData = { GetPerk = function() return nil end },
+	Elimination = { Eliminate = function(p) p:SetAttribute("Eliminado", true) end,
+		IsEliminated = function(p) return p:GetAttribute("Eliminado") == true end },
+	RoundManager = { IsRoundActive = function() return true end, RoundPrepared = { Event = signal() } },
+	MonsterLightWeakness = { IsWeakened = function() return false end },
 	Remotes = remotes,
 	ItemRegistry = { Items = {} },
 	ToolFactory = { Create = function() return nil end },
 	-- Status behavior is exercised against the real module in survivor_powers.luau.
 	SurvivorPowerStatus = { BeginAttack = function() return false end, BlockAttack = function() return false end,
-		Active = function() return false end, Stun = function() return false end, Emit = function() end },
+		Active = function() return false end, Stun = function(_, duration) stuns += 1; lastStunDuration = duration; return true end, Emit = function() end },
 	OTSEffects = { CreateTracer = function() traces += 1 end, CreateImpact = function() end },
-	DamageSystem = {
-		IsDamageable = function(model) return model:FindFirstChildOfClass("Humanoid").Health > 0 end,
-		Apply = function(humanoid, damage)
-			hits += 1
-			local before = humanoid.Health
-			humanoid:TakeDamage(damage)
-			return before-humanoid.Health, humanoid.Health <= 0
-		end,
-	},
+
 }
-local services = { Workspace = workspace, Players = players, ReplicatedStorage = storage, Debris = { AddItem = function(_, item, seconds) delay(seconds, function() item:Destroy() end) end } }
+local services = { RunService = { Heartbeat = signal() }, Workspace = workspace, Players = players, ReplicatedStorage = storage, Debris = { AddItem = function(_, item, seconds) delay(seconds, function() item:Destroy() end) end } }
+combatHeartbeat = services.RunService.Heartbeat
 local enum = setmetatable({}, { __index = function(t, key)
 	local item = setmetatable({}, { __index = function(_, value) return value end }); rawset(t, key, item); return item
 end })
 local environment = setmetatable({
 	game = { GetService = function(_, key) return assert(services[key], key) end },
 	workspace = workspace, script = { Parent = storage.Modules }, Enum = enum,
-	Instance = { new = function(class) return object(class) end },
+	-- DamageSystem/DropItemSystem publicam BindableEvents de observação
+	-- (DamageApplied/Healed/ItemPickedUp) pra quem quiser saber de dano, cura
+	-- e pickup sem alterar nada -- hoje o relatório de partida escuta os
+	-- três. object() não modela Event/Fire genericamente, então o
+	-- BindableEvent precisa do próprio formato aqui.
+	Instance = { new = function(class)
+		if class == "BindableEvent" then
+			local event = signal()
+			return { Event = event, Fire = function(_, ...) event:Fire(...) end }
+		end
+		return object(class)
+	end },
 	Vector3 = V, CFrame = CF, Color3 = { new = function(...) return {...} end, fromRGB = function(...) return {...} end },
 	UDim = { new = function(...) return {...} end },
 	UDim2 = { fromScale = function(...) return {...} end, fromOffset = function(...) return {...} end },
 	Random = { new = function() return { NextNumber = function() return 0 end } end },
 	RaycastParams = { new = function() return {} end },
+	OverlapParams = { new = function() return {} end },
 	os = { clock = function() return now end },
 	task = { delay = delay, defer = function(callback, ...) delay(0, callback, ...) end },
 	typeof = function(value) return if type(value) == "table" then value._kind or "table" else type(value) end,
@@ -230,6 +268,7 @@ local assets = object("Folder", "WeaponAssets", storage)
 local templates = object("Folder", "Tools", assets)
 object("Folder", "Audios", assets)
 local template = object("Tool", "Glock17", templates)
+template:SetAttribute("LobbyTestWeapon", true) -- regression suite preserves original lobby OTS
 object("BoolValue", "Weapon", template).Value = true
 local handle = object("Part", "Handle", template)
 handle.Anchored, handle.CanCollide, handle.CanTouch = false, false, false
@@ -255,6 +294,7 @@ local function player(name)
 	object("Part", "HumanoidRootPart", p.Character)
 	object("Part", "Head", p.Character).Position = V.new(0, 2, 0)
 	object("Backpack", "Backpack", p)
+	function hum:EquipTool(tool) self:UnequipTools(); tool.Parent = p.Character end
 	function hum:UnequipTools()
 		for _, child in p.Character:GetChildren() do if child:IsA("Tool") then child.Parent = p.Backpack end end
 	end
@@ -264,6 +304,8 @@ local function player(name)
 end
 local alice, bob = player("Alice"), player("Bob")
 local ammoSystem, drop, server = loadModule("AmmoSystem"), loadModule("DropItemSystem"), loadModule("OTSFirearmService")
+local damage = loadModule("DamageSystem")
+damage.DamageApplied.Event:Connect(function() hits += 1 end)
 ammoSystem.Init(); drop.Init(); server.Init(); server.Init()
 local rules = loadModule("OTSRules")
 assert(rules.ShotInterval(template) == 0.06 and rules.Spread(template) == 3
@@ -283,7 +325,7 @@ rayResult = { Instance = targetHead, Position = targetHead.Position, Normal = V.
 shoot()
 assert(mag.Value == 16 and hits == 1 and traces == 1, "A shot must debit exactly one bullet and damage once")
 shoot(); assert(mag.Value == 16 and hits == 1, "Fire rate spam must not deal damage")
-advance(0.2)
+advance(0.5)
 shoot(V.new(0/0, 0, 0)); shoot(V.new(math.huge, 0, 0)); shoot(V.new(0, 0, -9000))
 assert(mag.Value == 16 and hits == 1, "Reject nonfinite/out-of-range aim points")
 remotes.FirearmDamage.OnServerEvent:Fire(alice, targetHead)
@@ -296,7 +338,9 @@ alice:SetAttribute("Amarrado", true); shoot(); assert(mag.Value == 16, "Restrain
 alice:SetAttribute("Amarrado", nil)
 alice.Character:SetAttribute("PowerStunned", true); shoot(); assert(mag.Value == 16, "Stunned player cannot fire")
 alice.Character:SetAttribute("PowerStunned", nil)
+pistol:SetAttribute("LobbyTestWeapon", nil)
 alice:SetAttribute("InWaitingRoom", true); shoot(); assert(mag.Value == 16, "Waiting-room player cannot fire")
+pistol:SetAttribute("LobbyTestWeapon", true)
 alice:SetAttribute("InWaitingRoom", nil)
 mag.Value = 0; shoot(); assert(hits == 1, "Empty gun cannot deal damage")
 mag.Value = 17
@@ -304,26 +348,28 @@ local wall = object("Part", "Wall", workspace)
 obstruction = { Instance = wall, Position = V.new(0, 2, -0.5), Normal = V.new(0, 0, 1) }
 shoot(); assert(mag.Value == 16 and hits == 1, "Head-to-muzzle wall prevents shooting through cover")
 obstruction = nil
-advance(0.2)
+advance(0.5)
 rayResult.Instance = bob.Character.Head
 pistol:SetAttribute("LobbyTestWeapon", true)
 alice:SetAttribute("InRound", true); bob:SetAttribute("InRound", true)
 shoot(); assert(bob.Character.Humanoid.Health == 100, "Test weapon cannot damage a player even in round")
-advance(0.2)
+advance(0.5)
 pistol.Parent = alice.Character
 rayResult.Instance = targetHead
 alice:SetAttribute("InWaitingRoom", true)
 shoot(); assert(hits == 2, "Lobby test weapon must fire at its training target")
 alice:SetAttribute("InWaitingRoom", nil)
-advance(0.2)
+advance(0.5)
 pistol:SetAttribute("LobbyTestWeapon", nil); bob:SetAttribute("InRound", nil)
+alice:SetAttribute("Role", "Sobrevivente"); bob:SetAttribute("Role", "Monstro")
 rayResult.Instance = bob.Character.Head
 shoot(); assert(bob.Character.Humanoid.Health == 100, "Lobby player must be protected from live weapons")
-advance(0.2); bob:SetAttribute("InRound", true); shoot()
+advance(0.5); bob:SetAttribute("InRound", true); shoot()
 assert(bob.Character.Humanoid.Health < 100, "Live weapon should work in round")
 alice:SetAttribute("InRound", nil); bob:SetAttribute("InRound", nil)
 print("PASS: authoritative shooting, malformed requests, walls, ownership, cadence, lobby isolation")
 
+pistol:SetAttribute("LobbyTestWeapon", true)
 mag.Value = 4
 ammoSystem.AddReserve(alice, "Pistola", 8)
 local function reload(action) remotes.FirearmReload.OnServerEvent:Fire(alice, pistol, action or "Start") end
@@ -357,6 +403,11 @@ print("PASS: timed reload, duplicate requests, partial reserve, cancellation, de
 ammoSystem.ResetReserves(alice)
 ammoSystem.AddReserve(alice, "Pistola", 65)
 local box = ammoSystem.CreatePickup(V.new(2, 0, 0), "Pistola", 17)
+assert(box.MunicaoPrompt.RequiresLineOfSight)
+obstruction = { Instance = wall }
+box.MunicaoPrompt.Triggered:Fire(alice)
+assert(ammoSystem.GetReserve(alice, "Pistola") == 65 and box:GetAttribute("Quantidade") == 17, "Wall blocks ammo pickup without consuming it")
+obstruction = nil
 box.MunicaoPrompt.Triggered:Fire(alice)
 assert(ammoSystem.GetReserve(alice, "Pistola") == 68 and box:GetAttribute("Quantidade") == 14, "Partial pickup retains leftover rounds")
 box.MunicaoPrompt.Triggered:Fire(alice); assert(box.Parent ~= nil, "Full reserve must not consume pickup")
@@ -378,6 +429,10 @@ local pickup = testPistol.Handle.PegarPrompt
 pickup.Triggered:Fire(alice); assert(testPistol.Parent == folder, "Distant player cannot claim bench pistol")
 alice.Character.HumanoidRootPart.Position = testPistol.Handle.Position
 pistol.Parent = alice.Backpack
+obstruction = { Instance = wall }
+pickup.Triggered:Fire(alice)
+assert(testPistol.Parent == folder, "Wall blocks tools even when prompt is triggered directly")
+obstruction = nil
 pickup.Triggered:Fire(alice)
 assert(testPistol.Parent == alice.Backpack and testPistol.Handle.Anchored == false, "Pickup unanchors pistol before equip")
 advance(4); assert(folder.Glock17 == nil, "Picking the pistol must not duplicate it")
@@ -396,4 +451,202 @@ local dummy = folder:FindFirstChild("Alvo de treino")
 dummy.Humanoid.Health = 0; advance(3.1)
 assert(folder:FindFirstChild("Alvo de treino") ~= dummy and folder:FindFirstChild("Alvo de treino").Humanoid.Health == 100)
 print("PASS: lobby station, one pistol, pickup/unanchor, drop, ammo and target respawns")
-print("All firearm scenarios passed (simulated services; Studio visual/physics testing still required).")
+
+-- Part 1 exercises the REAL health, weapon, stat and OTS modules together.
+local cfg = loadModule("GameConfig")
+local combat = loadModule("WeaponSystem")
+local combatRules = loadModule("CombatRules")
+combat.Init(); combat.Init()
+local fallEvent = object("RemoteEvent", "FallDamageEvent", storage)
+fallEvent.OnServerEvent = signal()
+alice:SetAttribute("InRound", true); alice:SetAttribute("Role", "Sobrevivente")
+bob:SetAttribute("InRound", true); bob:SetAttribute("Role", "Monstro")
+alice.Character.HumanoidRootPart.Position = V.zero
+bob.Character.HumanoidRootPart.Position = V.new(0, 0, -5)
+bob.Character.Head.Position = V.new(0, 2, -5)
+damage.Init(); damage.Init()
+local monsterHum = bob.Character.Humanoid
+assert(monsterHum.Health == 1000 and monsterHum.MaxHealth == 1000, "Monster spawn must have 1000 HP")
+assert(alice.Character.Humanoid.Health > 0, "Survivor spawn has server-owned health")
+assert(damage.GetMonsterState(bob) == "Normal" and damage.GetMonsterState(alice) == nil)
+assert(not damage.SetMonsterState(bob, "Inventado") and not damage.SetMonsterState(alice, "Vulneravel"))
+assert(damage.SetMonsterState(bob, "Enfraquecido") and damage.GetMonsterState(bob) == "Enfraquecido")
+assert(damage.SetMonsterState(bob, "Vulneravel") and damage.GetMonsterState(bob) == "Vulneravel")
+damage.SetMonsterState(bob, "Normal")
+
+local function melee(id)
+	local tool = object("Tool", id)
+	tool:SetAttribute(id, true)
+	tool.Parent = alice.Backpack
+	return tool
+end
+local wrench, crowbar, flare = melee("PedraAfiada"), melee("LancaDeBambu"), melee("Sinalizador")
+assert(combat.Equip(alice, wrench))
+rayResult, obstruction = nil, nil
+local function attack(tool, ...)
+	remotes.WeaponAttack.OnServerEvent:Fire(alice, tool or wrench, ...)
+end
+attack(wrench, 999999, bob) -- extra client damage/target data has no authority
+advance(0.13) -- HitStart da chave inglesa: dano nao ocorre no clique.
+assert(monsterHum.Health == 992, "Wrench deals exactly 8, never client's invented damage")
+assert(bob.Character.HumanoidRootPart.AssemblyLinearVelocity.Magnitude > 0, "Wrench applies small push")
+assert(bob.Character:FindFirstChild("CombatHitFeedback"), "Actual damage has visible temporary feedback")
+assert(not bob.Character:GetAttribute("CombatAnimationState"), "No hurt animation in Part 1")
+attack(); assert(monsterHum.Health == 992, "Melee spam is rejected")
+assert(combat.Equip(alice, crowbar)); attack(crowbar)
+assert(monsterHum.Health == 992, "Switching weapons does not bypass cooldown")
+advance(1.01); attack(crowbar); advance(0.2)
+assert(monsterHum.Health == 977 and stuns == 1 and lastStunDuration == 0.4, "Crowbar damage and short stun")
+advance(1.51)
+local wallHit = { Instance = wall, Position = V.new(0, 0, -2), Normal = V.new(0, 0, 1) }
+obstruction = wallHit; attack(crowbar); advance(0.2)
+assert(monsterHum.Health == 977 and stuns == 1, "Melee cannot damage/stun through a wall")
+obstruction = nil; advance(1.51)
+bob.Character.HumanoidRootPart.Position = V.new(0, 0, 5)
+attack(crowbar); advance(0.2); assert(monsterHum.Health == 977, "Target behind attacker is not hit")
+advance(1.51); bob.Character.HumanoidRootPart.Position = V.new(0, 0, -20)
+attack(crowbar); advance(0.2); assert(monsterHum.Health == 977, "Out-of-range target is not hit")
+advance(1.51); bob.Character.HumanoidRootPart.Position = V.new(0, 0, -5)
+local other = player("SecondMonster")
+other:SetAttribute("Role", "Monstro"); other:SetAttribute("InRound", true)
+other.Character.HumanoidRootPart.Position = V.new(0, 0, -6)
+attack(crowbar); advance(0.2)
+assert(monsterHum.Health == 962 and other.Character.Humanoid.Health == 1000, "Exactly one target per swing")
+advance(1.51)
+local initialHealth = monsterHum.Health
+crowbar.Parent = alice.Backpack; attack(crowbar)
+local forged = object("Tool", "Crowbar", alice.Character); attack(forged)
+attack("LancaDeBambu"); attack({ Damage = 9999 })
+remotes.WeaponAttack.OnServerEvent:Fire(bob, wrench)
+assert(monsterHum.Health == initialHealth and combat.IsReady(alice), "Invalid identity/ownership consumes no cooldown")
+assert(combat.Equip(alice, crowbar))
+for _, flag in { "Amarrado", "Eliminado", "GrabLocked", "PowerStunned", "ShadowRushBusy", "TeleportBusy" } do
+	alice.Character:SetAttribute(flag, true); attack(crowbar)
+	assert(monsterHum.Health == initialHealth and combat.IsReady(alice), "Busy state must prevent melee: " .. flag)
+	alice.Character:SetAttribute(flag, nil)
+end
+alice:SetAttribute("InRound", nil); attack(crowbar)
+alice:SetAttribute("InRound", true); alice:SetAttribute("InWaitingRoom", true); attack(crowbar)
+alice:SetAttribute("InWaitingRoom", nil)
+assert(monsterHum.Health == initialHealth and combat.IsReady(alice), "No combat in lobby/waiting room")
+local shield = object("ForceField", "ForceField", bob.Character)
+local beforeStuns = stuns
+attack(crowbar); advance(0.2); assert(monsterHum.Health == initialHealth and stuns == beforeStuns, "Protection blocks damage AND effects")
+shield:Destroy(); advance(1.51)
+assert(combat.Equip(alice, flare))
+local signals, signalPoint = 0, nil
+combat.SignalFired.Event:Connect(function(_, position) signals += 1; signalPoint = position end)
+rayResult = wallHit
+attack(flare); attack(flare)
+assert(signals == 1 and signalPoint == wallHit.Position and monsterHum.Health == initialHealth, "Signal stops at wall; zero damage and cooldown")
+print("PASS: health initialization, states, melee cone/range/walls, one target, fixed damage, ownership, busy states, signal")
+
+advance(2.01)
+rayResult, obstruction = nil, nil
+local bat = melee("TacoBeisebol")
+assert(combat.Equip(alice, bat))
+local batStart, batStuns = monsterHum.Health, stuns
+assert(combatRules.Profile(cfg.Weapons.Definitions.PedraAfiada, "Heavy") == cfg.Weapons.Definitions.PedraAfiada,
+	"Weapons without a Heavy profile ignore the requested variant")
+attack(bat, "Light")
+advance(0.25)
+assert(monsterHum.Health == batStart - 12 and stuns == batStuns, "Bat light swing: 12 damage, no stun")
+attack(bat, "Heavy")
+assert(monsterHum.Health == batStart - 12, "Heavy right after a light swing shares the cooldown")
+advance(1.11); attack(bat, "Heavy"); advance(0.4)
+assert(monsterHum.Health == batStart - 38 and stuns == batStuns + 1 and lastStunDuration == 0.6, "Bat heavy swing: 26 damage + 0.6s stun")
+attack(bat, "Light")
+advance(1.11); attack(bat, "Light")
+assert(monsterHum.Health == batStart - 38, "Heavy swing imposes its own longer cooldown")
+advance(1.11); attack(bat, "Bogus"); advance(0.25)
+assert(monsterHum.Health == batStart - 50, "Unknown variant falls back to the light swing")
+advance(2.21); attack(bat, "Heavy", 999999, bob); advance(0.4)
+assert(monsterHum.Health == batStart - 76, "Client-sent numbers/targets never change heavy damage")
+advance(2.21)
+monsterHum.Health = batStart -- o cenario da pistola abaixo espera a vida de antes do taco
+bat:Destroy()
+print("PASS: baseball bat light/heavy variants use server-owned damage, stun and cooldown")
+
+advance(2.01)
+local live = template:Clone()
+live:SetAttribute("LobbyTestWeapon", nil)
+live.Parent = alice.Backpack
+assert(combat.Equip(alice, live))
+local bullets = live.Settings.Config.Ammo
+assert(bullets.Value == cfg.Weapons.Definitions.Glock17.Ammo and bullets.Value == 12, "Simple configurable initial ammo")
+assert(rules.ShotInterval(live) == 0.4 and rules.AttackRange(live) == 300 and rules.Recoil(live) == 0)
+assert(not rules.AnimationsEnabled(live) and not rules.ReloadEnabled(live))
+local function fireLive()
+	remotes.FirearmShoot.OnServerEvent:Fire(alice, live, V.new(0, 2, -80), false, 2, 999999)
+end
+rayResult = { Instance = bob.Character.Head, Position = bob.Character.Head.Position, Normal = V.new(0, 0, 1) }
+fireLive()
+assert(bullets.Value == 11 and monsterHum.Health == initialHealth - 25, "Left click without aim, fixed 25 damage including headshot")
+fireLive(); assert(bullets.Value == 11, "Pistol cooldown")
+assert(combat.Equip(alice, wrench)); attack(wrench)
+assert(monsterHum.Health == initialHealth - 25, "Gun-to-melee swap cannot bypass shared cooldown")
+assert(combat.Equip(alice, live))
+advance(0.41)
+rayResult = wallHit; fireLive()
+assert(bullets.Value == 10 and monsterHum.Health == initialHealth - 25, "A shot into a wall spends ammo without damage")
+advance(0.41)
+rayResult.Instance = alice.Character.Head
+fireLive()
+assert(alice.Character.Humanoid.Health == alice.Character.Humanoid.MaxHealth, "No self damage")
+advance(0.41)
+rayResult.Instance = other.Character.Head
+other:SetAttribute("Role", "Sobrevivente")
+fireLive()
+assert(other.Character.Humanoid.Health == other.Character.Humanoid.MaxHealth, "No friendly fire")
+local remaining = bullets.Value
+live.Parent = alice.Backpack; live.Parent = alice.Character
+assert(bullets.Value == remaining, "Equip/drop transitions do not refill ammo")
+remotes.FirearmReload.OnServerEvent:Fire(alice, live, "Start")
+remotes.FirearmReload.OnServerEvent:Fire(alice, live, "Marker", "End")
+advance(3)
+assert(bullets.Value == remaining and not live:GetAttribute("FirearmReloading"), "No advanced reload in Part 1")
+bullets.Value = 0
+rayResult.Instance = bob.Character.Head
+local hp = monsterHum.Health
+fireLive(); assert(monsterHum.Health == hp and bullets.Value == 0, "No ammunition means no shot")
+print("PASS: live pistol fixed damage/range/cooldown, hip fire, wall/self/friendly-fire protection, finite ammunition, no reload")
+
+local deaths = 0
+monsterHum.Died:Connect(function() deaths += 1 end)
+local applied, died = damage.Apply(bob, 99999, { Source = alice, FixedDamage = true })
+assert(applied == hp - 1 and not died and monsterHum.Health == 1 and deaths == 0)
+assert(bob.Character:GetAttribute("MonsterTemporarilyDefeated") == true and not bob:GetAttribute("Eliminado") and not bob.Character:FindFirstChild("Dead"))
+assert(damage.Apply(bob, 25, { Source = alice, FixedDamage = true }) == 0)
+assert(not damage.Execute(bob, { Source = alice }) and monsterHum.Health == 1 and deaths == 0, "Execution also cannot kill monster")
+assert(damage.Apply(bob, 0/0) == 0 and damage.Apply(bob, math.huge) == 0)
+assert(damage.Heal(bob, 0/0) == 0 and damage.Heal(bob, math.huge) == 0)
+bob:SetAttribute("Role", "Sobrevivente")
+assert(monsterHum.MaxHealth < 1000 and bob.Character:GetAttribute("MonsterCombatState") == nil, "Role reset clears monster health/state")
+bob:SetAttribute("Role", "Monstro")
+assert(monsterHum.Health == 1000 and bob.Character:GetAttribute("MonsterTemporarilyDefeated") == nil)
+local victim = player("HumanVictim")
+victim:SetAttribute("Role", "Sobrevivente")
+assert(damage.Execute(victim, { Source = bob }) and victim:GetAttribute("Eliminado"), "Existing survivor elimination still works")
+print("PASS: monster floor prevents death/execution/elimination, finite health inputs, lifecycle resets, survivor elimination")
+
+
+local monsterCombat = loadModule("MonsterCombat")
+monsterCombat.Init(); monsterCombat.Init()
+bob.Character.HumanoidRootPart.Position = V.zero
+alice.Character.HumanoidRootPart.Position = V.new(0, 0, -4)
+other.Character.HumanoidRootPart.Position = V.new(0, 0, -5)
+local humanHP, otherHP = alice.Character.Humanoid.Health, other.Character.Humanoid.Health
+rayResult, obstruction = nil, wallHit
+remotes.MonsterAttack.OnServerEvent:Fire(bob)
+assert(alice.Character.Humanoid.Health == humanHP and other.Character.Humanoid.Health == otherHP, "Monster also cannot hit through walls")
+advance(1.11); obstruction = nil
+remotes.MonsterAttack.OnServerEvent:Fire(bob)
+assert(alice.Character.Humanoid.Health < humanHP and other.Character.Humanoid.Health == otherHP, "Monster hits only one target per swing")
+local damagedHP = alice.Character.Humanoid.Health
+remotes.MonsterAttack.OnServerEvent:Fire(bob)
+assert(alice.Character.Humanoid.Health == damagedHP, "Monster cooldown still enforced")
+advance(1.11); bob:SetAttribute("InRound", nil)
+remotes.MonsterAttack.OnServerEvent:Fire(bob)
+assert(alice.Character.Humanoid.Health == damagedHP, "Monster cannot attack outside the round")
+print("PASS: existing monster attack now respects one target, walls and round membership")
+print("All combat/firearm scenarios passed (simulated services; Studio visual/physics testing still required).")
