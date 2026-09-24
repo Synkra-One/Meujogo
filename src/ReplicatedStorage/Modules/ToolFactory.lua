@@ -1,10 +1,9 @@
 --!strict
 --[[
 	ToolFactory
-	Constrói as Tools funcionais dos itens novos desta leva (Faca
-	Improvisada, Crowbar, Wrench, Tocha, Crowbar Ancestral). O id interno dos
-	itens antigos continua existindo para preservar os sistemas que já escutam
-	Attributes como "LancaDeBambu", "PedraAfiada" e "ArmaRara".
+	Constrói as Tools funcionais dos itens novos desta leva (Crowbar, Tocha e
+	Crowbar Ancestral). O id interno dos itens é mantido nos Attributes usados
+	pelos sistemas de coleta e combate.
 
 	Um lugar só porque ItemSpawner.lua (pickups no mapa) e IslandGenerator.lua
 	(Lança Ancestral nas Ruínas)
@@ -163,6 +162,23 @@ local function arczisFlashlightTemplate(): Tool?
 	return if template and template:IsA("Tool") then template else nil
 end
 
+local function fallbackFlashlight(): Tool?
+	-- O modelo visual externo pode falhar por permissão ou indisponibilidade
+	-- temporária do Toolbox. Ainda assim a ferramenta precisa existir:
+	-- FlashlightRig monta o feixe, a bateria e os atributos funcionais a partir
+	-- deste corpo simples.
+	local model = Instance.new("Model")
+	local handle = makeHandle(Vector3.new(0.32, 0.32, 1.6), Color3.fromRGB(38, 40, 44), Enum.Material.Metal)
+	handle.Parent = model
+	local tool = FlashlightRig.Build(model)
+	if not tool then
+		model:Destroy()
+		return nil
+	end
+	tool:SetAttribute("FlashlightModelAssetId", ItemRegistry.Items.Lanterna.AssetId)
+	return tool
+end
+
 --------------------------------------------------------------------------------
 -- Taco de Beisebol
 --------------------------------------------------------------------------------
@@ -275,16 +291,6 @@ local CONSTRUCTORS: { [string]: () -> Tool? } = {
 		return tool
 	end,
 
-	FacaImprovisada = function()
-		local tool = Instance.new("Tool")
-		tool.Name = "Faca Improvisada"
-		tool.RequiresHandle = true
-		tool.Grip = CFrame.new(0, 0, -0.3)
-		local handle = makeHandle(Vector3.new(0.3, 0.15, 1.4), Color3.fromRGB(170, 170, 175), Enum.Material.Metal)
-		handle.Parent = tool
-		return tool
-	end,
-
 	Bandagem = function()
 		-- Fallback: um rolinho de bandagem branco. Se você já tem uma Tool
 		-- "Bandagem" própria no jogo, o UtilityItemSystem reage a ela do mesmo
@@ -314,20 +320,6 @@ local CONSTRUCTORS: { [string]: () -> Tool? } = {
 				tool.Name = "Crowbar"
 				tool.RequiresHandle = true
 				local handle = makeHandle(Vector3.new(0.25, 0.25, 4.2), Color3.fromRGB(95, 100, 110), Enum.Material.Metal)
-				handle.Parent = tool
-				return tool
-			end,
-		})
-	end,
-
-	PedraAfiada = function()
-		return buildAssetTool("PedraAfiada", {
-			Length = 2.1,
-			Fallback = function()
-				local tool = Instance.new("Tool")
-				tool.Name = "Wrench"
-				tool.RequiresHandle = true
-				local handle = makeHandle(Vector3.new(0.3, 0.25, 2.1), Color3.fromRGB(120, 120, 125), Enum.Material.Metal)
 				handle.Parent = tool
 				return tool
 			end,
@@ -388,16 +380,16 @@ local CONSTRUCTORS: { [string]: () -> Tool? } = {
 		local template = if type(assetId) == "number" and assetId > 0
 			then AssetLoader.Load(assetId) else nil
 		if not template then
-			warn(string.format("[ToolFactory] O modelo unico da Lanterna (%s) nao carregou; nenhuma substituta foi criada.", tostring(assetId)))
-			return nil
+			warn(string.format("[ToolFactory] O modelo visual da Lanterna (%s) nao carregou; usando corpo funcional de reserva.", tostring(assetId)))
+			return fallbackFlashlight()
 		end
 
 		local model = template:Clone()
 		scaleModelToLength(model, FlashlightConfig.ModelLength)
 		local tool = FlashlightRig.Build(model)
 		if not tool then
-			warn(string.format("[ToolFactory] O asset %s nao possui uma estrutura valida de lanterna.", tostring(assetId)))
-			return nil
+			warn(string.format("[ToolFactory] O asset %s nao possui uma estrutura valida de lanterna; usando corpo funcional de reserva.", tostring(assetId)))
+			return fallbackFlashlight()
 		end
 		tool:SetAttribute("FlashlightModelAssetId", assetId)
 		return tool

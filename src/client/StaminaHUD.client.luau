@@ -21,6 +21,7 @@ local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local FearRules = require(ReplicatedStorage.Modules.FearPresentationRules)
 local DiscoveredItemsStore = require(script.Parent.DiscoveredItemsStore)
 local SurvivalMinimapHUD = require(script.Parent.SurvivalMinimapHUD)
+local StaminaRing = require(script.Parent.StaminaRing)
 
 local LocalPlayer = Players.LocalPlayer
 local playerGui = LocalPlayer:WaitForChild("PlayerGui")
@@ -86,9 +87,17 @@ end)
 
 --------------------------------------------------------------------------------
 -- Intenção de correr
+--
+-- O que vai pro servidor é o estado REAL de corrida do pacote de movimento
+-- (Attribute local "IsSprinting" no HumanoidRootPart, escrito pelo script
+-- Crouching). Esse Attribute nasce no cliente e não replica, então é daqui
+-- que o servidor fica sabendo. Recalculado todo frame e enviado só quando
+-- muda: nunca fica preso num valor antigo (ex.: Shift já apertado quando a
+-- partida libera o movimento). Sem o pacote, cai pro Shift/botão apertado.
 --------------------------------------------------------------------------------
 
-local holding = false
+local sprintKeyHeld = false -- input físico (fallback quando o pacote não publica)
+local holding = false -- última intenção enviada ao servidor
 
 local function setHolding(value: boolean)
 	if value == holding then
@@ -98,29 +107,35 @@ local function setHolding(value: boolean)
 	Remotes.SprintIntent:FireServer(value)
 end
 
+local function packSprinting(): boolean?
+	local character = LocalPlayer.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local value = root and root:GetAttribute("IsSprinting")
+	return if type(value) == "boolean" then value else nil
+end
+
 UserInputService.InputBegan:Connect(function(input: InputObject, _gameProcessed: boolean)
 	-- Outros controles locais (câmera/PlayerModule) podem marcar Shift como
-	-- processado antes deste listener. A intenção de correr ainda precisa
-	-- chegar ao servidor; só um campo de texto realmente deve bloqueá-la.
+	-- processado antes deste listener; só um campo de texto bloqueia.
 	if UserInputService:GetFocusedTextBox() then
 		return
 	end
 	if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
-		setHolding(true)
+		sprintKeyHeld = true
 	end
 end)
 
 UserInputService.InputEnded:Connect(function(input: InputObject)
 	if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
-		setHolding(false)
+		sprintKeyHeld = false
 	end
 end)
 
 ContextActionService:BindAction("SprintIntent", function(_, state: Enum.UserInputState)
 	if state == Enum.UserInputState.Begin then
-		setHolding(true)
+		sprintKeyHeld = true
 	elseif state == Enum.UserInputState.End or state == Enum.UserInputState.Cancel then
-		setHolding(false)
+		sprintKeyHeld = false
 	end
 	return Enum.ContextActionResult.Pass
 end, UserInputService.TouchEnabled, Enum.KeyCode.ButtonL3)
@@ -312,9 +327,9 @@ end
 local function onCharacterAdded(character: Model)
 	hookCharacter(character)
 	-- Se a troca de corpo ocorreu com Shift já pressionado, InputBegan não
-	-- dispara de novo. Reenvia o estado físico atual para o servidor.
-	setHolding(UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
-		or UserInputService:IsKeyDown(Enum.KeyCode.RightShift))
+	-- dispara de novo; o frame seguinte reenvia a intenção sozinho.
+	sprintKeyHeld = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
+		or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
 end
 
 if LocalPlayer.Character then
@@ -323,6 +338,11 @@ end
 LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
 
 RunService.RenderStepped:Connect(function(dt: number)
+	if LocalPlayer:GetAttribute("GameplayEnabled") ~= true then
+		if holding then setHolding(false) end
+		gui.Enabled = false
+		return
+	end
 	-- Enquanto a tela inicial (ReplicatedFirst/MenuBoot) estiver aberta, o
 	-- HUD de partida não pode aparecer por baixo dela. gui.Enabled é
 	-- reescrito nos dois sentidos aqui -- sem isto, fechar o menu deixaria
@@ -332,11 +352,14 @@ RunService.RenderStepped:Connect(function(dt: number)
 		return
 	end
 	gui.Enabled = true
-	-- FONTE ÚNICA do fôlego: Attribute "Stamina" no Player (0..100), escrito
-	-- só pelo servidor em StaminaSystem.lua. Aqui só normaliza pra 0..1 --
-	-- ninguém mais divide por 100 depois disso.
-	local raw = LocalPlayer:GetAttribute("Stamina")
-	local target = math.clamp((if type(raw) == "number" then raw else 100) / 100, 0, 1)
+	local pack = packSprinting()
+	setHolding(if pack ~= nil then pack else sprintKeyHeld)
+
+	-- FONTE ÚNICA do fôlego: Attributes "Stamina" e "StaminaMax" no Player,
+	-- escritos só pelo servidor (StaminaSystem.lua). Fraction limita a 0..1,
+	-- trata teto 0 como vazio e devolve nil enquanto os Attributes não
+	-- chegaram (o anel mantém o último valor). Ninguém divide de novo depois.
+	local target = StaminaRing.Fraction(LocalPlayer:GetAttribute("Stamina"), LocalPlayer:GetAttribute("StaminaMax"))
 	local exhausted = LocalPlayer:GetAttribute("StaminaExausto") == true
 
 	local humanoid = currentHumanoid

@@ -14,6 +14,7 @@ local DamageSystem = require(script.Parent.DamageSystem)
 local Round = require(script.Parent.RoundManager)
 local Targeting = require(script.Parent.FlashlightTargeting)
 local Status = require(script.Parent.SurvivorPowerStatus)
+local MatchStateService = require(script.Parent.MatchStateService)
 
 local System = {}
 type Lamp = { battery: number, on: boolean, direction: Vector3, aimAt: number, drainAt: number, burstReadyAt: number }
@@ -51,7 +52,8 @@ end
 
 local function canUse(player: Player, tool: Tool): boolean
 	local character = player.Character
-	if not character or tool.Parent ~= character or not alive(player)
+	if not MatchStateService.IsGameplayEnabled(player)
+		or not character or tool.Parent ~= character or not alive(player)
 		or (player:GetAttribute("Role") ~= GameConfig.Roles.Survivor and not RunService:IsStudio())
 		or (player:GetAttribute("InWaitingRoom") == true and not RunService:IsStudio()) then return false end
 	for _, flag in Config.BlockingFlags do
@@ -157,7 +159,8 @@ local function burst(player: Player, tool: Tool, state: Lamp, direction: any, se
 	local function reject(reason: string)
 		Remotes.Flashlight:FireClient(player, "BurstResult", tool, false, reason, sequence)
 	end
-	if not canUse(player, tool) or player:GetAttribute("Role") ~= GameConfig.Roles.Survivor
+	if not MatchStateService.IsGameplayEnabled(player)
+		or not canUse(player, tool) or player:GetAttribute("Role") ~= GameConfig.Roles.Survivor
 		or not Round.IsRoundActive() or player:GetAttribute("InRound") ~= true
 		or player:GetAttribute("InWaitingRoom") == true then reject("Blocked"); return end
 	local character = player.Character :: Model
@@ -182,7 +185,9 @@ local function burst(player: Player, tool: Tool, state: Lamp, direction: any, se
 			end
 		end
 	end
-	if #candidates == 0 then reject("Range"); return end
+	-- O clarão é uma ativação válida mesmo sem um Monstro próximo. Nesse
+	-- caso ele consome bateria/cooldown e mostra o efeito, mas termina como
+	-- "Miss" sem aplicar stun, bloqueio ou dano em ninguém.
 	table.sort(candidates, function(a, b) return a.distance < b.distance end)
 	-- Commit once, before applying effects. Cooldown belongs to both owner
 	-- and Tool, so swapping/dropping a lamp cannot bypass it.

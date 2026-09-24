@@ -18,7 +18,6 @@ local BLOCKING_FLAGS = {
 	"ShadowRushBusy",
 	"TeleportBusy",
 	"PowerStunned",
-	"Amarrado",
 	"FearTripping",
 }
 
@@ -365,8 +364,20 @@ function Pose:Update(direction: Vector3, aiming: boolean, dt: number)
 	local localAim = if rootPart then rootPart.CFrame:VectorToObjectSpace(direction) else direction
 	local targetPitch = math.clamp(math.asin(math.clamp(localAim.Y, -1, 1)),
 		-math.rad(Config.AimPitchLimit), math.rad(Config.AimPitchLimit))
-	local targetYaw = math.clamp(math.atan2(-localAim.X, -localAim.Z),
-		-math.rad(Config.AimYawLimit), math.rad(Config.AimYawLimit))
+	local yawLimit = math.rad(Config.AimYawLimit)
+	local rawYaw = math.atan2(-localAim.X, -localAim.Z)
+	-- atan2 vira de +180 pra -180 (ou vice-versa) quando a mira cruza "atrás
+	-- do personagem". Mesmo depois do clamp pro limite do ombro, essa virada
+	-- fazia o alvo pular de +limite pra -limite num unico quadro -- a
+	-- lanterna "chicoteava" pro lado oposto. Perto dessa costura, mantem o
+	-- lado que ja estava vencendo (histerese pelo self.yaw atual) em vez de
+	-- confiar no sinal bruto do atan2.
+	local targetYaw
+	if math.abs(rawYaw) > math.rad(150) then
+		targetYaw = if self.yaw >= 0 then yawLimit else -yawLimit
+	else
+		targetYaw = math.clamp(rawYaw, -yawLimit, yawLimit)
+	end
 	self.pitch = smooth(self.pitch, targetPitch, Config.PoseAimResponsiveness, dt)
 	self.yaw = smooth(self.yaw, targetYaw, Config.PoseAimResponsiveness, dt)
 	local pitch, yaw = self.pitch, self.yaw

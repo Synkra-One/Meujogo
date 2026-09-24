@@ -40,6 +40,7 @@ function Rules.CanAttack(player: Player): boolean
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	local role = player:GetAttribute("Role")
 	if not character or not humanoid or humanoid.Health <= 0
+		or player:GetAttribute("GameplayEnabled") ~= true
 		or (role ~= GameConfig.Roles.Survivor and role ~= GameConfig.Roles.Spy)
 		or player:GetAttribute("InRound") ~= true or player:GetAttribute("InWaitingRoom") == true
 		or character:FindFirstChild("Dead") then return false end
@@ -48,7 +49,7 @@ function Rules.CanAttack(player: Player): boolean
 	-- morte. WeaponAttackActive e tratado separadamente pelo WeaponSystem.
 	local animationState = character:GetAttribute("CombatAnimationState")
 	if animationState == "Hurt" or animationState == "Death" then return false end
-	for _, name in { "Eliminado", "Amarrado", "GrabLocked", "PowerStunned", "ShadowRushBusy", "TeleportBusy" } do
+	for _, name in { "Eliminado", "GrabLocked", "PowerStunned", "ShadowRushBusy", "TeleportBusy" } do
 		if player:GetAttribute(name) == true or character:GetAttribute(name) == true then return false end
 	end
 	return true

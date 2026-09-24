@@ -16,6 +16,7 @@ atravessar; na prática mais, por causa do relevo e do mato.
 | `Tools/CaveInterior.lua` | O covil do Monstro dentro da montanha: escava o terreno e monta os três níveis, o sangue e a luz (ver [Caverna.md](Caverna.md)). |
 | `Tools/Structures.lua` | Peças em `Part` primitiva: cabana, lodge, celeiro, casa de barcos, píer, barco, torre de vigia, farol, fogueira, mesa, lampião, alvo, fardo, secador, canoa, cabana nativa, totem, arbusto, tronco caído. |
 | `Tools/PoiGenerator.lua` | Monta cada POI no site do layout com as peças de `Structures`. |
+| `Tools/HouseGenerator.lua` + `Tools/Houses/` | Casas grandes nas clareiras Acampamento, CabanasA, CabanasB e VilaNativa: lote, terreno, casa (ver [Casas.md](Casas.md)). |
 | `Tools/PlaneCrashGenerator.lua` | Queda de avião internacional (260 studs): fuselagem no impacto, peças próximas, destroços distantes e rastro do mar à floresta; desvia dos POIs. |
 | `Tools/ItemSpawner.lua` | Itens; zona nova `Construcoes` = marcadores `PontoLoot` dentro das construções. |
 | `server/DoorSystem.lua` | Portas (`Porta` Attribute) com prompt Abrir/Fechar. |
@@ -24,13 +25,12 @@ atravessar; na prática mais, por causa do relevo e do mato.
 
 | Site | O que tem | Spawn / loot |
 |---|---|---|
-| **Acampamento** | Lodge (salão com lareira, 2 quartos, varanda), 3 cabanas em volta da fogueira, mesas de piquenique, varal, lampiões acesos | SpawnPOI em cada porta e nos quartos; PontoLoot em armários/mesas/prateleiras; 1 SpawnArma no lodge e 1 numa cabana |
-| **CabanasA / CabanasB** | 3 / 2 cabanas + fogueira + latrina + mesa | idem |
+| **Acampamento / CabanasA / CabanasB** | Clareira nivelada com 2 casas grandes (uma CampCabin e uma CasaDoCaseiro), portas e gavetas funcionais, caminho de terra até a trilha. Ver [Casas.md](Casas.md) | SpawnPOI na frente de cada casa; PontoLoot no piso; SpawnArma na cozinha da CasaDoCaseiro; loot nas gavetas (DrawerSystem) |
 | **Lago** | Bacia com água (nível próprio), píer de 30 studs com barco amarrado, casa de barcos aberta, barco furado virado, canoa, secador de peixe | PontoLoot no píer e na casa de barcos (SpawnArma) |
-| **Campo** | Planície plana de grama (r≈130) com celeiro (mezanino + escada), 2 alvos de arco, fardos, cerca caída, 3 árvores solitárias | SpawnArma e 3 PontoLoot no celeiro; SpawnPOI no centro |
+| **Campo (Fazenda)** | Planície de grama (r≈130) com a fazenda: celeiro grande (palheiro, baias, selaria, telheiro com trator, silo, curral) e casa de fazenda de dois andares com cata-vento, poço e casinha. Ver [Casas.md](Casas.md) | SpawnPOI na frente das duas; PontoLoot no celeiro e nos dois andares da casa; SpawnArma na selaria e na sala |
 | **Torre** | Torre de vigia no site mais alto, escada `TrussPart` escalável, lampião aceso no topo | SpawnArma na plataforma |
 | **Farol** | Ponta rochosa elevada na costa, farol de 6 segmentos com lâmpada acesa (range 120), barraco do faroleiro | SpawnPOI/PontoLoot |
-| **VilaNativa** | 5 moradias de 18×20 + casa comunal de 22×24, interiores mobiliados, janelas, varandas, telhados em camadas, totem, fogueira, preparo de carne, sangue e canoa | PontoLoot em cada casa e na mesa; SpawnPOI nas entradas |
+| **VilaNativa** | Clareira com 2 casas grandes, como acima (a vila nativa antiga não é mais gerada) | idem |
 | **Ruinas** | Círculo de pedras + Lança Ancestral | SpawnPOI |
 | **Caverna** | Covil dentro da montanha (Peak 95, Radius 150): túnel em S descendo 9, salão de raio 40 com 56 de pé-direito, poço de sangue, galeria no meio, ponte de tábuas, laje de cima com o ninho, ossuário e despensa. Spawn do Monstro no ninho. Ver [Caverna.md](Caverna.md) | — |
 | **Radio** | Estação repetidora cercada (132x112): torre de 105 studs com baliza, abrigo técnico 36x26 com duas portas, gerador, tanque e galões, caixa de fusíveis, holofotes, portão e estrada de manutenção. É o objetivo de socorro — ver [Radio.md](Radio.md) | 2 PontoLoot no abrigo + 1 no depósito |

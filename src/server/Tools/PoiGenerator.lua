@@ -20,8 +20,9 @@
 	               definida, só não é chamada.
 	  Lago         Píer entrando na água, casa de barcos na margem, barco
 	               furado virado, canoa, secador de peixe.
-	  Campo        Celeiro, dois alvos de arco, fardos de feno espalhados,
-	               cerca curta caída.
+	  Campo        SEM construção aqui -- a fazenda (celeiro grande + casa de
+	               fazenda) é do Tools/HouseGenerator. buildMeadow() (celeiro
+	               simples, alvos, fardos) continua definida, só não é chamada.
 	  Torre        Torre de vigia (escada TrussPart escalável).
 	  Farol        Farol na ponta rochosa + barraco do faroleiro.
 	  VilaNativa   SEM construção -- idem, clareira nivelada maior. Era a
@@ -35,7 +36,7 @@
 	               LobbyManager/PlaneCrash leem daqui depois de
 	               salvo, sem precisar recalcular o layout. Existe pra TODO
 	               site, inclusive os 4 sem construção acima -- é como achar
-	               o centro/raio da clareira pra encaixar a casa na mão.
+	               o centro/raio que o HouseGenerator usa pras casas grandes.
 
 	Ruínas e Caverna continuam no IslandGenerator.
 ]]
@@ -464,7 +465,7 @@ function PoiGenerator.Generate(): number
 	-- construção -- só a clareira nivelada (Layout.<nome> acima já marca
 	-- centro/raio). As casinhas pequenas saíram daqui; essas clareiras
 	-- agora são pra casas grandes (CampCabin_01 em diante, ~60-70x35-38
-	-- studs), montadas à mão por enquanto. buildCamp/buildCabinCluster/
+	-- studs), postas pelo Tools/HouseGenerator. buildCamp/buildCabinCluster/
 	-- buildVillage continuam definidas acima pra quem quiser voltar a gerar
 	-- casinha pequena ali.
 
@@ -472,11 +473,7 @@ function PoiGenerator.Generate(): number
 		buildLake(poiFolder("Lago"), sites.Lago, rng)
 		built += 1
 	end
-	if sites.Campo then
-		buildMeadow(poiFolder("Campo"), sites.Campo, rng)
-		built += 1
-		task.wait()
-	end
+	-- Campo: a fazenda é do HouseGenerator (buildMeadow não é mais chamada).
 	if sites.Torre then
 		buildTower(poiFolder("Torre"), sites.Torre)
 		built += 1

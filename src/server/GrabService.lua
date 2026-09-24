@@ -44,8 +44,7 @@ local function canStart(player: Player, character: Model): (boolean, string?)
 	if player:GetAttribute("Role") ~= GameConfig.Roles.Monster then
 		return false, "Apenas o Monstro pode usar Grab."
 	end
-	if player:GetAttribute("Amarrado") == true or character:GetAttribute("Amarrado") == true
-		or FlashlightRules.PowerBlocked(character) then
+	if FlashlightRules.PowerBlocked(character) then
 		return false, "O Monstro esta impedido de agir."
 	end
 	if character:GetAttribute("TeleportBusy") == true or character:GetAttribute("ShadowRushBusy") == true

@@ -143,7 +143,7 @@ local function canBoard(player: Player): boolean
 	if player:GetAttribute("Role") == GameConfig.Roles.Monster then
 		return false
 	end
-	if player:GetAttribute("Eliminado") == true or player:GetAttribute("Amarrado") == true then
+	if player:GetAttribute("Eliminado") == true then
 		return false
 	end
 	local character = player.Character
@@ -969,7 +969,7 @@ local function step()
 	end
 
 	if state == "Pousado" then
-		-- Quem morreu ou foi amarrado no assento perde a vaga.
+		-- Quem morreu ou deixou de ser elegível no assento perde a vaga.
 		for player in boarded do
 			if not canBoard(player) then
 				unboard(player)

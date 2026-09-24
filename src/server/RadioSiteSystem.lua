@@ -159,7 +159,7 @@ local function canAct(player: Player, target: BasePart?): boolean
 		Remotes.LobbyMessage:FireClient(player, "Só os Sobreviventes mexem na estação de rádio.")
 		return false
 	end
-	if player:GetAttribute("Eliminado") == true or player:GetAttribute("Amarrado") == true then
+	if player:GetAttribute("Eliminado") == true then
 		return false
 	end
 	local character = player.Character
@@ -787,7 +787,7 @@ local function stillTransmitting(player: Player): boolean
 	if player.Parent ~= Players or player:GetAttribute("Role") ~= GameConfig.Roles.Survivor then
 		return false
 	end
-	if player:GetAttribute("Eliminado") == true or player:GetAttribute("Amarrado") == true then
+	if player:GetAttribute("Eliminado") == true then
 		return false
 	end
 	local character = player.Character

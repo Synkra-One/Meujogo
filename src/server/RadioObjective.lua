@@ -249,7 +249,7 @@ local function canInteract(player: Player, tower: BasePart): boolean
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if player:GetAttribute("InRound") ~= true or player:GetAttribute("Role") ~= GameConfig.Roles.Survivor
-		or player:GetAttribute("Eliminado") == true or player:GetAttribute("Amarrado") == true
+		or player:GetAttribute("Eliminado") == true
 		or not humanoid or humanoid.Health <= 0 or not root or not root:IsA("BasePart")
 		or character:GetAttribute("PowerStunned") == true or character:GetAttribute("GrabLocked") == true
 		or not tower:IsDescendantOf(Workspace)

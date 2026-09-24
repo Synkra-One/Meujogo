@@ -12,7 +12,11 @@ local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local player = Players.LocalPlayer
 local generation = 0
 
-local function enableControls()
+local function enableControlsIfInMatch()
+	if ReplicatedStorage:GetAttribute("MatchState") ~= "InMatch"
+		or player:GetAttribute("GameplayEnabled") ~= true then
+		return
+	end
 	pcall(function()
 		local playerModule = player:WaitForChild("PlayerScripts", 5):WaitForChild("PlayerModule", 5)
 		local controls = require(playerModule :: ModuleScript):GetControls()
@@ -36,7 +40,10 @@ local function bindCharacter(character: Model)
 		RunService.Heartbeat:Wait()
 	end
 
-	enableControls()
+	-- MatchStateController é o dono da trava. O corpo novo pode aparecer
+	-- enquanto ainda está em Loading; nunca libere os controles só porque o
+	-- respawn terminou.
+	enableControlsIfInMatch()
 	-- PlayerModule e o engine também atualizam CameraSubject durante respawn.
 	-- Reafirmar por alguns frames remove a disputa de ordem sem manter um loop.
 	for _ = 1, 8 do

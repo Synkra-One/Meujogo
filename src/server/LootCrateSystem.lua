@@ -60,6 +60,8 @@ local OPENED_ATTR = "CaixaAberta"
 
 local rng = Random.new()
 local watched: { [BasePart]: true } = {}
+local originalAppearance: { [BasePart]: { color: Color3, transparency: number } } = {}
+local generation = 0
 
 --------------------------------------------------------------------------------
 -- Tabela de loot (itens com Rarity, agrupados)
@@ -145,7 +147,7 @@ end
 	Entrega UM item. Devolve false quando o item não pôde ser dado (por
 	exemplo, asset do Toolbox que não carregou) -- aí quem chamou re-sorteia.
 ]]
-local function grantItem(player: Player, backpack: Backpack, itemId: string): boolean
+local function grantItem(player: Player, backpack: Backpack, itemId: string, epoch: number): boolean
 	local def = ItemRegistry.Items[itemId]
 	if not def then
 		return false
@@ -160,6 +162,7 @@ local function grantItem(player: Player, backpack: Backpack, itemId: string): bo
 	if not tool then
 		return false
 	end
+	if epoch ~= generation then tool:Destroy(); return false end
 	tool.Parent = backpack
 	return true
 end
@@ -203,16 +206,18 @@ local function onOpenRequest(player: Player, crate: unknown)
 	end
 
 	markOpened(part)
+	local epoch = generation
 
 	local given: { string } = {}
 	for _ = 1, rollCount(player) do
 		-- Até 3 tentativas por rolagem se um asset sorteado não puder ser criado.
 		for _ = 1, 3 do
 			local itemId = rollItem(player)
-			if itemId and grantItem(player, backpack, itemId) then
+			if itemId and grantItem(player, backpack, itemId, epoch) then
 				table.insert(given, itemId)
 				break
 			end
+			if epoch ~= generation then return end
 		end
 	end
 
@@ -236,6 +241,7 @@ local function attachPrompt(crate: BasePart)
 		return
 	end
 	watched[crate] = true
+	originalAppearance[crate] = { color = crate.Color, transparency = crate.Transparency }
 
 	local prompt = crate:FindFirstChildOfClass("ProximityPrompt")
 	if not prompt then
@@ -257,6 +263,7 @@ local function attachPrompt(crate: BasePart)
 
 	crate.Destroying:Connect(function()
 		watched[crate] = nil
+		originalAppearance[crate] = nil
 	end)
 end
 
@@ -340,6 +347,8 @@ end
 	novo na Command Bar pra reposicionar sem reiniciar o servidor.
 ]]
 function LootCrateSystem.Generate()
+	generation += 1
+	lootPointCache = nil
 	local existing = Workspace:FindFirstChild(FOLDER_NAME)
 	if existing then
 		existing:Destroy()
@@ -382,6 +391,20 @@ function LootCrateSystem.Generate()
 	print(string.format("[LootCrateSystem] %d caixa(s) espalhada(s) pela ilha.", placed))
 end
 
+function LootCrateSystem.Reset()
+	LootCrateSystem.Generate()
+	-- Inclui caixas colocadas manualmente nas casas, fora de CaixasLoot.
+	for crate, appearance in originalAppearance do
+		if crate:IsDescendantOf(Workspace) then
+			crate:SetAttribute(OPENED_ATTR, false)
+			crate.Color = appearance.color
+			crate.Transparency = appearance.transparency
+			local prompt = crate:FindFirstChildOfClass("ProximityPrompt")
+			if prompt then prompt.Enabled = true end
+		end
+	end
+end
+
 --------------------------------------------------------------------------------
 -- Init
 --------------------------------------------------------------------------------
@@ -398,9 +421,7 @@ function LootCrateSystem.Init()
 
 	-- Caixas novas (e todas fechadas de novo) a cada partida.
 	local RoundManager = require(script.Parent.RoundManager)
-	RoundManager.RoundPrepared.Event:Connect(function()
-		LootCrateSystem.Generate()
-	end)
+	RoundManager.RoundPrepared.Event:Connect(LootCrateSystem.Reset)
 
 	if #rarityOrder == 0 then
 		warn("[LootCrateSystem] Nenhum item com Rarity em ItemRegistry -- as caixas vão sair vazias.")

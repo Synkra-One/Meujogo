@@ -5,7 +5,7 @@
 
 	  1. GOLPE  -- client/MonsterController pede (Remotes.MonsterAttack:FireServer,
 	     botão esquerdo). O servidor valida (é o Monstro, vivo, partida ativa,
-	     não amarrado, cooldown passou), faz um hitbox em CONE à frente do
+	     vivo, cooldown passou), faz um hitbox em CONE à frente do
 	     HumanoidRootPart e roteia o dano por DamageSystem.Apply
 	     (Cause = "Monstro"). 3 golpes limpos matam um Sobrevivente (100 HP).
 
@@ -90,9 +90,6 @@ end
 local function onAttackRequest(player: Player)
 	if not RoundManager.IsRoundActive() or not isMonster(player)
 		or player:GetAttribute("InRound") ~= true or player:GetAttribute("InWaitingRoom") == true then
-		return
-	end
-	if player:GetAttribute("Amarrado") == true then
 		return
 	end
 

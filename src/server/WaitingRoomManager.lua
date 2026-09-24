@@ -15,8 +15,10 @@ local Selection = require(script.Parent.CharacterStatsApplier)
 local RoleAssignment = require(script.Parent.RoleAssignment)
 local RoundManager = require(script.Parent.RoundManager)
 local CharacterPresentation = require(script.Parent.CharacterPresentation)
+local MatchStateService = require(script.Parent.MatchStateService)
 
 local WaitingRoomManager = {}
+local WAITING_CONFIG = GameConfig.WaitingRoom or { StartCountdownDuration = 5 }
 local members: { Player } = {}
 local state = "Lobby"
 local endsAt = 0
@@ -24,20 +26,44 @@ local generation = 0
 local capacity = math.min(GameConfig.Players.Max, #SelectionConfig.GetSelectableCharacters())
 local lastRequest: { [Player]: number } = {}
 
-local function setState(value: string)
-	state = value
-	ReplicatedStorage:SetAttribute("MatchState", value)
+local function publicState(value: string): MatchStateService.State
+	if value == "Lobby" or value == "Waiting" then return "Lobby" end
+	if value == "Countdown" or value == "Revealing" or value == "Selecting" then
+		return "CharacterSelection"
+	end
+	if value == "Starting" then return "Loading" end
+	if value == "Playing" then return "InMatch" end
+	return "RoundEnd"
 end
 
-local function minimum(): number
-	if GameConfig.Testing.SoloStart then return 1 end
-	return math.max(2, GameConfig.Players.Min)
+local function setState(value: string)
+	state = value
+	MatchStateService.Set(publicState(value))
 end
 
 local function isDevRoleTester(player: Player): boolean
 	if GameConfig.Testing.DevRoleChooser ~= true then return false end
 	if RunService:IsStudio() then return true end
 	return table.find(GameConfig.Testing.DevRoleUserIds, player.UserId) ~= nil
+end
+
+local function devSoloSelected(): boolean
+	if GameConfig.Testing.DevRoleChooser ~= true then return false end
+	for _, player in members do
+		local role = player:GetAttribute("DevForceRole")
+		-- Espião depende de uma equipe para sabotar. O atalho solo é deliberado
+		-- apenas para os dois fluxos jogáveis isoladamente.
+		if isDevRoleTester(player)
+			and (role == GameConfig.Roles.Survivor or role == GameConfig.Roles.Monster) then
+			return true
+		end
+	end
+	return false
+end
+
+local function minimum(): number
+	if GameConfig.Testing.SoloStart or devSoloSelected() then return 1 end
+	return math.max(2, GameConfig.Players.Min)
 end
 
 local function isRole(value: unknown): boolean
@@ -125,7 +151,11 @@ local function startFrozenRound(token: number, participants: { Player })
 			pcall(function() CharacterPresentation.SpawnLobbyAvatar(player) end)
 		end
 	end
-	WaitingRoomManager.OpenLobby()
+	-- O erro fica em RoundEnd até o próximo ciclo de retorno terminar. Assim
+	-- uma falha de preparação não expõe o Lobby no meio da tela de transição.
+	task.delay(1, function()
+		if state == "Returning" then WaitingRoomManager.OpenLobby() end
+	end)
 end
 
 local function finishSelection(token: number)
@@ -154,7 +184,8 @@ local function finishSelection(token: number)
 end
 
 local function beginSelection()
-	if state ~= "Waiting" or not allLobbyReady() then return end
+	if state ~= "Waiting" and state ~= "Countdown" then return end
+	if not allLobbyReady() then return end
 	resetCountdown()
 	local token = generation
 	local participants = table.clone(members)
@@ -187,6 +218,24 @@ local function beginSelection()
 		for _, player in participants do
 			if player.Parent == Players then player:SetAttribute("RoleRevealOpen", nil) end
 		end
+		local hasSurvivor = false
+		for _, player in participants do
+			if player:GetAttribute("Role") == GameConfig.Roles.Survivor then
+				hasSurvivor = true
+				break
+			end
+		end
+		-- A solo Dev test can intentionally select Monstro/Espiao. There is no
+		-- survivor character-selection screen in that case, so start the round
+		-- directly after the role reveal instead of asserting on an empty roster.
+		if not hasSurvivor then
+			setState("Starting")
+			endsAt = 0
+			for _, player in participants do player:SetAttribute("InWaitingRoom", nil) end
+			broadcast()
+			task.spawn(function() startFrozenRound(token, participants) end)
+			return
+		end
 
 		setState("Selecting")
 		endsAt = Workspace:GetServerTimeNow() + SelectionConfig.Duration
@@ -211,12 +260,60 @@ local function beginSelection()
 			finishSelection(token)
 			return
 		end
+		-- A broken/late client must not hold the whole match forever. Keep the
+		-- normal deadline for the UI, but resolve the current/default choices
+		-- after a short safety window when nobody confirmed yet.
+		local autoConfirmDelay = math.clamp(
+			tonumber(SelectionConfig.AutoConfirmDelay) or SelectionConfig.Duration,
+			0,
+			SelectionConfig.Duration
+		)
+		task.delay(autoConfirmDelay, function() finishSelection(token) end)
 		task.delay(SelectionConfig.Duration, function() finishSelection(token) end)
 	end)
 end
 
-local function updateWaitingState()
+local function beginStartCountdown()
+	if state ~= "Waiting" or not allLobbyReady() then return end
 	resetCountdown()
+	local token = generation
+	local duration = math.max(0, WAITING_CONFIG.StartCountdownDuration or 5)
+	setState("Countdown")
+	endsAt = Workspace:GetServerTimeNow() + duration
+	broadcast()
+	if duration <= 0 then
+		beginSelection()
+		return
+	end
+	task.delay(duration, function()
+		if generation ~= token or state ~= "Countdown" then return end
+		if not allLobbyReady() then
+			setState("Waiting")
+			endsAt = 0
+			broadcast()
+			return
+		end
+		-- Não publique Waiting aqui: ele é o estado interno da fila, mas seu
+		-- estado visual é Lobby. Publicá-lo criava um frame em que o Lobby
+		-- reaparecia entre o sorteio e a escolha do personagem.
+		beginSelection()
+	end)
+end
+
+local function updateWaitingState()
+	if state == "Countdown" then
+		-- Qualquer alteração de loadout/pronto ou entrada de novo jogador
+		-- invalida a contagem. O jogador pode continuar na fila e confirmar de
+		-- novo; a próxima contagem começa com a composição atual.
+		if allLobbyReady() then
+			broadcast()
+		else
+			resetCountdown()
+			setState("Waiting")
+			broadcast()
+		end
+		return
+	end
 	if state ~= "Waiting" then return end
 	if #members == 0 then
 		setState("Lobby")
@@ -224,7 +321,7 @@ local function updateWaitingState()
 		return
 	end
 	broadcast()
-	if allLobbyReady() then beginSelection() end
+	if allLobbyReady() then beginStartCountdown() end
 end
 
 function WaitingRoomManager.Join(player: Player)
@@ -253,7 +350,7 @@ end
 
 local function leaveWaiting(player: Player)
 	local index = table.find(members, player)
-	if not index or state ~= "Waiting" then return end
+	if not index or (state ~= "Waiting" and state ~= "Countdown") then return end
 	table.remove(members, index)
 	player:SetAttribute("InWaitingRoom", nil)
 	player:SetAttribute("MatchReady", nil)
@@ -318,6 +415,9 @@ function WaitingRoomManager.Init()
 			if not table.find(members, player) then WaitingRoomManager.Join(player) end
 			return
 		end
+		-- Countdown/CharacterSelection é um ponto sem retorno para os clientes:
+		-- loadout e pronto não podem publicar Waiting novamente e reabrir o
+		-- Lobby. A única saída nessa janela é desconectar do servidor.
 		if state ~= "Waiting" or not table.find(members, player) then return end
 		if action == "Leave" then leaveWaiting(player); return end
 		if action == "Ready" then

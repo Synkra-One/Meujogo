@@ -50,14 +50,14 @@ end
 
 local function shakeCamera(amount: number)
 	local started = os.clock()
-	RunService:BindToRenderStep("WeaponImpactShake", Enum.RenderPriority.Camera.Value + 1, function()
+	RunService:BindToRenderStep("WeaponImpactShake", Enum.RenderPriority.Camera.Value + 3, function()
 		local elapsed = os.clock() - started
 		if elapsed >= 0.11 then
 			RunService:UnbindFromRenderStep("WeaponImpactShake")
 			return
 		end
 		local camera = Workspace.CurrentCamera
-		if camera then
+		if camera and camera.CameraType == Enum.CameraType.Custom then
 			local fade = 1 - elapsed / 0.11
 			camera.CFrame *= CFrame.new(
 				(math.random() - 0.5) * amount * fade,

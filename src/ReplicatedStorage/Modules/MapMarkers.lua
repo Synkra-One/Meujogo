@@ -17,7 +17,7 @@
 	Uso:
 		local MapMarkers = require(game.ReplicatedStorage.Modules.MapMarkers)
 		local category = MapMarkers.CategoryOf("Glock17") -- por nome de Tool
-		local category = MapMarkers.CategoryOf(nil, "FacaImprovisada") -- por itemId do ItemRegistry
+		local category = MapMarkers.CategoryOf(nil, "LancaDeBambu") -- por itemId do ItemRegistry
 		local style = MapMarkers.Style(category) -- { Color, Glyph }
 ]]
 
@@ -29,7 +29,7 @@ local MapMarkers = {}
 
 MapMarkers.Category = {
 	Firearm = "Firearm", -- armas de fogo (hoje só a Glock17)
-	Melee = "Melee", -- Faca Improvisada, Crowbar, Wrench
+	Melee = "Melee", -- Crowbar, Taco de Beisebol
 	Light = "Light", -- Tocha, Lanterna
 	Heal = "Heal", -- Chocolate, Bandagem
 	Radio = "Radio", -- Antena, Bateria, Transmissor
@@ -52,9 +52,7 @@ local DEFAULT_STYLE = { Color = Color3.fromRGB(200, 200, 200), Glyph = "?" }
 
 -- itemId de ItemRegistry.Items -> categoria.
 local ITEM_CATEGORY: { [string]: string } = {
-	FacaImprovisada = MapMarkers.Category.Melee,
 	LancaDeBambu = MapMarkers.Category.Melee,
-	PedraAfiada = MapMarkers.Category.Melee,
 	TacoBeisebol = MapMarkers.Category.Melee,
 	Tocha =MapMarkers.Category.Light,
 	Lanterna = MapMarkers.Category.Light,

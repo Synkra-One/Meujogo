@@ -7,7 +7,7 @@ return table.freeze({
 	-- novo só precisa ligar o Attribute -- sem segunda lanterna, sem mexer no
 	-- inventário. "AbyssBlackout" é o Apagão do Abismo (server/AbyssBlackout).
 	BlockingFlags = table.freeze({
-		"GrabLocked", "ShadowRushBusy", "TeleportBusy", "PowerStunned", "Amarrado", "AbyssBlackout",
+		"GrabLocked", "ShadowRushBusy", "TeleportBusy", "PowerStunned", "AbyssBlackout",
 	}),
 	BatteryMax = 100,
 	BatteryDrainRate = 100 / 60,
@@ -33,9 +33,9 @@ return table.freeze({
 	FlashBurstRingPitch = 3,
 	ModelLength = 1.8,
 	-- Gameplay cone for monster exposure; visual lighting is tuned separately.
-	FlashlightRange = 36,
+	FlashlightRange = 48,
 	BeamAngle = 38,
-	LightRange = 44,
+	LightRange = 58,
 	LightAngle = 48,
 	Brightness = 4.6,
 	-- Visual layer: a tight hotspot, broad spill and a small local fill light.
@@ -90,7 +90,7 @@ return table.freeze({
 	AimTimeout = 0.75,
 	ToggleCooldown = 0.15,
 	MaxMuzzleDistance = 5,
-	VisualDistance = 140,
+	VisualDistance = 180,
 	VisualRayInterval = 1 / 15,
 	MaxBlur = 3,
 	DisorientationBlur = 2,

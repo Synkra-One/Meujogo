@@ -5,15 +5,15 @@
 	LethalAbilityUsed, ver contrato em ReplicatedStorage/Modules/Remotes.lua).
 
 	Fluxo atual: cliente dispara LethalAbilityUsed:FireServer(targetPlayer)
-	-> se o jogador for Espiao, não estiver amarrado, o alvo estiver a até
+	-> se o jogador for Espiao, o alvo estiver a até
 	8 studs, não estiver já eliminado e o cooldown
 	(GameConfig.Spy.LethalCooldown = 180s) já tiver passado, o servidor:
 	    1) executa o alvo pelo DamageSystem (vida, animação e eliminação),
 	    2) dispara PlayerKilled(vítima, autor, causa) para todos os clientes,
 	    3) reinicia o cooldown do Espião.
 
-	Qualquer falha de validação (não é Espiao, está amarrado, alvo fora de
-	alcance, alvo já eliminado, cooldown ainda ativo) é rejeitada em silêncio.
+	Qualquer falha de validação (não é Espiao, alvo fora de alcance, alvo já
+	eliminado, cooldown ainda ativo) é rejeitada em silêncio.
 
 	Uso (chamar uma vez no boot do servidor):
 		local LethalAbility = require(script.LethalAbility)
@@ -29,6 +29,7 @@ local Elimination = require(script.Parent.Elimination)
 local DamageSystem = require(script.Parent.DamageSystem)
 local SoundManager = require(script.Parent.SoundManager)
 local PowerStatus = require(script.Parent.SurvivorPowerStatus)
+local MatchStateService = require(script.Parent.MatchStateService)
 
 local LethalAbility = {}
 
@@ -77,14 +78,10 @@ local function isValidTarget(caster: Player, target: unknown): boolean
 end
 
 local function onLethalAbilityUsed(caster: Player, target: unknown)
+	if not MatchStateService.IsGameplayEnabled(caster) then return end
 	if caster.Character and caster.Character:GetAttribute("PowerStunned") == true then return end
 	if caster.Character and caster.Character:GetAttribute("GrabLocked") == true then return end
 	if caster:GetAttribute("Role") ~= GameConfig.Roles.Spy then
-		return
-	end
-
-	-- Amarrado (ConfrontSystem) bloqueia a habilidade letal.
-	if caster:GetAttribute("Amarrado") == true then
 		return
 	end
 

@@ -53,6 +53,7 @@ local function disconnect(list: { RBXScriptConnection })
 end
 
 local function blocked(): boolean
+	if player:GetAttribute("GameplayEnabled") ~= true then return true end
 	local model = character
 	local human = humanoid
 	local currentTool = tool
@@ -62,10 +63,8 @@ local function blocked(): boolean
 		or player:GetAttribute("CursorLivre") == true
 		or waitingRoomBlocked
 		or player:GetAttribute("Eliminado") == true
-		or player:GetAttribute("Amarrado") == true
 		or not model or not human or human.Health <= 0
 		or model:GetAttribute("Eliminado") == true
-		or model:GetAttribute("Amarrado") == true
 		or model:GetAttribute("GrabLocked") == true
 		or model:GetAttribute("PowerStunned") == true
 		or model:GetAttribute("ShadowRushBusy") == true

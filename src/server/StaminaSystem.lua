@@ -30,9 +30,16 @@
 	  Diego (Stamina 20).
 
 	VALOR PRO CLIENTE
-	  O fôlego atual (0..100) vai como Attribute "Stamina" no Player.
-	  Attributes replicam sozinhos -- a barra em client/StaminaHUD só lê,
-	  sem remote de volta.
+	  O fôlego atual vai como Attribute "Stamina" no Player e o teto como
+	  "StaminaMax" (hoje 100). Attributes replicam sozinhos -- o anel em
+	  client/StaminaHUD só lê os dois e divide um pelo outro, sem remote de
+	  volta e sem escala própria.
+
+	INTENÇÃO (Remotes.SprintIntent)
+	  O cliente manda true enquanto o pacote de movimento está DE FATO em
+	  corrida (Attribute local "IsSprinting" do HumanoidRootPart) -- não só
+	  "Shift apertado". Esse Attribute é escrito pelo cliente e NÃO replica
+	  pro servidor; por isso ele chega pela intenção.
 
 	Uso (uma vez no boot):
 		require(script.StaminaSystem).Init()
@@ -46,6 +53,7 @@ local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local StatScaling = require(ReplicatedStorage.Modules.StatScaling)
 local FearSystem = require(script.Parent.FearSystem)
+local MatchStateService = require(script.Parent.MatchStateService)
 
 local StaminaSystem = {}
 
@@ -97,7 +105,8 @@ end
 local function publish(player: Player, state: State)
 	-- Uma casa decimal evita que a HUD pareça ficar parada entre saltos inteiros,
 	-- mas limita atualizações desnecessárias de Attribute pela rede.
-	setIfChanged(player, "Stamina", math.floor(state.value * 10 + 0.5) / 10)
+	setIfChanged(player, "StaminaMax", MAX)
+	setIfChanged(player, "Stamina", math.floor(math.clamp(state.value, 0, MAX) * 10 + 0.5) / 10)
 	setIfChanged(player, "StaminaExausto", state.exhausted or nil)
 end
 
@@ -121,6 +130,16 @@ end
 local function step(dt: number)
 	for _, player in Players:GetPlayers() do
 		local state = getState(player)
+		if not MatchStateService.IsGameplayEnabled(player) then
+			state.intent = false
+			state.idleFor = 0
+			state.exhausted = false
+			state.value = MAX
+			local character = player.Character
+			if character then setSprintGate(character, false, true) end
+			publish(player, state)
+			continue
+		end
 		local character = player.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -160,12 +179,17 @@ local function step(dt: number)
 		-- velocidade abaixo de 1.35 por alguns frames e o fôlego congelava
 		-- enquanto o personagem seguia correndo -- era isso que fazia a corrida
 		-- inteira gastar só um pedaço da barra.
-		-- IsSprinting é publicado pelo script Crouching no root. Ele só SOMA
-		-- casos de gasto, nunca isenta: quem mentir "false" continua caindo na
-		-- regra de velocidade acima, então não abre brecha de exploit.
-		local packSprinting = root:GetAttribute("IsSprinting") == true
+		-- A intenção agora é o estado REAL de corrida do pacote (o cliente lê o
+		-- IsSprinting local e manda por SprintIntent). Antes este módulo lia o
+		-- Attribute IsSprinting direto do HumanoidRootPart -- mas ele é
+		-- escrito pelo CLIENTE e nunca replica pro servidor, então era sempre
+		-- nil: numa curva/tranco o gasto parava e, depois do RegenDelay, o
+		-- fôlego SUBIA com o personagem ainda correndo (a barra "descolava" do
+		-- que o jogador via). A intenção só SOMA casos de gasto: quem mentir
+		-- "true" só perde fôlego; mentir "false" não dá corrida grátis porque
+		-- o portão CanSprint continua fechando no zero.
 		local moving = speed > walkBase * SPRINT_SPEED_RATIO
-			or (packSprinting and speed > walkBase * 0.6)
+			or (state.intent and speed > walkBase * 0.6)
 		local shadowBusy = character:GetAttribute("ShadowRushBusy") == true
 		local grabLocked = character:GetAttribute("GrabLocked") == true
 		if character:GetAttribute("PowerInfiniteStamina") == true then
@@ -175,10 +199,7 @@ local function step(dt: number)
 			publish(player, state)
 			continue
 		end
-		-- Mesma lógica do `moving`: o estado real do pacote também vale como
-		-- intenção, pra um SprintIntent perdido na rede não deixar a corrida
-		-- de graça.
-		local sprinting = (state.intent or packSprinting)
+		local sprinting = state.intent
 			and moving and not state.exhausted and not shadowBusy and not grabLocked
 
 		if sprinting then
@@ -209,9 +230,14 @@ end
 -- API
 --------------------------------------------------------------------------------
 
---[[ Get(player) -- fôlego atual 0..100. ]]
+--[[ Get(player) -- fôlego atual 0..Max(). ]]
 function StaminaSystem.Get(player: Player): number
 	return getState(player).value
+end
+
+--[[ Max() -- teto do fôlego (o mesmo publicado em "StaminaMax"). ]]
+function StaminaSystem.Max(): number
+	return MAX
 end
 
 --[[ Refill(player) -- enche o fôlego (respawn, item, começo de partida). ]]

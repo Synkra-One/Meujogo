@@ -17,6 +17,10 @@ local SurvivorSelectionConfig = {}
 SurvivorSelectionConfig.Duration = 30
 SurvivorSelectionConfig.WarningAt = 10
 SurvivorSelectionConfig.RoleRevealDuration = 7.5
+-- Safety fallback: if a client does not open/confirm the selection UI, the
+-- server still starts the round instead of leaving everyone stuck in Selecting.
+-- Players can confirm manually before this delay and keep their choice.
+SurvivorSelectionConfig.AutoConfirmDelay = 8
 SurvivorSelectionConfig.DefaultCharacterId = CharacterData.Characters[1].Id
 
 export type AvailabilityState = "Available" | "Locked" | "Unavailable"

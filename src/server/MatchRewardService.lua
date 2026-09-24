@@ -60,6 +60,7 @@ local ExtractionSystem = require(script.Parent.ExtractionSystem)
 local MatchStatsService = require(script.Parent.MatchStatsService)
 local RadioInstallSystem = require(script.Parent.RadioInstallSystem)
 local RadioPieces = require(script.Parent.RadioPieces)
+local RepairMinigameSystem = require(script.Parent.RepairMinigameSystem)
 local RoundManager = require(script.Parent.RoundManager)
 
 local MatchRewardService = {}
@@ -592,8 +593,16 @@ local function connectItemPickups()
 		if not IMPORTANT_ITEM_CATEGORIES[category] then
 			return
 		end
+		local session = MatchStatsService.GetSession(player)
+		if not MatchStatsService.IsAccepting(player) or not session
+			or not MatchRewardsConfig.SurvivorRoles[session.Role] then
+			return
+		end
 
 		tool:SetAttribute(ITEM_FOUND_ATTRIBUTE, true)
+		if category == "Fuel" and worldItemId == "Gasolina" then
+			MatchStatsService.AddStat(player, Stat.GasolineFound, 1)
+		end
 		-- Key = a própria Tool: cada Instance só concede XP uma vez, mesmo que
 		-- este actionId não tivesse UniqueBy nenhum.
 		MatchRewardService.RecordImportantItemFound(player, tostring(tool), tool.Name)
@@ -621,6 +630,12 @@ local function connectRadioInstall()
 
 	RadioInstallSystem.AllInstalled.Event:Connect(function(player: Player)
 		MatchRewardService.RecordObjectiveCompleted(player, "Radio")
+	end)
+end
+
+local function connectRepairs()
+	RepairMinigameSystem.RepairCompleted.Event:Connect(function(player: Player)
+		MatchStatsService.AddStat(player, Stat.RepairsCompleted, 1)
 	end)
 end
 
@@ -719,6 +734,7 @@ function MatchRewardService.Init()
 	connectEscapes()
 	connectItemPickups()
 	connectRadioInstall()
+	connectRepairs()
 	connectLeaving()
 end
 

@@ -5,13 +5,13 @@ O jogador entra na fila pelo botão **Jogar** do menu ou pelo prompt **Iniciar p
 O fluxo autoritativo é:
 
 1. `Lobby`: ninguém está na fila.
-2. `Waiting`: participantes escolhem skin/perk e marcam **Pronto**.
-3. `Selecting`: os papéis são sorteados e abre a escolha de sobrevivente por 30 segundos. O Monstro recebe Jason automaticamente.
+2. `Waiting`: participantes escolhem skin/perk e marcam **Pronto**. Quando o mínimo estiver pronto, começa uma janela de 5 segundos para permitir que outro jogador entre na fila. Em teste, selecionar um papel no painel **Dev - papel da partida** libera uma sala solo sem mudar o mínimo das partidas normais.
+3. `Selecting`: os papéis são sorteados e abre a escolha de sobrevivente. O Monstro recebe Jason automaticamente. A escolha fica disponível por 30 segundos; se a interface do cliente não confirmar em 8 segundos, o servidor usa a escolha atual ou o primeiro sobrevivente livre para não travar a partida.
 4. `Starting`: escolhas são congeladas e os corpos da partida são criados.
 5. `Playing`: os jogadores são enviados à ilha e as fases começam.
 6. `Intermission` / `Returning`: resultado, limpeza e retorno ao lobby.
 
-Não há outra contagem entre `Waiting` e `Selecting`. O prazo único usa `Workspace:GetServerTimeNow()` e `SurvivorSelectionConfig.Duration`. Se todos os jogadores humanos confirmarem, `Selecting` termina antes dos 30 segundos. Se o prazo acabar, o servidor confirma a escolha atual e usa o primeiro sobrevivente livre como fallback em caso de conflito.
+A contagem de entrada usa `GameConfig.WaitingRoom.StartCountdownDuration` (5 segundos) e é cancelada se a composição ou o estado de pronto mudar. Depois do sorteio, o prazo de seleção usa `Workspace:GetServerTimeNow()` e `SurvivorSelectionConfig.Duration`; `SurvivorSelectionConfig.AutoConfirmDelay` é apenas um fallback para clientes que não abriram ou não responderam à tela. Se todos os jogadores humanos confirmarem, `Selecting` termina antes do fallback. Caso contrário, o servidor confirma a escolha atual e usa o primeiro sobrevivente livre como fallback em caso de conflito.
 
 ## Elenco e interface
 

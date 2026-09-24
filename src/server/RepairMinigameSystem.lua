@@ -34,7 +34,7 @@
 	Dois jogadores no mesmo ponto têm uma sequência cada um.
 
 	CANCELAMENTO: soltar a tecla, sair do alcance, perder linha de visão,
-	tomar dano, ser atordoado/agarrado/amarrado, morrer, o canStart do
+		tomar dano, ser atordoado/agarrado, morrer, o canStart do
 	objetivo passar a recusar, ou o cliente parar de confirmar que ainda está
 	segurando. Em todos os casos a sessão some por um caminho só (stop).
 
@@ -103,7 +103,7 @@ local nextToken = 0
 --------------------------------------------------------------------------------
 
 -- Mesmo contrato das outras interações do jogo (ver RadioSiteSystem.canAct):
--- sobrevivente vivo, na partida, sem estar amarrado/atordoado/agarrado.
+-- sobrevivente vivo, na partida, sem estar atordoado/agarrado.
 local function canChannel(player: Player): (boolean, string?)
 	if player.Parent ~= Players then
 		return false, nil
@@ -114,7 +114,7 @@ local function canChannel(player: Player): (boolean, string?)
 	if player:GetAttribute("Role") ~= GameConfig.Roles.Survivor then
 		return false, "Só os Sobreviventes reparam."
 	end
-	if player:GetAttribute("Eliminado") == true or player:GetAttribute("Amarrado") == true then
+	if player:GetAttribute("Eliminado") == true then
 		return false, nil
 	end
 	local character = player.Character
@@ -286,6 +286,7 @@ local function finish(session: Session)
 	local completed, err = pcall(spec.onComplete, session.player)
 	if not completed then
 		warn(string.format("[RepairMinigame] onComplete de '%s' falhou: %s", spec.taskId, tostring(err)))
+		return
 	end
 	RepairMinigameSystem.RepairCompleted:Fire(session.player, spec.taskId)
 end
@@ -440,6 +441,7 @@ local function begin(player: Player, spec: Spec)
 		-- Minigame desligado pra esta tarefa: o objetivo resolve na hora,
 		-- como fazia antes de existir minigame nenhum.
 		spec.onComplete(player)
+		RepairMinigameSystem.RepairCompleted:Fire(player, spec.taskId)
 		return
 	end
 

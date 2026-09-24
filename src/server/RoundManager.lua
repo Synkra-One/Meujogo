@@ -51,6 +51,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
@@ -92,6 +93,17 @@ local spawnHandler: (({ Player }) -> ())? = nil
 local participants: { Player } = {}
 local escapeSucceeded = false
 local outcome: Outcome? = nil
+
+-- WaitingRoomManager permite iniciar sozinho quando um desenvolvedor escolhe
+-- explicitamente Sobrevivente ou Monstro. A mesma exceção precisa existir
+-- aqui; antes, a sala aceitava o teste e o RoundManager o rejeitava por ainda
+-- exigir dois participantes.
+local function canStartDevSolo(player: Player): boolean
+	if GameConfig.Testing.DevRoleChooser ~= true then return false end
+	local role = player:GetAttribute("DevForceRole")
+	if role ~= GameConfig.Roles.Survivor and role ~= GameConfig.Roles.Monster then return false end
+	return RunService:IsStudio() or table.find(GameConfig.Testing.DevRoleUserIds, player.UserId) ~= nil
+end
 
 --------------------------------------------------------------------------------
 -- Estado dos jogadores
@@ -295,7 +307,8 @@ local function prepareRound(players: { Player })
 	for _, player in players do
 		if player.Parent == Players then table.insert(connected, player) end
 	end
-	local minimum = if GameConfig.Testing.SoloStart then 1 else math.max(2, GameConfig.Players.Min)
+	local devSolo = #connected == 1 and canStartDevSolo(connected[1])
+	local minimum = if GameConfig.Testing.SoloStart or devSolo then 1 else math.max(2, GameConfig.Players.Min)
 	assert(#connected >= minimum, "Jogadores insuficientes após preparar a partida.")
 	-- WaitingRoomManager sorteia antes da tela de selecao para que apenas os
 	-- jogadores humanos a vejam. Mantemos o fallback para testes/admin que
@@ -315,7 +328,6 @@ local function prepareRound(players: { Player })
 	local spawnedCharacters: { [Player]: Model } = {}
 	for _, player in connected do
 		player:SetAttribute("InRound", true)
-		player:SetAttribute("Amarrado", false)
 		player:SetAttribute("CharacterSelectOpen", nil)
 		-- A marca de eliminado agora vive no Player (sobrevive ao respawn do
 		-- DeathRespawnHandler do pacote de movimento), então precisa ser

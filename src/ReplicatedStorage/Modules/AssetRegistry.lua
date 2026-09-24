@@ -142,8 +142,7 @@ AssetRegistry.Sounds = {
 
 	-- SoundManager.lua: efeitos curtos posicionais.
 	PlayerKilled = "rbxassetid://0",
-	PlayerRestrained = "rbxassetid://0",
-	ItemThrow = "rbxassetid://0", -- impacto da Pedra Afiada (WeaponSystem.lua)
+	ItemThrow = "rbxassetid://0", -- impacto de arma/objeto (WeaponSystem.lua)
 
 	-- AmbientSoundController.client.luau: tensão por ficar fora de zona segura.
 	HeartbeatTension = "rbxassetid://0",

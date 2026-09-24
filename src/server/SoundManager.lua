@@ -12,14 +12,9 @@
 	  precisar de nenhum script no cliente: trocar o SoundId e dar Play já
 	  replica sozinho.
 
-	EFEITOS DE MORTE/AMARRAÇÃO
-	  PlayerKilled e PlayerRestrained também são FireAllClients, então pela
-	  mesma razão não dá pra "escutá-los" no servidor. Em vez de inventar
-	  mais BindableEvents, os módulos que já disparam esses remotes
-	  (LethalAbility.lua, ConfrontSystem.lua) chamam PlayDeathSound/
-	  PlayRestrainSound diretamente, no mesmo lugar onde disparam o remote.
-	  "Escutar o evento" e "reagir no exato momento em que ele acontece" dão
-	  no mesmo resultado aqui, sem duplicar lógica de detecção de morte.
+	EFEITOS DE MORTE
+	  Os módulos que eliminam jogadores chamam PlayDeathSound diretamente no
+	  mesmo lugar onde disparam o remote, sem duplicar lógica de detecção.
 
 	  Cada efeito cria uma Part invisível ancorada na posição do evento com
 	  um Sound posicional (RollOff), toca e se autodestrói -- só quem está
@@ -208,17 +203,8 @@ function SoundManager.PlayDeathSound(position: Vector3)
 end
 
 --[[
-	PlayRestrainSound(position)
-	Chamado por ConfrontSystem ao amarrar alguém, logo após disparar
-	PlayerRestrained(isRestrained = true). Não toca de novo ao soltar.
-]]
-function SoundManager.PlayRestrainSound(position: Vector3)
-	playPositionalSound(position, AssetRegistry.Sounds.PlayerRestrained)
-end
-
---[[
 	PlayThrowSound(position)
-	Chamado por WeaponSystem.lua no ponto de impacto da Pedra Afiada.
+	Chamado por WeaponSystem.lua no ponto de impacto de uma arma.
 ]]
 function SoundManager.PlayThrowSound(position: Vector3)
 	playPositionalSound(position, AssetRegistry.Sounds.ItemThrow)

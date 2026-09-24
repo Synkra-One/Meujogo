@@ -114,7 +114,9 @@ local function ensureLobbyExists()
 	startPart.Anchored = true
 	startPart.CanCollide = true
 	startPart.Size = Vector3.new(4, 1, 4)
-	startPart.Position = LOBBY_ORIGIN + Vector3.new(0, 0.5, 20)
+	-- O Lobby também fica imóvel por contrato. Deixe o terminal ao alcance do
+	-- spawn, para que o jogador consiga iniciar a fila sem precisar caminhar.
+	startPart.Position = LOBBY_ORIGIN + Vector3.new(0, 0.5, 6)
 	startPart.Color = Color3.fromRGB(51, 102, 204)
 	startPart.Material = Enum.Material.Neon
 
@@ -266,8 +268,10 @@ end
 local function moveToIsland(player: Player, character: Model, target: Vector3)
 	local root = character:WaitForChild("HumanoidRootPart", 10)
 	assert(root and root:IsA("BasePart"), "Personagem sem HumanoidRootPart durante o desembarque.")
-	local wasAnchored = root.Anchored
-	root.Anchored = true
+	-- O corpo permanece não ancorado durante o transporte. A raiz é do
+	-- servidor enquanto MatchState=Loading, evitando conflito com ownership,
+	-- ragdoll e outros sistemas que também precisam mover o personagem.
+	if root:CanSetNetworkOwnership() then root:SetNetworkOwner(nil) end
 	local ok, err = pcall(function()
 		prepareStream(player, target)
 		local humanoid = character:FindFirstChildOfClass("Humanoid")
@@ -277,7 +281,6 @@ local function moveToIsland(player: Player, character: Model, target: Vector3)
 		root.AssemblyAngularVelocity = Vector3.zero
 		character:PivotTo(CFrame.new(target))
 	end)
-	if root.Parent then root.Anchored = wasAnchored end
 	if not ok then error(err) end
 end
 

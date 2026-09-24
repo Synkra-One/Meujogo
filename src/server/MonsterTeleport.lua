@@ -828,7 +828,7 @@ local function onTeleportRequest(player: Player, rawPoint: unknown)
 	if not RoundManager.IsRoundActive() or not isMonster(player) then
 		return
 	end
-	if activeSession or player:GetAttribute("Amarrado") == true then
+	if activeSession then
 		return
 	end
 

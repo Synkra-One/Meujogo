@@ -95,7 +95,7 @@ function Presentation.Init()
 		if disabledRound or not character or player.Character ~= character then return false end
 		local humanoid = character:FindFirstChildOfClass("Humanoid")
 		return player:GetAttribute("Role") == Config.Roles.Survivor and player:GetAttribute("InRound") == true
-			and ReplicatedStorage:GetAttribute("MatchState") == "Playing"
+			and ReplicatedStorage:GetAttribute("MatchState") == "InMatch"
 			and player:GetAttribute("Eliminado") ~= true and character:GetAttribute("Eliminado") ~= true
 			and player:GetAttribute("CharacterSelectOpen") ~= true and humanoid ~= nil and humanoid.Health > 0
 	end
@@ -131,7 +131,7 @@ function Presentation.Init()
 		end))
 	end
 	table.insert(connections, ReplicatedStorage:GetAttributeChangedSignal("MatchState"):Connect(function()
-		disabledRound = ReplicatedStorage:GetAttribute("MatchState") ~= "Playing"
+		disabledRound = ReplicatedStorage:GetAttribute("MatchState") ~= "InMatch"
 		if not eligible() then reset() end
 	end))
 	table.insert(connections, Remotes.RoundEnded.OnClientEvent:Connect(function()

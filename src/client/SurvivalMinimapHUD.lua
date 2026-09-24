@@ -2,17 +2,15 @@
 --[[
 	SurvivalMinimapHUD
 
-	Painel circular no canto inferior direito, montado em três camadas que se
-	encaixam pelo ZIndex:
+	Painel circular no canto inferior direito:
 
 	  3  disco do mapa da ilha
-	  6  arco de fôlego (StaminaRing) -- anel vermelho-vinho, cortado por
-	     UIGradient, que só encurta conforme o fôlego cai
-	 10  moldura do Figma ............. só decoração, por cima de tudo
+	  6  anel de fôlego (StaminaRing) -- fino, contínuo, POR FORA do disco
+	     (não cobre o mapa): trilho escuro + preenchimento claro de pontas
+	     redondas que encurta/volta conforme o fôlego real
 
-	A barra de vida e o gauge antigo de fôlego (arcos de 24 segmentos +
-	badges) saíram daqui: o arco é a única leitura de fôlego na tela, e ele só
-	desenha o valor que StaminaHUD.client.luau lê do Attribute "Stamina".
+	O anel é a única leitura de fôlego na tela, e ele só desenha a fração que
+	StaminaHUD.client.luau calcula dos Attributes "Stamina"/"StaminaMax".
 ]]
 
 local HttpService = game:GetService("HttpService")
@@ -31,23 +29,13 @@ local MAP_SIZE = 168
 local MAP_CENTER = Vector2.new(160, 160)
 local MAP_RESOLUTION = 42
 
--- Geometria calibrada pixel a pixel em cima do export real do Figma
--- (Imagens/Minimapa/3c71779a-444d-4931-be0d-12a0b3069dd0.png, 1254x1254): a
--- trilha vermelha original ocupa a faixa de raio ~0.75..0.89 da metade da
--- imagem, e é nela que o arco tem que cair.
---
--- O atlas do arco (StaminaRingAtlas.png) desenha o anel exatamente nessa
--- faixa, então basta arco e moldura saírem no MESMO tamanho e centrados no
--- mesmo ponto pra encaixarem -- tamanhos diferentes viram dois anéis
--- concêntricos. RING_SIZE sai do tamanho do mapa pro anel encostar na borda
--- dele sem folga.
-local RING_INNER_FRAC = 0.75
-local RING_SIZE = MAP_SIZE / RING_INNER_FRAC
-
--- Camadas: mapa (3) < arco (6) < moldura do Figma (10). O arco tem furo
--- próprio na textura, então passa por cima do mapa sem tapá-lo.
-local FILL_ZINDEX = 6
-local FRAME_ZINDEX = 10
+-- Anel de fôlego: começa POR FORA da borda do mapa (raio do disco + o
+-- contorno de 2 px + uma folga), então nunca cobre o mapa.
+local MAP_EDGE_STROKE = 2
+local RING_GAP = 3
+local RING_THICKNESS = 5
+local RING_INNER_RADIUS = MAP_SIZE / 2 + MAP_EDGE_STROKE + RING_GAP
+local RING_ZINDEX = 6
 
 local COLORS = {
 	MapEdge = Color3.fromRGB(194, 196, 188),
@@ -198,7 +186,7 @@ function SurvivalMinimapHUD.new(parent: Instance)
 	local mapClip = circle(root, "MapClip", MAP_SIZE, Color3.fromRGB(8, 12, 12), 3)
 	mapClip.Position = UDim2.fromOffset(MAP_CENTER.X, MAP_CENTER.Y)
 	mapClip.ClipsDescendants = true
-	stroke(mapClip, COLORS.MapEdge, 2, 0.3)
+	stroke(mapClip, COLORS.MapEdge, MAP_EDGE_STROKE, 0.3)
 	self.mapClip = mapClip
 
 	local terrain = frame(mapClip, "Terrain", nil, 3)
@@ -252,14 +240,12 @@ function SurvivalMinimapHUD.new(parent: Instance)
 		self:_prepare()
 	end)
 
-	-- Arco de fôlego: o preenchimento entra ABAIXO do mapa (o mapa é o que faz
-	-- o furo do anel) e a moldura do Figma por cima de tudo.
+	-- Anel de fôlego concêntrico ao mapa, do lado de fora dele.
 	local ok, staminaRing = pcall(StaminaRing.new, root, {
 		center = MAP_CENTER,
-		ringSize = RING_SIZE,
-		frameSize = RING_SIZE, -- tem que ser igual a ringSize: mesma imagem, só escalada por esse tamanho
-		fillZIndex = FILL_ZINDEX,
-		frameZIndex = FRAME_ZINDEX,
+		innerRadius = RING_INNER_RADIUS,
+		thickness = RING_THICKNESS,
+		zIndex = RING_ZINDEX,
 	})
 	if ok then
 		self.staminaRing = staminaRing
@@ -372,23 +358,22 @@ function SurvivalMinimapHUD:SetDiscoveredItems(entries: { DiscoveredEntry })
 end
 
 -- health entra só pra decidir o fade de "tudo cheio e parado" (não vira gauge
--- nenhum aqui); stamina é o fôlego real 0..1 -- StaminaRing cuida da
--- suavização visual sozinho, sem timer próprio.
+-- nenhum aqui); stamina é a fração real 0..1 (StaminaRing.Fraction) ou nil
+-- enquanto os Attributes não chegaram -- aí o anel mantém o último valor.
 --[[
 	Update(..., fearHidden)
 	fearHidden (0..1) vem de FearPresentationRules.HudFade: em pânico o painel
 	inteiro -- mapa E arco de fôlego, que moram no mesmo CanvasGroup -- apaga.
 	É só leitura: o Attribute "Stamina" e o mapa continuam intactos por baixo.
 ]]
-function SurvivalMinimapHUD:Update(dt: number, health: number, stamina: number, exhausted: boolean, holding: boolean, fearHidden: number?)
+function SurvivalMinimapHUD:Update(dt: number, health: number, stamina: number?, exhausted: boolean, holding: boolean, fearHidden: number?)
 	self.healthShown += (math.clamp(health, 0, 1) - self.healthShown) * math.min(1, dt * 12)
-	local staminaFraction = math.clamp(stamina, 0, 1)
 	if self.staminaRing then
-		-- `stamina` já chega normalizado (StaminaHUD divide o Attribute 0..100
-		-- por 100). NÃO dividir de novo aqui.
-		self.staminaRing:SetProgress(staminaFraction)
+		-- `stamina` já chega normalizado pelo teto real. NÃO dividir de novo aqui.
+		self.staminaRing:SetProgress(stamina)
 		self.staminaRing:Update(dt)
 	end
+	local staminaFraction = if self.staminaRing then self.staminaRing._target else (stamina or 1)
 
 	local pulse = (math.sin(os.clock() * 8) + 1) * 0.5
 	local idle = if staminaFraction >= 0.995 and self.healthShown >= 0.995 and not holding

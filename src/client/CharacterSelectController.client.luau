@@ -165,7 +165,7 @@ end
 devRoleButtons.Random = devRoleButton("Random", "Sorteio normal", "Deixa o jogo sortear normalmente.", 22)
 devRoleButtons[GameConfig.Roles.Monster] = devRoleButton(GameConfig.Roles.Monster, "Jason / Monstro", "Força você a nascer como Jason na caverna.", 23)
 devRoleButtons[GameConfig.Roles.Survivor] = devRoleButton(GameConfig.Roles.Survivor, "Sobrevivente", "Força gameplay humana de sobrevivência.", 24)
-devRoleButtons[GameConfig.Roles.Spy] = devRoleButton(GameConfig.Roles.Spy, "Espião", "Força gameplay de sabotagem.", 25)
+devRoleButtons[GameConfig.Roles.Spy] = devRoleButton(GameConfig.Roles.Spy, "Espião", "Força sabotagem; precisa de outros jogadores.", 25)
 
 local selectingCharacter = false
 
@@ -440,7 +440,7 @@ local function setVisible(visible: boolean, keepCursorFree: boolean?)
 	-- mudança de CharacterSelectOpen/Role enquanto a escolha está aberta.
 	local dedicatedSelection = playerGui:FindFirstChild("SurvivorSelectionUI")
 	local selectionOwnsCursor = player:GetAttribute("CharacterSelectOpen") == true
-		or ReplicatedStorage:GetAttribute("MatchState") == "Selecting"
+		or ReplicatedStorage:GetAttribute("MatchState") == "CharacterSelection"
 		or (dedicatedSelection and (dedicatedSelection :: ScreenGui).Enabled == true)
 	local cursorFree = visible or keepCursorFree == true or selectionOwnsCursor
 	LocalPlayer:SetAttribute("CursorLivre", if cursorFree then true else nil)
@@ -563,7 +563,8 @@ Remotes.WaitingRoom.OnClientEvent:Connect(function(newSnapshot)
 		table.insert(lines, string.format("%s %s\n%s", if member.ready then "✓" else "○", member.name,
 			(if character then character.Nome else "Aguardando sorteio do papel…") .. devSuffix))
 	end
-	inRoom = snapshot.state == "Waiting" and me ~= nil
+	inRoom = (snapshot.state == "Waiting" or snapshot.state == "Countdown")
+		and ReplicatedStorage:GetAttribute("MatchState") == "Lobby" and me ~= nil
 	roster = snapshot.roster
 	memberLabel.Text = table.concat(lines, "\n\n")
 	readyButton.Text = if me and me.ready then "Cancelar pronto" else "Pronto"

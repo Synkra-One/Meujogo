@@ -9,7 +9,7 @@
 	CATEGORIAS
 	  "PecaRadio" -- Antena/Bateria/Transmissor: peças únicas criadas por
 	    RadioPieces.lua. Viram Tools no inventário e caem quando o portador morre.
-	  "Tool" -- FacaImprovisada/LancaDeBambu/PedraAfiada/Tocha/LancaAncestral:
+	  "Tool" -- LancaDeBambu/Tocha/LancaAncestral:
 	    Tools de verdade no Backpack (WeaponSystem.lua / já existentes).
 
 	RARIDADE -> quantidade: RarityCount decide quantas cópias de cada item
@@ -71,14 +71,6 @@ ItemRegistry.Items = {
 		Function = "Peça de reparo do rádio.",
 	},
 
-	FacaImprovisada = {
-		DisplayName = "Faca Improvisada",
-		Category = "Tool",
-		AttributeName = "FacaImprovisada",
-		Rarity = "Comum",
-		Zones = { Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta, Zone.Praia, Zone.Construcoes, Zone.Construcoes },
-		Function = "Dano fraco, afasta o Monstro brevemente. Não mata ninguém.",
-	},
 	LancaDeBambu = {
 		DisplayName = "Pé de cabra",
 		Category = "Tool",
@@ -87,15 +79,6 @@ ItemRegistry.Items = {
 		Zones = { Zone.Floresta },
 		AssetId = 81510444,
 		Function = "Golpe curto: 15 de dano e breve atordoamento no Monstro.",
-	},
-	PedraAfiada = {
-		DisplayName = "Chave inglesa",
-		Category = "Tool",
-		AttributeName = "PedraAfiada",
-		Rarity = "Comum",
-		Zones = { Zone.Rochas },
-		AssetId = 10490012632,
-		Function = "Golpe curto: 8 de dano e pequeno recuo no Monstro.",
 	},
 	Sinalizador = {
 		DisplayName = "Sinalizador",

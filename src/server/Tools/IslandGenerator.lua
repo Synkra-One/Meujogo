@@ -1185,7 +1185,7 @@ end
 --[[
 	Generate(seed?)
 	Layout -> Terreno -> Rochas -> Caverna -> Floresta -> Vegetação -> Ruínas
-	-> POIs, e imprime o resumo.
+	-> POIs -> Casas grandes, e imprime o resumo.
 ]]
 function IslandGenerator.Generate(seed: number?)
 	if seed then
@@ -1207,6 +1207,14 @@ function IslandGenerator.Generate(seed: number?)
 	local bushes, logs = IslandGenerator.GenerateUndergrowth()
 	local ruins = IslandGenerator.GenerateRuins()
 	local pois = PoiGenerator.Generate()
+	-- Casas grandes nas clareiras (usa os marcadores Layout que o
+	-- PoiGenerator acabou de criar). Falha aqui não derruba a ilha.
+	local housesOk, housesErr = pcall(function()
+		require(script.Parent.HouseGenerator).Generate()
+	end)
+	if not housesOk then
+		warn("[IslandGenerator] HouseGenerator falhou: " .. tostring(housesErr))
+	end
 
 	local failed = {}
 	for id in failedTemplates do

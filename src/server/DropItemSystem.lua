@@ -43,6 +43,7 @@ local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local ItemRegistry = require(ReplicatedStorage.Modules.ItemRegistry)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local ToolFactory = require(ReplicatedStorage.Modules.ToolFactory)
+local MatchStateService = require(script.Parent.MatchStateService)
 
 local DropItemSystem = {}
 
@@ -329,6 +330,7 @@ end
 ]]
 function DropItemSystem.Init()
 	Remotes.DropItem.OnServerEvent:Connect(function(player: Player, tool: unknown)
+		if not MatchStateService.IsGameplayEnabled(player) then return end
 		if typeof(tool) ~= "Instance" or not (tool :: Instance):IsA("Tool") then
 			return
 		end

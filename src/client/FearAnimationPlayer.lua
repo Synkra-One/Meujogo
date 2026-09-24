@@ -50,7 +50,7 @@ function FearAnimationPlayer.new(player: Player, character: Model)
 	local function blocked(h: Humanoid, root: BasePart): boolean
 		if interacting or h.Health <= 0 or h.Sit or h.FloorMaterial == Enum.Material.Air or h.FloorMaterial == Enum.Material.Water
 			or root.Anchored or character:GetAttribute("FirearmAiming") == true
-			or player:GetAttribute("Amarrado") == true or player:GetAttribute("CursorLivre") == true
+			or player:GetAttribute("CursorLivre") == true
 			or root:GetAttribute("IsCrouching") or root:GetAttribute("IsCrawling") or root:GetAttribute("CrawlLock")
 			or character:FindFirstChildOfClass("Tool") then return true end
 		local movement = h:GetState()

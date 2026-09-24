@@ -258,13 +258,14 @@ local function shakeCamera(magnitude: number, duration: number)
 	end
 	local start = os.clock()
 	local seed = math.random(0, 1000)
-	local connection: RBXScriptConnection
-	connection = RunService.RenderStepped:Connect(function()
+	RunService:BindToRenderStep("FallImpactCamera", Enum.RenderPriority.Camera.Value + 6, function()
 		local elapsed = os.clock() - start
 		if elapsed >= duration then
-			connection:Disconnect()
+			RunService:UnbindFromRenderStep("FallImpactCamera")
 			return
 		end
+		camera = workspace.CurrentCamera
+		if not camera or camera.CameraType ~= Enum.CameraType.Custom then return end
 		local envelope = (1 - elapsed / duration) ^ 2
 		local ox = (math.noise(elapsed * 8, seed, 0)) * magnitude * envelope
 		local oy = (math.noise(elapsed * 8, seed + 50, 0)) * magnitude * envelope
@@ -282,7 +283,7 @@ local function applyStagger()
 	end
 	local before = currentHumanoid.WalkSpeed
 	if before <= 0.1 then
-		return -- já tá parado por outro motivo (amarrado/transição) -- não mexe
+		return -- já tá parado por outro motivo (transição) -- não mexe
 	end
 
 	staggerToken += 1

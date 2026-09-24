@@ -145,6 +145,12 @@ function SmoothShiftLock:Enable()
 		--// Distance &gt; 1 e sempre verdadeiro) -- duas fontes escrevendo a
 		--// mesma propriedade todo frame e exatamente o tremor.
 		if Camera.CameraType ~= Enum.CameraType.Custom then return; end;
+		-- A camera adaptativa ja posicionou e resolveu o volume completo.
+		-- Este modulo mantem somente o cursor e a rotacao do personagem.
+		if LocalPlayer:GetAttribute("AdaptiveShoulderCameraActive") == true then
+			self:_updateMouseState();
+			return;
+		end;
 		if self.Head.LocalTransparencyModifier &gt; 0.6 then return; end;
 
 		local CameraCFrame = Camera.CoordinateFrame;
@@ -309,6 +315,19 @@ function SmoothShiftLock:ToggleShiftLock(Enable: boolean?)
 	self:_transitionLockOffset();
 	if self.Enabled then
 		self._shiftlockMaid:GiveTask(RunService.RenderStepped:Connect(function(Delta: number)
+			if not Camera or Camera.CameraType ~= Enum.CameraType.Custom then return; end;
+			if LocalPlayer:GetAttribute("MovementLocked") == true then return; end;
+			if self.RootPart:GetAttribute("CrawlLock") then
+				self.Humanoid.AutoRotate = false;
+				return;
+			end;
+			if LocalPlayer:GetAttribute("AdaptiveShoulderCameraActive") == true then
+				-- Explorar permite olhar ao redor sem girar o corpo parado.
+				-- Com arma/lanterna equipada, o corpo acompanha a direcao da mira.
+				local tool = self.Character:FindFirstChildOfClass("Tool");
+				local facingCamera = tool ~= nil or self.Character:GetAttribute("FirearmAiming") == true;
+				if not facingCamera then self.Humanoid.AutoRotate = true; return; end;
+			end;
 			if (self.Humanoid and self.RootPart) then 
 				self.Humanoid.AutoRotate = not self.Enabled;
 			end;
@@ -327,7 +346,7 @@ function SmoothShiftLock:ToggleShiftLock(Enable: boolean?)
 			if LocalPlayer:GetAttribute("CursorLivre") == true then return; end; --// [Meujogo]
 			if Config.SMOOTH_CHARACTER_ROTATION then
 				local x, y, z = Camera.CFrame:ToOrientation();
-				self.RootPart.CFrame = self.RootPart.CFrame:Lerp(CFrame.new(self.RootPart.Position) * CFrame.Angles(0, y, 0), Delta * 5 * Config.CHARACTER_ROTATION_SPEED);
+				self.RootPart.CFrame = self.RootPart.CFrame:Lerp(CFrame.new(self.RootPart.Position) * CFrame.Angles(0, y, 0), 1 - math.exp(-5 * Config.CHARACTER_ROTATION_SPEED * Delta));
 			else
 				local x, y, z = Camera.CFrame:ToOrientation();
 				self.RootPart.CFrame = CFrame.new(self.RootPart.Position) * CFrame.Angles(0, y, 0);

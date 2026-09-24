@@ -12,6 +12,8 @@ MODULES = {
     # Só o TEXTO: o HUD precisa de services do Studio, mas dá pra travar
     # regressões visuais nele (halo preto, segunda barra, conversão dupla).
     "SurvivalMinimapHUD": "src/client/SurvivalMinimapHUD.lua",
+    "StaminaHUD": "src/client/StaminaHUD.client.luau",
+    "StaminaSystem": "src/server/StaminaSystem.lua",
 }
 sources = "local sources = {}\n" + "\n".join(
     f'sources["{name}"] = [====[\n{(ROOT / path).read_text()}\n]====]'

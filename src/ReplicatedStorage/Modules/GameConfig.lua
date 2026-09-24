@@ -28,15 +28,21 @@ GameConfig.Players = {
 	Max = 10, -- lotação máxima do servidor/partida
 }
 
+-- A sala só abre a seleção depois que todos os membros estão prontos e esta
+-- pequena janela termina. Jogadores que chegam durante a contagem ainda podem
+-- entrar; se entrarem sem confirmar, a contagem volta para "Waiting".
+GameConfig.WaitingRoom = {
+	StartCountdownDuration = 5,
+}
+
 --------------------------------------------------------------------------------
 -- MOVIMENTO
 --------------------------------------------------------------------------------
 
 -- ATENÇÃO: estes números NÃO valem mais. Quem manda no WalkSpeed/sprint agora
 -- é o "Ultimate R6 Movement System" (StarterCharacterScripts/Crouching), e os
--- valores dele ficam DENTRO do próprio script, não aqui. Mantido só porque
--- MonsterLightWeakness/ConfrontSystem ainda leem WalkSpeed pra restaurar
--- depois de enfraquecer/amarrar. Se for ajustar velocidade, é no Crouching.
+-- valores dele ficam DENTRO do próprio script, não aqui. Se for ajustar
+-- velocidade, é no Crouching.
 GameConfig.Movement = {
 	WalkSpeed = 16,
 	SprintSpeed = 24,
@@ -753,6 +759,25 @@ GameConfig.LootCrates = {
 }
 
 --------------------------------------------------------------------------------
+-- GAVETAS DAS CASAS (server/DrawerSystem.lua)
+--------------------------------------------------------------------------------
+-- Cômodas, balcões, criados-mudos etc. das casas grandes abrem e fecham.
+-- Cada casa tem 5–7 gavetas funcionais, com 1–3 itens por rodada (Sorte de
+-- quem abre primeiro, pesos de LootCrates.RarityWeights); qualquer
+-- sobrevivente/espião pode guardar o item da mão numa gaveta aberta e vazia
+-- (esconder peça do rádio do Espião, por exemplo). O Monstro não usa gaveta.
+
+GameConfig.Drawers = {
+	OpenRange = 7, -- alcance do prompt (servidor valida com +2 de folga)
+	SlideTime = 0.32, -- segundos pra abrir/fechar
+	FunctionalPerHouse = { Min = 5, Max = 7 },
+	LootPerHouse = { Min = 1, Max = 3 }, -- um item por gaveta sorteada
+	StoreKey = Enum.KeyCode.B, -- "Guardar item" (E/F já são abrir/pegar)
+	StoreGamepadKey = Enum.KeyCode.DPadUp,
+	MonsterCanUse = false,
+}
+
+--------------------------------------------------------------------------------
 -- DESCOBERTA DE ITENS NO MAPA (server/ItemDiscovery.lua)
 --------------------------------------------------------------------------------
 -- Passar perto de um item do mundo (arma, material, caixa de loot...) marca
@@ -859,16 +884,6 @@ GameConfig.Spy = {
 	RepairHoldDuration = 3,
 }
 
---------------------------------------------------------------------------------
--- EFEITOS DE STATUS
---------------------------------------------------------------------------------
-
-GameConfig.Effects = {
-	-- "Amarrado": jogador imobilizado até ser solto ou o tempo acabar.
-	AmarradoDuration = 90, -- 1min30s
-}
-
---------------------------------------------------------------------------------
 -- FRAQUEZA DO MONSTRO À LUZ
 --------------------------------------------------------------------------------
 -- Aplicado quando o Monstro toca uma Zona Segura (Part com Attribute
@@ -1058,30 +1073,16 @@ GameConfig.RadioSite = {
 	},
 }
 
--- CONFRONTO (detectar / amarrar / executar)
+-- CONFRONTO (detectar / executar)
 --------------------------------------------------------------------------------
 
 GameConfig.Confront = {
 	-- Cristal Ancestral: alcance da leitura de suspeito.
 	DetectRange = 12,
 
-	-- Amarrar: ação cooperativa. Usa X / ButtonB para não disputar E /
-	-- ButtonX com o Grab do Monstro quando ele está perto de outro jogador.
-	TieInputKey = Enum.KeyCode.X,
-	TieGamepadKey = Enum.KeyCode.ButtonB,
-	TieRange = 10, -- alcance do ProximityPrompt "Amarrar"
-	TieHelpersRequired = 2, -- quantos jogadores precisam agir juntos
-	TieHoldDuration = 5, -- segundos de ação simultânea pra completar
-	-- Por quanto tempo o "estou ajudando" de um jogador continua valendo
-	-- depois que ele aciona o prompt. Precisa ser MAIOR que TieHoldDuration,
-	-- senão a ajuda expira antes de a amarração completar.
-	TieAssistWindow = 8,
-
 	-- Arma Rara: alcance da execução.
 	KillRange = 8,
 }
-
--- Duração do efeito "amarrado" em si: GameConfig.Effects.AmarradoDuration.
 
 --------------------------------------------------------------------------------
 -- GERENCIAMENTO DE RODADA
@@ -1126,16 +1127,13 @@ GameConfig.Tension = {
 --------------------------------------------------------------------------------
 GameConfig.Weapons = {
 	MeleeConeCos = 0.5,
-	-- IDs antigos preservados para inventário, drops, crafting e pickups.
+	-- IDs de armas disponíveis para inventário, drops e pickups.
 	Definitions = {
-		PedraAfiada = { DisplayName = "Chave inglesa", Kind = "Melee", Damage = 8, Range = 6, Cooldown = 1, PushForce = 12 },
 		LancaDeBambu = { DisplayName = "Pé de cabra", Kind = "Melee", Damage = 15, Range = 7, Cooldown = 1.5, StunDuration = 0.4 },
 		Sinalizador = { DisplayName = "Sinalizador", Kind = "Signal", Damage = 0, Range = 35, Cooldown = 2,
 			RevealMonster = false, RepelMonster = false }, -- somente pontos de extensão
 		Glock17 = { DisplayName = "Pistola", Kind = "Firearm", Damage = 25, Range = 300, Cooldown = 0.4,
 			Ammo = 12, ReloadEnabled = false, AnimationsEnabled = false, Recoil = 0, Spread = 0 },
-		-- Item legado continua disponível, sem se tornar uma quinta arma nova.
-		FacaImprovisada = { DisplayName = "Faca Improvisada", Kind = "Melee", Damage = 0, Range = 6, Cooldown = 1, PushForce = 35 },
 		-- Clique = golpe leve (Hit). Segurar o clique = Heavy (Finish): mais
 		-- dano, empurrão e atordoamento, mas cooldown maior -- o DPS dos dois
 		-- é parecido de propósito, então forçar Heavy via cliente não rende
@@ -1155,7 +1153,7 @@ GameConfig.Weapons = {
 -- Ids de ItemRegistry.Items entregues ao Backpack quando a partida começa,
 -- por papel. Papel ausente (Monstro) não recebe nada.
 GameConfig.StartingItems = {
-	[GameConfig.Roles.Survivor] = { "TacoBeisebol" },
+	[GameConfig.Roles.Survivor] = { "TacoBeisebol", "Lanterna" },
 	[GameConfig.Roles.Spy] = { "TacoBeisebol" },
 } :: { [string]: { string } }
 
@@ -1209,7 +1207,7 @@ GameConfig.Environment = {
 }
 
 --------------------------------------------------------------------------------
--- MODO DE TESTE (TEMPORÁRIO -- apagar quando for pra valer)
+-- MODO DE TESTE (desligado por padrão; ative apenas em uma sessão local)
 --------------------------------------------------------------------------------
 -- Atalhos pra conseguir testar a partida sozinho no Studio. Nada disso
 -- deveria sobreviver ao lançamento: com os três desligados, o jogo volta ao
@@ -1217,9 +1215,10 @@ GameConfig.Environment = {
 -- itens de brinde no desembarque).
 
 GameConfig.Testing = {
-	-- Ignora o mínimo de GameConfig.Players.Min no prompt "IniciarPartida",
-	-- deixando começar com 1 jogador só. O máximo continua valendo.
-	SoloStart = true,
+	-- Mantém o mínimo de dois jogadores no servidor publicado. Um teste solo
+	-- também pode ser liberado escolhendo um papel no painel Dev da sala;
+	-- SoloStart continua disponível para cenários automatizados.
+	SoloStart = false,
 
 	-- Força o papel apenas em teste solo. Em partida com 2+ jogadores,
 	-- RoleAssignment sempre sorteia exatamente 1 Monstro.

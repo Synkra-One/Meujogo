@@ -162,7 +162,6 @@ local function selectTarget(state: AttackState, character: Model, root: BasePart
 end
 
 local function profileKey(profile: CombatConfig.Profile): string
-	if profile.WeaponId == "PedraAfiada" then return "Wrench" end
 	if profile.WeaponId == "LancaDeBambu" then return "Crowbar" end
 	return "BaseballBat"
 end

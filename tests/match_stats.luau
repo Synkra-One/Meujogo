@@ -140,6 +140,7 @@ local function fixture()
 	local DropItemSystem = { ItemPickedUp = bindable() }
 	local RadioPieces = { PiecePickedUp = bindable() }
 	local RadioInstallSystem = { PieceInstalled = bindable(), AllInstalled = bindable() }
+	local RepairMinigameSystem = { RepairCompleted = bindable() }
 	local Elimination = {
 		IsEliminated = function(p) return p:GetAttribute("Eliminado") == true end,
 		Reset = function(p) p:SetAttribute("Eliminado", nil) end,
@@ -178,6 +179,7 @@ local function fixture()
 		DropItemSystem = DropItemSystem,
 		RadioPieces = RadioPieces,
 		RadioInstallSystem = RadioInstallSystem,
+		RepairMinigameSystem = RepairMinigameSystem,
 		DataStoreManager = DataStoreManager,
 	}
 
@@ -339,6 +341,7 @@ local function fixture()
 		DropItemSystem = DropItemSystem,
 		RadioPieces = RadioPieces,
 		RadioInstallSystem = RadioInstallSystem,
+		RepairMinigameSystem = RepairMinigameSystem,
 		player = player,
 		tool = tool,
 		advance = advance,
@@ -519,6 +522,7 @@ test("jogador eliminado mantém o relatório até o fim da partida", function()
 	local payload = f.resultsFor(survivor)
 	assert(payload ~= nil, "o jogador morto não recebeu relatório")
 	assert(payload.MatchXP == xpBeforeDeath)
+	assert(payload.Eliminated and not payload.Escaped)
 	assert(#payload.Actions > 0, "o histórico do morto sumiu")
 	assert(f.resultsFor(monster) ~= nil)
 end)
@@ -548,6 +552,7 @@ test("jogador que escapa é marcado e mantém o relatório", function()
 	f.endMatch("Sobreviventes", "fuga")
 	local payload = f.resultsFor(survivor)
 	assert(payload ~= nil and payload.MatchXP == xpAfterEscape)
+	assert(payload.Escaped and payload.EscapeMethod == "Helicoptero" and not payload.Eliminated)
 end)
 
 --------------------------------------------------------------------------------
@@ -1108,7 +1113,33 @@ test("pegar um item importante do chão concede XP (ex: Galão de Gasolina)", fu
 	assert(session.MatchXP == f.Config.Actions.ImportantItemFound.XP,
 		"não pagou XP pelo Galão: " .. session.MatchXP)
 	assert(session.Stats.ImportantItemsFound == 1)
+	assert(session.Stats.GasolineFound == 1, "gasolina não entrou na estatística específica")
 	assert(gasolina:GetAttribute("_MatchRewardItemFound") == true, "não marcou a Tool como já paga")
+	f.DropItemSystem.ItemPickedUp:Fire(survivor, gasolina)
+	assert(session.Stats.GasolineFound == 1, "o mesmo galão contou duas vezes")
+end)
+
+test("reparo concluído e gasolina coletada geram destaques sem alterar XP", function()
+	local f = fixture()
+	local mechanic = f.player(1, "Mecanica")
+	local collector = f.player(2, "Explorador")
+	mechanic:SetAttribute("Role", "Sobrevivente")
+	collector:SetAttribute("Role", "Sobrevivente")
+	f.startMatch({ mechanic, collector })
+
+	f.RepairMinigameSystem.RepairCompleted:Fire(mechanic, "RadioPartida")
+	f.DropItemSystem.ItemPickedUp:Fire(collector, f.tool("Gasolina", "Gasolina"))
+	assert(f.Stats.GetStat(mechanic, "RepairsCompleted") == 1)
+	assert(f.Stats.GetSession(mechanic).MatchXP == 0, "reparo adicionou XP não configurado")
+	f.endMatch("Sobreviventes", "fim")
+
+	local found = {}
+	for _, highlight in f.resultsFor(mechanic).Highlights do
+		found[highlight.Id] = highlight
+	end
+	assert(found.RepairExpert and found.RepairExpert.UserId == mechanic.UserId)
+	assert(found.FuelFinder and found.FuelFinder.UserId == collector.UserId)
+	assert(f.resultsFor(collector).MatchXP == f.Config.Actions.ImportantItemFound.XP)
 end)
 
 test("item comum (material/melee) não paga XP de achado importante", function()

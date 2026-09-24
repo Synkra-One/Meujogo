@@ -211,10 +211,10 @@ local function cast(player: Player)
 	if now < (casting[player] or 0) then return end -- trava anti-duplo-clique
 	if not RoundManager.IsRoundActive() or player:GetAttribute("Role") ~= Config.Roles.Monster
 		or player:GetAttribute("InRound") ~= true or Elimination.IsEliminated(player)
-		or player:GetAttribute("Amarrado") == true then return end
+		then return end
 	local character, humanoid, root = livingCharacter(player)
 	if not character or not humanoid or not root or FlashlightRules.PowerBlocked(character) then return end
-	for _, flag in { "Amarrado", "TeleportBusy", "GrabLocked", "PowerStunned", "ShadowRushBusy" } do
+	for _, flag in { "TeleportBusy", "GrabLocked", "PowerStunned", "ShadowRushBusy" } do
 		if character:GetAttribute(flag) == true then return end
 	end
 	if now < (cooldowns[player] or 0) then

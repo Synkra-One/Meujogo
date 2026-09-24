@@ -14,6 +14,7 @@ local Damage = require(script.Parent.DamageSystem)
 local Status = require(script.Parent.SurvivorPowerStatus)
 local RadioSite = require(script.Parent.RadioSiteSystem)
 local RepairMinigame = require(script.Parent.RepairMinigameSystem)
+local MatchStateService = require(script.Parent.MatchStateService)
 local System = {}
 local initialized = false
 
@@ -44,7 +45,8 @@ local function living(player: Player): (Model?, Humanoid?, BasePart?)
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if player.Parent ~= Players or player:GetAttribute("InRound") ~= true
+	if not MatchStateService.IsGameplayEnabled(player)
+		or player.Parent ~= Players or player:GetAttribute("InRound") ~= true
 		or Elimination.IsEliminated(player) or not character or not character.Parent
 		or not humanoid or humanoid.Health <= 0 or not root or not root:IsA("BasePart") then return nil, nil, nil end
 	return character, humanoid, root
@@ -406,8 +408,7 @@ local function onRequest(player: Player, slot: unknown)
 	local character, humanoid, root = living(player)
 	if not Round.IsRoundActive() or player:GetAttribute("Role") ~= Config.Roles.Survivor
 		or player:GetAttribute("CharacterSelectOpen") == true or not character or not humanoid or not root then return end
-	if player:GetAttribute("Amarrado") == true or character:GetAttribute("Amarrado") == true
-		or character:GetAttribute("PowerStunned") == true or character:GetAttribute("PowerMoving") == true
+	if character:GetAttribute("PowerStunned") == true or character:GetAttribute("PowerMoving") == true
 		or character:GetAttribute("FearTripping") == true or character:GetAttribute("TeleportBusy") == true
 		or character:GetAttribute("ShadowRushBusy") == true or character:GetAttribute("GrabLocked") == true
 		or humanoid.Sit or humanoid.PlatformStand

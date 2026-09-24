@@ -382,7 +382,7 @@ end
 local function refreshVisibility()
 	local matchState = if ReplicatedStorage.GetAttribute then ReplicatedStorage:GetAttribute("MatchState") else nil
 	local selecting = snapshot and snapshot.state == "Selecting"
-		and (matchState == nil or matchState == "Selecting")
+		and (matchState == nil or matchState == "CharacterSelection")
 	local allowed = player:GetAttribute("CharacterSelectOpen") == true
 		or (confirmed and player:GetAttribute("InWaitingRoom") == true)
 		or (selecting and player:GetAttribute("InWaitingRoom") == true and not confirmed)

@@ -249,6 +249,18 @@ test("preparation is awaited and concurrent starts are rejected", function()
 	assert(prepared and f.round.IsRoundActive())
 end)
 
+test("authorized dev can start survivor or monster rounds alone", function()
+	for _, role in { "Sobrevivente", "Monstro" } do
+		local f = fixture()
+		local solo = f.player(1) -- UserId autorizado no GameConfig do fixture.
+		solo:SetAttribute("DevForceRole", role)
+		f.task.spawn(function() f.round.StartRound({ solo }) end)
+		f.advance(0.3)
+		assert(f.round.IsRoundActive(), "Dev solo round was rejected for " .. role)
+		assert(solo:GetAttribute("Role") == role, "Dev solo role was not preserved for " .. role)
+	end
+end)
+
 test("failed preparation releases the round for a later retry", function()
 	local f = fixture()
 	local roster = { f.player(1), f.player(2) }

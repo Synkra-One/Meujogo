@@ -96,7 +96,9 @@ MatchStatsTypes.Stat = {
 	AlliesHelped = "AlliesHelped", -- aliados curados/ajudados
 	AlliesSaved = "AlliesSaved", -- aliados salvos de uma situação letal
 	ImportantItemsFound = "ImportantItemsFound", -- itens relevantes descobertos
+	GasolineFound = "GasolineFound", -- galões de Gasolina coletados do mapa
 	ItemsDelivered = "ItemsDelivered", -- itens de objetivo entregues/instalados
+	RepairsCompleted = "RepairsCompleted", -- minigames de reparo concluídos
 	ObjectiveStepsCompleted = "ObjectiveStepsCompleted", -- etapas de objetivo concluídas
 	ObjectiveContribution = "ObjectiveContribution", -- soma abstrata de contribuição
 	ChasesStarted = "ChasesStarted", -- perseguições em que entrou
@@ -193,6 +195,9 @@ export type ResultsPayload = {
 	Stats: { { Key: string, Label: string, Value: string } }, -- prontas pra desenhar
 	Highlights: { Highlight }, -- destaques da partida inteira (públicos)
 	MVPUserId: number?,
+	Escaped: boolean,
+	EscapeMethod: string?,
+	Eliminated: boolean,
 	IsMVP: boolean,
 	Account: AccountProgress?,
 }
@@ -229,7 +234,9 @@ MatchStatsTypes.StatLabel = {
 	AlliesHelped = "Aliados ajudados",
 	AlliesSaved = "Aliados salvos",
 	ImportantItemsFound = "Itens importantes",
+	GasolineFound = "Galões de gasolina encontrados",
 	ItemsDelivered = "Itens entregues",
+	RepairsCompleted = "Reparos concluídos",
 	ObjectiveStepsCompleted = "Etapas de objetivo",
 	ObjectiveContribution = "Contribuição em objetivos",
 	ChasesStarted = "Perseguições sofridas",
@@ -282,7 +289,9 @@ MatchStatsTypes.StatsShownFor = {
 		"HealingDone",
 		"AlliesHelped",
 		"ImportantItemsFound",
+		"GasolineFound",
 		"ItemsDelivered",
+		"RepairsCompleted",
 		"ObjectiveStepsCompleted",
 		"ObjectiveContribution",
 		"ChasesStarted",

@@ -16,6 +16,7 @@ local PowerStatus = require(script.Parent.SurvivorPowerStatus)
 local AmmoSystem = require(script.Parent.AmmoSystem)
 local WeaponSystem = require(script.Parent.WeaponSystem)
 local CombatRules = require(ReplicatedStorage.Modules.CombatRules)
+local MatchStateService = require(script.Parent.MatchStateService)
 local pistolConfig = GameConfig.Weapons.Definitions.Glock17
 local assets = ReplicatedStorage:WaitForChild("WeaponAssets")
 local toolsFolder = assets:WaitForChild("Tools")
@@ -32,13 +33,13 @@ local function alive(player: Player): boolean
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	return character ~= nil and humanoid ~= nil and humanoid.Health > 0
 		and character:GetAttribute("Eliminado") ~= true and character:FindFirstChild("Dead") == nil
-		and character:GetAttribute("Amarrado") ~= true and player:GetAttribute("Eliminado") ~= true
-		and player:GetAttribute("Amarrado") ~= true
+		and player:GetAttribute("Eliminado") ~= true
 		and character:GetAttribute("GrabLocked") ~= true
 end
 
 local function equipped(player: Player, candidate: unknown): Tool?
-	if typeof(candidate) ~= "Instance" or not Rules.IsWeapon(candidate :: Instance) or not alive(player) then return nil end
+	if not MatchStateService.IsGameplayEnabled(player)
+		or typeof(candidate) ~= "Instance" or not Rules.IsWeapon(candidate :: Instance) or not alive(player) then return nil end
 	local tool = candidate :: Tool
 	if not tool.Enabled then return nil end
 	if Rules.IsFoundation(tool) and not CombatRules.CanAttack(player) then return nil end

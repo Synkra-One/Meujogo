@@ -89,7 +89,7 @@ function RoleAssignment.AssignRoles(players: { Player })
 		forcedRole = nil
 	end
 
-	if #players == 1 and GameConfig.Testing.SoloStart then
+	if #players == 1 and (GameConfig.Testing.SoloStart or devForcedRole(players[1]) ~= nil) then
 		-- A escolha explicita do painel dev vence o padrao de teste. Sem ela,
 		-- ForceRole pode manter o teste solo previsivel (Sobrevivente por
 		-- padrao, para a tela de selecao sempre poder ser validada).

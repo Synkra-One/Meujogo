@@ -103,6 +103,10 @@ end
 -- MAIN LOOP
 -- =============================================
 RunService.RenderStepped:Connect(function(dt)
+	Camera = workspace.CurrentCamera
+	if not Camera or Camera.CameraType ~= Enum.CameraType.Custom then return end
+	if Player:GetAttribute("AdaptiveShoulderCameraActive") == true
+		or Player:GetAttribute("MovementLocked") == true then return end
 	if not RootPart or not Humanoid then return end
 	if Humanoid.Health &lt;= 0 then return end
 

@@ -16,7 +16,7 @@
 	     pra partes ancoradas, e devolve WalkSpeed.
 
 	Paradas propositais que ele respeita (não age):
-	  - Attribute "Amarrado" / "Eliminado" no Player ou character
+	  - Attribute "Eliminado" no Player ou character
 	  - Humanoid morto, Seated, PlatformStand vindo de assento de verdade,
 	    ou state Physics (ragdoll ativo de propósito)
 	  - "CrawlLock" na HRP (transição de rastejar) -- tolerância maior
@@ -47,9 +47,6 @@ end
 -- nil = ficar parado aqui é proposital. número = segundos de tolerância.
 local function graceFor(character: Model, humanoid: Humanoid, hrp: BasePart): number?
 	if character:GetAttribute("PowerStunned") == true or character:GetAttribute("PowerMoving") == true then return nil end
-	if LocalPlayer:GetAttribute("Amarrado") == true or character:GetAttribute("Amarrado") == true then
-		return nil
-	end
 	if LocalPlayer:GetAttribute("Eliminado") == true or character:GetAttribute("Eliminado") == true then
 		return nil
 	end

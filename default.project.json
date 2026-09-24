@@ -55,8 +55,8 @@
 
     "StarterPlayer": {
       "$properties": {
-        "CameraMinZoomDistance": 6,
-        "CameraMaxZoomDistance": 9,
+        "CameraMinZoomDistance": 5.2,
+        "CameraMaxZoomDistance": 5.2,
         "DevCameraOcclusionMode": "Zoom",
         "LoadCharacterAppearance": true,
         "EnableMouseLockOption": false

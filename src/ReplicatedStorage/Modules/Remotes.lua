@@ -66,6 +66,11 @@ Remotes.WeaponImpact = getRemote("WeaponImpact")
 -- Não possui OnServerEvent: só sistemas do servidor podem produzir ruído.
 Remotes.NoiseDetected = getRemote("NoiseDetected")
 
+-- S -> C SOMENTE ao monstro ativo: (monsterCharacter, snapshot completo).
+-- Entradas: { player, character, strength, bpm, tension }. Ausência inicia fade.
+-- Sem OnServerEvent; medo/alcance nunca são informados pelo cliente.
+Remotes.HeartbeatDetected = getRemote("HeartbeatDetected")
+
 -- C -> S: "Aim", tool, unitDirection | "Toggle", tool, enabled, unitDirection, sequence.
 -- No hit, target, origin, battery or damage is accepted from a client.
 -- S -> C: "State", tool, enabled, battery, sequence (toggle acknowledgement).
@@ -142,19 +147,6 @@ Remotes.SabotageAction = getRemote("SabotageAction")
 --------------------------------------------------------------------------------
 Remotes.LethalAbilityUsed = getRemote("LethalAbilityUsed")
 
---------------------------------------------------------------------------------
--- PlayerRestrained
--- Disparado por: servidor, quando um jogador fica "amarrado"
---   (duração: GameConfig.Effects.AmarradoDuration = 90s).
--- Server -> Clients (FireAllClients):
---   targetUserId: number
---   isRestrained: boolean  -- true ao prender, false ao soltar/expirar
---   releasesAt: number?    -- os.time() em que solta sozinho (só quando isRestrained = true)
--- Recebido por: todos os clientes (trava animação/movimento local, atualiza UI).
---------------------------------------------------------------------------------
-Remotes.PlayerRestrained = getRemote("PlayerRestrained")
-
---------------------------------------------------------------------------------
 -- PlayerKilled
 -- Disparado por: servidor, quando um jogador morre (Monstro, Espião ou hazard).
 -- Server -> Clients (FireAllClients):
@@ -209,8 +201,8 @@ Remotes.ShadowRush = getRemote("ShadowRush")
 -- Server -> Client (FireClient), só pro Monstro:
 --   ("cooldown", readyAt: number)   -- cooldown iniciado (ativação aceita ou falha)
 --   ("cancel", motivo: string)      -- destino inválido / habilidade cancelada
--- Validação que falha (não é Monstro, ocupado, cooldown, partida parada,
---   amarrado) é rejeitada em silêncio, exceto destino inválido (manda "cancel").
+-- Validação que falha (não é Monstro, ocupado, cooldown ou partida parada) é
+-- rejeitada em silêncio, exceto destino inválido (manda "cancel").
 --------------------------------------------------------------------------------
 Remotes.MonsterTeleport = getRemote("MonsterTeleport")
 
@@ -480,12 +472,13 @@ Remotes.CharacterRoster = getRemote("CharacterRoster")
 --------------------------------------------------------------------------------
 -- SprintIntent
 -- Client -> Server (FireServer):
---   holding: boolean   -- true quando aperta Shift, false quando solta
+--   holding: boolean   -- true enquanto o pacote de movimento está EM CORRIDA
+--                         (IsSprinting local do HumanoidRootPart; sem o
+--                         pacote, Shift apertado), false quando para.
 -- É só a INTENÇÃO. Quem decide se o fôlego cai é o servidor
---   (server/StaminaSystem.lua), que mede a velocidade real do personagem --
---   mentir "não estou correndo" não adianta, porque o gasto é validado pelo
---   movimento de verdade. O fôlego atual volta pro cliente como Attribute
---   "Stamina" no Player (replica sozinho, sem remote).
+--   (server/StaminaSystem.lua), que também mede a velocidade real do
+--   personagem. O fôlego volta pro cliente como Attributes "Stamina" e
+--   "StaminaMax" no Player (replicam sozinhos, sem remote).
 --------------------------------------------------------------------------------
 Remotes.SprintIntent = getRemote("SprintIntent")
 

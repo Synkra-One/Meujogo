@@ -1,0 +1,31 @@
+--!strict
+-- Studs e graus. Perfis compactos de terceira pessoa, inspirados em survival
+-- horror sobre o ombro. A colisao sempre tem prioridade sobre estes alvos.
+return table.freeze({
+	Distance = 5.2,
+	IndoorDistance = 3.65,
+	AimDistance = 3.1,
+	CrouchDistance = 4.4,
+	SprintDistance = 5.65,
+	Shoulder = 1.25,
+	IndoorShoulder = 0.75,
+	AimShoulder = 1.05,
+	Height = 0.18,
+	IndoorHeight = 0.02,
+	PivotHeight = 1.15,
+	FOV = 68,
+	IndoorFOV = 66,
+	AimFOV = 60,
+	ProfileResponse = 7,
+	FOVResponse = 8,
+	CollisionRelease = 4.5,
+	CollisionPadding = 0.12,
+	CollisionRadius = 0.32,
+	ProbeInterval = 0.12,
+	ProbeDistance = 5,
+	CeilingDistance = 6,
+	IndoorHold = 0.45,
+	ShoulderResponse = 8,
+	FadeStart = 1.8,
+	FadeEnd = 0.6,
+})

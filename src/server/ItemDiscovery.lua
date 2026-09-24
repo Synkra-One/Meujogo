@@ -222,7 +222,8 @@ local function scanOnce()
 		end
 		local playerPos = root.Position
 		for instance, entry in discoverables do
-			if seen[instance] or not instance:IsDescendantOf(Workspace) then
+			-- Item numa gaveta fechada (DrawerSystem) ninguém está vendo.
+			if seen[instance] or not instance:IsDescendantOf(Workspace) or SafeAttribute.Get(instance, "OcultoNaGaveta") == true then
 				continue
 			end
 			local pos = entry.getPosition()

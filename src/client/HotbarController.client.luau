@@ -395,6 +395,7 @@ local function applyVisibility()
 	-- barra de itens não pode aparecer por baixo dela.
 	local introMenuOpen = LocalPlayer:GetAttribute("IntroMenuOpen") == true
 	gui.Enabled = hasTools and hotbarHidden < 0.999 and not introMenuOpen
+		and LocalPlayer:GetAttribute("GameplayEnabled") == true
 end
 
 local function refresh()

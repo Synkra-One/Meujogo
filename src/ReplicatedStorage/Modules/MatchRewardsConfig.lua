@@ -601,6 +601,38 @@ MatchRewardsConfig.Highlights = {
 		Minimum = 20,
 	},
 	{
+		Id = "RepairExpert",
+		Name = "Especialista em Reparos",
+		Description = "Mais reparos concluídos",
+		Stat = "RepairsCompleted",
+		Roles = SURVIVOR_ROLES,
+		Minimum = 1,
+	},
+	{
+		Id = "FuelFinder",
+		Name = "Caçador de Combustível",
+		Description = "Mais galões de gasolina encontrados",
+		Stat = "GasolineFound",
+		Roles = SURVIVOR_ROLES,
+		Minimum = 1,
+	},
+	{
+		Id = "Supplier",
+		Name = "Fornecedor da Equipe",
+		Description = "Mais itens importantes encontrados",
+		Stat = "ImportantItemsFound",
+		Roles = SURVIVOR_ROLES,
+		Minimum = 2,
+	},
+	{
+		Id = "Guardian",
+		Name = "Protetor da Equipe",
+		Description = "Mais aliados salvos",
+		Stat = "AlliesSaved",
+		Roles = SURVIVOR_ROLES,
+		Minimum = 1,
+	},
+	{
 		Id = "StealthMaster",
 		Name = "Mestre da Furtividade",
 		Description = "Mais tempo perto do Monstro sem ser detectado",
@@ -631,6 +663,14 @@ MatchRewardsConfig.Highlights = {
 		UsePerformance = true,
 		Roles = MONSTER_ROLES,
 		Minimum = 100,
+	},
+	{
+		Id = "Hunter",
+		Name = "Predador",
+		Description = "Mais sobreviventes eliminados",
+		Stat = "SurvivorsEliminated",
+		Roles = MONSTER_ROLES,
+		Minimum = 1,
 	},
 } :: { HighlightRule }
 
@@ -711,7 +751,7 @@ MatchRewardsConfig.Notification = {
 		MinInterval = 0.45,
 
 		-- !! SEM ID AINDA !! Não existe som de XP no projeto (SoundManager só
-		-- tem morte/amarrar/arremesso, e os três ainda são placeholder
+		-- tem morte/arremesso, ambos ainda são placeholder
 		-- "rbxassetid://0"). Cole aqui o id do som escolhido -- string vazia
 		-- simplesmente não toca nada, o resto da notificação funciona igual.
 		-- Procure algo CURTO (< 0.4s) e seco: um "tick"/"clink" abafado.

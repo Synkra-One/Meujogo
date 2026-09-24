@@ -6,10 +6,14 @@
 	O servidor gira a porta em torno da dobradiça (borda esquerda) com um
 	tween; o estado fica no Attribute "PortaAberta" (replica sozinho).
 
-	Attributes usados (gravados por Structures.Door):
-	  CFrameFechada  CFrame  -- pose fechada; a dobradiça é a borda -X dela
-	  LarguraPorta   number
-	  PortaAberta    boolean
+	Attributes usados (gravados por Structures.Door / Houses/HouseKit.Door):
+	  CFrameFechada     CFrame  -- pose fechada; a dobradiça é a borda -X dela
+	  LarguraPorta      number
+	  PortaAberta       boolean
+	  DobradicaDireita  boolean? -- dobradiça na borda +X (abre pro mesmo lado)
+
+	A folha sempre abre na direção do LookVector da pose fechada. Peças
+	soldadas na folha (maçaneta, almofadas) giram junto.
 
 	Não valida Role: qualquer jogador abre/fecha (o Monstro também -- no
 	F13 o Jason abre porta normalmente; quebrar barricada vem depois).
@@ -35,9 +39,10 @@ local function targetCFrame(door: BasePart, open: boolean): CFrame?
 	if typeof(closed) ~= "CFrame" or type(width) ~= "number" then
 		return nil
 	end
-	local hinge = closed * CFrame.new(-width / 2, 0, 0)
-	local angle = if open then OPEN_ANGLE else 0
-	return hinge * CFrame.Angles(0, angle, 0) * CFrame.new(width / 2, 0, 0)
+	local side = if door:GetAttribute("DobradicaDireita") == true then 1 else -1
+	local hinge = closed * CFrame.new(side * width / 2, 0, 0)
+	local angle = if open then -side * OPEN_ANGLE else 0
+	return hinge * CFrame.Angles(0, angle, 0) * CFrame.new(-side * width / 2, 0, 0)
 end
 
 local function setOpen(door: BasePart, open: boolean, prompt: ProximityPrompt)

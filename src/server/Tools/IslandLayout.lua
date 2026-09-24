@@ -38,9 +38,9 @@
 	PoiGenerator.Generate() não constrói mais casinha pequena nelas (as
 	funções buildCamp/buildCabinCluster/buildVillage continuam no código,
 	só não são chamadas). O raio de cada site (CONFIG.Sites) foi aumentado
-	pra caber ~2 casas grandes por clareira; use o marcador em
-	Workspace.Ilha.Layout.<nome> (Attributes Poi/Raio) pra saber onde
-	encaixar as casas na mão.
+	pra caber ~2 casas grandes por clareira; Tools/HouseGenerator lê o
+	marcador Workspace.Ilha.Layout.<nome> (Attributes Poi/Raio) e põe as
+	casas (docs/Casas.md).
 
 	TRILHAS: um loop passando pelos POIs "de morador" (ordenados por ângulo
 	em volta do centro) + ramais pra Torre, Farol, Ruínas e boca da Caverna.

@@ -166,7 +166,7 @@ local function canUseSelection(player: Player): boolean
 		and player.Parent == Players
 		and player:GetAttribute("CharacterSelectOpen") == true
 		and player:GetAttribute("Role") ~= GameConfig.Roles.Monster
-		and ReplicatedStorage:GetAttribute("MatchState") == "Selecting"
+		and ReplicatedStorage:GetAttribute("MatchState") == "CharacterSelection"
 		and Workspace:GetServerTimeNow() < selectionEndsAt
 end
 

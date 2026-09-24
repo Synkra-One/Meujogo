@@ -2,10 +2,12 @@
 -- Autoridade de alcance/oclusao para itens e tasks. RequiresLineOfSight
 -- cuida do prompt no cliente; esta checagem protege a acao no servidor.
 local Workspace = game:GetService("Workspace")
+local MatchStateService = require(script.Parent.MatchStateService)
 
 local InteractionGuard = {}
 
 function InteractionGuard.CanReach(player: Player, target: BasePart, maxDistance: number): boolean
+	if not MatchStateService.IsGameplayEnabled(player) then return false end
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")

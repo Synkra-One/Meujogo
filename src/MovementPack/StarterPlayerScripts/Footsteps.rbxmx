@@ -24,6 +24,17 @@ local MaxDistance = 250 -- if any character is beyond this distance they wont ma
 
 local LocalPlayer = Players.LocalPlayer
 
+local function movementBlocked(Character: Model?): boolean
+	local owner = Character and Players:GetPlayerFromCharacter(Character)
+	if owner then
+		local state = ReplicatedStorage:GetAttribute("MatchState")
+		return owner:GetAttribute("MovementLocked") == true
+			or state == "CharacterSelection"
+			or state == "Loading"
+	end
+	return false
+end
+
 local Modules = ReplicatedStorage:WaitForChild("Modules")
 local FootstepModule = require(Modules:WaitForChild("FootstepModule"))
 
@@ -45,6 +56,8 @@ local function GetRandomFromTable(Table:{any})
 end
 
 local function PlayRandomSound(Directory:Folder,PlayAt:BasePart|Attachment,Speed:number)
+	local character = PlayAt and PlayAt:FindFirstAncestorOfClass("Model")
+	if movementBlocked(character) then return end
 	local Sound:Sound = GetRandomFromTable(Directory)
 
 	if Sound.IsLoaded then
@@ -212,6 +225,9 @@ local function OnCharacterAdded(Character:Model)
 	end
 
 	local function CanFootstep()
+		if movementBlocked(Character) then
+			return false
+		end
 		local shadowState = Character:GetAttribute("ShadowRushState")
 		if shadowState == "EnteringShadow" or shadowState == "ShadowRush" then
 			return false -- a forma sombria desliza no ar; nenhum passo deve tocar
@@ -222,6 +238,7 @@ local function OnCharacterAdded(Character:Model)
 	local function StateChanged(old,new)
 		HumanoidState = new
 		FloorMaterial = Humanoid.FloorMaterial
+		if movementBlocked(Character) then return end
 		local shadowState = Character:GetAttribute("ShadowRushState")
 		if shadowState == "EnteringShadow" or shadowState == "ShadowRush" then return end
 

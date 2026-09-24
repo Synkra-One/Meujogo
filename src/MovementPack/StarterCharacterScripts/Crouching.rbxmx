@@ -93,12 +93,12 @@ local CONFIG = {
 	CrawlIdleAnimSpeed   = 1.0,
 	CrawlWalkAnimSpeed   = 1.0,
 
-	DefaultFOV   = 70,
-	SprintFOV    = 90,
-	JogFOV       = 78, -- [Meujogo] entre o padrao (70) e o de correr (90)
+	DefaultFOV   = 68,
+	SprintFOV    = 75,
+	JogFOV       = 71,
 	JogFOVTime   = 0.3,
-	CrouchFOV    = 62,
-	CrawlFOV     = 55,
+	CrouchFOV    = 66,
+	CrawlFOV     = 64,
 
 	SprintFOVTime  = 0.35,
 	CrouchFOVTime  = 0.4,
@@ -376,10 +376,17 @@ end
 -- =============================================
 -- [Meujogo] Movimento e mira compartilham o mesmo tween de FOV.
 local movementFOV = CONFIG.DefaultFOV
+Character:SetAttribute("MovementCameraFOV", movementFOV)
 local function tweenFOV(target, duration)
 	movementFOV = target
+	Character:SetAttribute("MovementCameraFOV", target)
+	if plr:GetAttribute("AdaptiveShoulderCameraActive") == true then
+		if fovTween then fovTween:Cancel(); fovTween = nil end
+		return
+	end
 	Camera = workspace.CurrentCamera
 	if not Camera then return end
+	if Camera.CameraType ~= Enum.CameraType.Custom then return end
 	if Character:GetAttribute("FirearmAiming") == true then
 		local aimFOV = Character:GetAttribute("FirearmAimFOV")
 		target = math.min(target, if type(aimFOV) == "number" then aimFOV else 62)
@@ -407,6 +414,9 @@ Character:GetAttributeChangedSignal("ShadowRushFOV"):Connect(function()
 	tweenFOV(movementFOV, 0.12)
 end)
 Character:GetAttributeChangedSignal("ShadowRushBusy"):Connect(function()
+	tweenFOV(movementFOV, 0.2)
+end)
+plr:GetAttributeChangedSignal("AdaptiveShoulderCameraActive"):Connect(function()
 	tweenFOV(movementFOV, 0.2)
 end)
 workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()

@@ -261,7 +261,6 @@ local function updateEffects(player: Player, state: State, root: BasePart, dt: n
 	local running = humanoid ~= nil and not root.Anchored and humanoid.FloorMaterial ~= Enum.Material.Air
 		and humanoid.FloorMaterial ~= Enum.Material.Water and not humanoid.Sit
 		and humanoid:GetState() ~= Enum.HumanoidStateType.Swimming
-		and player:GetAttribute("Amarrado") ~= true
 		and horizontalVelocity(root).Magnitude > StatScaling.WalkSpeed(player) * GameConfig.Characters.SprintSpeedRatio
 	if state.value >= CFG.TripMinFear and running and not state.trip and now >= state.tripCooldownUntil then
 		state.tripCheck += dt

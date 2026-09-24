@@ -29,7 +29,7 @@ type Kind = "Hit" | "Finish"
 
 local ITEM_ATTRIBUTE = "TacoBeisebol"
 -- Mesma lista da FlashlightPose: estados que tomam o controle do corpo.
-local BLOCKING_FLAGS = { "GrabLocked", "ShadowRushBusy", "TeleportBusy", "PowerStunned", "Amarrado", "FearTripping" }
+local BLOCKING_FLAGS = { "GrabLocked", "ShadowRushBusy", "TeleportBusy", "PowerStunned", "FearTripping" }
 
 local player = Players.LocalPlayer
 

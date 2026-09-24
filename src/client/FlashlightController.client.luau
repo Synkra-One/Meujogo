@@ -57,6 +57,7 @@ local function canUseRole(): boolean
 end
 
 local function blockedReason(): string?
+	if player:GetAttribute("GameplayEnabled") ~= true then return "estado de preparação" end
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	if not character or not humanoid or humanoid.Health <= 0 or not equipped or equipped.Parent ~= character
@@ -277,6 +278,21 @@ local beforeSimulation = RunService.PreSimulation:Connect(function(dt)
 			tool:GetAttribute("FlashlightOn") == true, dt)
 	end
 end)
+-- A luz/feixe (FlashlightVisuals) precisa ler a pose do braço JA aplicada
+-- neste quadro. PreRender (onde o resto da lanterna roda, abaixo) acontece
+-- ANTES de PreAnimation/PreSimulation no mesmo quadro -- ler a pose dali
+-- pegava sempre o resultado do quadro ANTERIOR, e em giros rapidos a luz
+-- ficava visivelmente atrasada em relacao ao modelo da lanterna.
+-- PostSimulation roda depois da fisica, entao a pose ja assentou.
+local afterSimulation = RunService.PostSimulation:Connect(function()
+	local allowed = eligible()
+	for tool, owner in visibleTools do
+		local isLocal = owner == player
+		local on = if isLocal then predicted and allowed else tool:GetAttribute("FlashlightOn") == true
+		Visuals.Update(tool, on)
+	end
+	Visuals.UpdateImpacts(Players:GetPlayers())
+end)
 
 RunService:BindToRenderStep("SurvivorFlashlight", Enum.RenderPriority.Camera.Value + 2, function(dt)
 	local now, camera = os.clock(), workspace.CurrentCamera
@@ -303,12 +319,6 @@ RunService:BindToRenderStep("SurvivorFlashlight", Enum.RenderPriority.Camera.Val
 			Remotes.Flashlight:FireServer("Aim", equipped, aimDirection)
 		end
 	end
-	for tool, owner in visibleTools do
-		local isLocal = owner == player
-		local on = if isLocal then predicted and allowed else tool:GetAttribute("FlashlightOn") == true
-		Visuals.Update(tool, on)
-	end
-	Visuals.UpdateImpacts(Players:GetPlayers())
 	if now - lastHUD >= 0.05 then
 		lastHUD = now
 		hud:Update(equipped ~= nil and canUseRole(),
@@ -321,6 +331,7 @@ script.Destroying:Connect(function()
 	RunService:UnbindFromRenderStep("SurvivorFlashlight")
 	beforeAnimation:Disconnect()
 	beforeSimulation:Disconnect()
+	afterSimulation:Disconnect()
 	unequip()
 	pose:Destroy()
 	for tool, remotePose in remotePoses do

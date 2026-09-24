@@ -73,12 +73,6 @@ end
 -- Os SoundIds abaixo ja existem em WeaponAssets/Audios.rbxmx (Metal/Wood).
 -- HitboxSize e largura/altura/profundidade; ForwardOffset desloca a caixa para
 -- a frente do HumanoidRootPart. Todos os tempos sao segundos desde AttackStart.
-local wrench = profile("PedraAfiada", {
-	HitboxSize = Vector3.new(2.4, 2.8, 4.2), ForwardOffset = 2.8,
-	HitStart = 0.12, HitEnd = 0.27, AttackEnd = 0.58,
-	ImpactSound = "rbxassetid://1565756818", ImpactColor = Color3.fromRGB(205, 225, 255), ImpactShake = 0.10,
-})
-
 local crowbar = profile("LancaDeBambu", {
 	HitboxSize = Vector3.new(3.1, 3.2, 5.7), ForwardOffset = 3.4,
 	HitStart = 0.18, HitEnd = 0.39, AttackEnd = 0.92,
@@ -99,22 +93,12 @@ local bat = profile("TacoBeisebol", {
 	Heavy = batHeavy,
 })
 
--- Mantem a faca legado funcional sem criar uma quarta configuracao publica.
-local fallback = profile("FacaImprovisada", {
-	HitboxSize = Vector3.new(2.2, 2.6, 3.2), ForwardOffset = 2.3,
-	HitStart = 0.11, HitEnd = 0.25, AttackEnd = 0.55,
-	ImpactSound = "rbxassetid://1565756818", ImpactColor = Color3.fromRGB(220, 220, 220), ImpactShake = 0.09,
-})
-
 local byAttribute: { [string]: Profile } = {
-	PedraAfiada = wrench,
 	LancaDeBambu = crowbar,
 	TacoBeisebol = bat,
-	FacaImprovisada = fallback,
 }
 
 local WeaponCombatConfig = {
-	Wrench = wrench,
 	Crowbar = crowbar,
 	BaseballBat = bat,
 	Debug = table.freeze({

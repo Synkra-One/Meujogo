@@ -45,6 +45,7 @@ local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local SafeAttribute = require(ReplicatedStorage.Modules.SafeAttribute)
 local RepairMinigameSystem = require(script.Parent.RepairMinigameSystem)
+local MatchStateService = require(script.Parent.MatchStateService)
 
 local SabotageSystem = {}
 
@@ -110,6 +111,7 @@ local function applySabotage(player: Player, target: Instance)
 end
 
 local function onSabotageAction(player: Player, target: unknown)
+	if not MatchStateService.IsGameplayEnabled(player) then return end
 	if player:GetAttribute("Role") ~= GameConfig.Roles.Spy then
 		return
 	end
@@ -117,10 +119,6 @@ local function onSabotageAction(player: Player, target: unknown)
 		return
 	end
 
-	-- Amarrado (ConfrontSystem) bloqueia a sabotagem.
-	if player:GetAttribute("Amarrado") == true then
-		return
-	end
 
 	if isOnCooldown(player) then
 		return
@@ -164,6 +162,9 @@ end
 -- Revalidada pelo minigame a cada tique: outro sobrevivente terminar o reparo
 -- (ou o Espião desfazer a sabotagem) derruba a sessão de quem ficou pra trás.
 local function canRepair(player: Player, target: Instance): (boolean, string?)
+	if not MatchStateService.IsGameplayEnabled(player) then
+		return false, "A partida ainda não começou."
+	end
 	if player:GetAttribute("Role") ~= GameConfig.Roles.Survivor then
 		return false, "Só os Sobreviventes consertam o fio."
 	end

@@ -43,6 +43,96 @@
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+-- O sistema antigo de jangada foi removido, mas mapas salvos anteriormente
+-- ainda podem carregar sua área de construção e o kit de teste neon. Limpa
+-- somente os nomes/atributos exclusivos daquele sistema; as peças atuais do
+-- rádio usam peças metálicas próprias e permanecem intactas.
+local function removeLegacyRaftObjects()
+	local legacyStructureNames = {
+		PraiaJangada = true,
+		Jangada = true,
+		LocalJangada = true,
+		KitTesteJangada = true,
+		KitJangada = true,
+	}
+	local legacyItemNames = {
+		Madeira = true,
+		Corda = true,
+		Lona = true,
+		PecaMadeira = true,
+		PecaCorda = true,
+		PecaLona = true,
+	}
+	local ilha = Workspace:FindFirstChild("Ilha")
+
+	local function isInsideGeneratedItems(descendant: Instance): boolean
+		local itemsFolder = descendant:FindFirstAncestor("Itens")
+		return ilha ~= nil and itemsFolder ~= nil and itemsFolder:IsDescendantOf(ilha)
+	end
+
+	for _, descendant in Workspace:GetDescendants() do
+		if descendant.Parent and legacyStructureNames[descendant.Name] then
+			descendant:Destroy()
+		elseif descendant.Parent and (
+			descendant:GetAttribute("MaterialJangada") == true
+				or descendant:GetAttribute("TipoMaterial") ~= nil
+		) then
+			-- Esses atributos eram exclusivos dos materiais da jangada; podem ser
+			-- apagados mesmo se o mapa antigo os tiver salvo fora de Itens.
+			descendant:Destroy()
+		elseif descendant.Parent and isInsideGeneratedItems(descendant) then
+			local oldRadioBlock = descendant:IsA("BasePart")
+				and descendant:GetAttribute("PecaRadio") == true
+				and descendant.Material == Enum.Material.Neon
+			if legacyItemNames[descendant.Name] or oldRadioBlock then
+				descendant:Destroy()
+			end
+		end
+	end
+end
+
+removeLegacyRaftObjects()
+
+-- Remove pickups/tools de itens aposentados que possam ter ficado salvos no
+-- mapa ou sido gerados por uma versão anterior do ItemSpawner. A limpeza é
+-- deliberadamente baseada em IDs/Attributes explícitos para não confundir
+-- pedras e tábuas que são apenas parte da decoração do mapa.
+local function removeRetiredItemObjects()
+	local retiredIds = {
+		FacaImprovisada = true,
+		PedraAfiada = true,
+	}
+	local retiredNames = {
+		FacaImprovisada = true,
+		["Faca Improvisada"] = true,
+		PedraAfiada = true,
+		["Pedra Afiada"] = true,
+		["Chave inglesa"] = true,
+		Wrench = true,
+	}
+
+	for _, descendant in Workspace:GetDescendants() do
+		if not descendant.Parent then
+			continue
+		end
+		local worldItemId = descendant:GetAttribute("WorldItemId")
+		if (typeof(worldItemId) == "string" and retiredIds[worldItemId]) or retiredNames[descendant.Name] then
+			descendant:Destroy()
+			continue
+		end
+		if descendant:IsA("Tool") then
+			for itemId in retiredIds do
+				if descendant:GetAttribute(itemId) == true then
+					descendant:Destroy()
+					break
+				end
+			end
+		end
+	end
+end
+
+removeRetiredItemObjects()
+
 local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local LightingPresets = require(ReplicatedStorage.Modules.LightingPresets)
 local lightingOk, lightingErr = pcall(function()
@@ -97,6 +187,10 @@ safeInit("MonsterAnimationRigValidation", script.MonsterAnimationRigValidation)
 -- Primeiro teste isolado: Mesh_AlpTrees4 tem colisao de copa muito maior que
 -- o tronco visual. Corrige todas as copias salvas somente dessa variante.
 safeInit("TreeCollisionFix", script.TreeCollisionFix)
+-- Estado de partida vem antes de qualquer sistema de interação/combate:
+-- durante Lobby, sorteio e carregamento o servidor também assume a raiz do
+-- personagem e publica GameplayEnabled=false.
+safeInit("MatchStateService", script.MatchStateService)
 safeInit("LobbyManager", script.LobbyManager)
 
 safeInit("DataStoreManager", script.DataStoreManager)
@@ -111,6 +205,7 @@ safeInit("TestRigSwap", script.TestRigSwap)
 safeInit("StaminaSystem", script.StaminaSystem)
 safeInit("FearSystem", script.FearSystem)
 safeInit("NoiseService", script.NoiseService)
+safeInit("HeartbeatDetection", script.HeartbeatDetection)
 -- DamageSystem antes de OTSFirearmService/WeaponSystem: os dois roteiam o dano por
 -- ele (require no topo já resolve o módulo; Init() só liga MaxHealth + regen).
 safeInit("DamageSystem", script.DamageSystem)
@@ -177,6 +272,10 @@ safeInit("LobbyFiringRange", script.LobbyFiringRange)
 safeInit("DoorSystem", script.DoorSystem)
 -- Depois de CharacterStatsApplier: o sorteio da caixa lê a Sorte publicada.
 safeInit("LootCrateSystem", script.LootCrateSystem)
+-- Gavetas das casas grandes (Tools/Houses): abrir/fechar, loot por rodada e
+-- "Guardar item". Depois de DropItemSystem (o item dentro é um pickup dele)
+-- e de CharacterStatsApplier (a Sorte de quem abre decide a raridade).
+safeInit("DrawerSystem", script.DrawerSystem)
 -- Depois de WeaponSpawner/LootCrateSystem/DropItemSystem: marca no mapa de
 -- cada jogador os itens do mundo que ele passar perto (Q do Monstro / M do
 -- Sobrevivente-Espião). Observa o Workspace por evento, então pega tanto o

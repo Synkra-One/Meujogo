@@ -163,30 +163,6 @@ local function candidatePoints(zone: string, rng: Random): { Vector3 }
 	return pointsFromPath(path)
 end
 
---------------------------------------------------------------------------------
--- Criação das Parts
---------------------------------------------------------------------------------
-
-local function newPickupAnchor(name: string, position: Vector3, parent: Instance): Part
-	local part = Instance.new("Part")
-	part.Name = name
-	part.Size = Vector3.new(1.2, 1.2, 1.2)
-	part.Position = position
-	part.Anchored = true
-	part.CanCollide = false
-	part.Material = Enum.Material.Neon
-	part.Parent = parent
-	return part
-end
-
-local function spawnMaterialPart(itemId: string, category: string, position: Vector3, parent: Instance)
-	local part = newPickupAnchor(itemId, position, parent)
-	part.Color = Color3.fromRGB(255, 195, 70)
-
-	part:SetAttribute("PecaRadio", true)
-	part:SetAttribute("TipoPeca", itemId)
-end
-
 local function spawnToolPickup(itemId: string, displayName: string, position: Vector3, parent: Instance)
 	local tool = ToolFactory.Create(itemId)
 	if not tool then
@@ -283,8 +259,6 @@ function ItemSpawner.SpawnSampleNear(position: Vector3?, spacing: number?)
 
 		if def.Category == "Tool" then
 			spawnToolPickup(itemId, def.DisplayName, placePosition, itens :: Folder)
-		else
-			spawnMaterialPart(itemId, def.Category, placePosition, itens :: Folder)
 		end
 	end
 
@@ -349,11 +323,8 @@ function ItemSpawner.Generate(seed: number?)
 
 					if def.Category == "Tool" then
 						spawnToolPickup(itemId, def.DisplayName, position, itens)
-					else
-						spawnMaterialPart(itemId, def.Category, position, itens)
+						placed += 1
 					end
-
-					placed += 1
 				end
 			end
 

@@ -180,11 +180,21 @@ function VFX.Play(id: string, character: Model?, position: Vector3, duration: nu
 					then Enum.AnimationPriority.Action4
 					else Enum.AnimationPriority.Action
 				track.Looped = false
-				track:Play(0.12)
+				-- O começo precisa manter o ritmo original. No Diego, a parte
+				-- de sentar e trabalhar com os braços fica mais lenta somente
+				-- depois da metade do asset.
+				track:Play(0.12, 1, 1)
+				if id == "ArmadilhaImprovisada" then
+					session.trapOriginalLength = track.Length
+					session.trapSlowed = false
+				end
 				-- O servidor coloca a trap no meio do gesto; mantenha o track
 				-- vivo até o fim mesmo quando a duração enviada for curta.
 				if track.Length > 0 then
-					session.endsAt = math.max(session.endsAt, os.clock() + track.Length + 0.15)
+					local playedLength = if id == "ArmadilhaImprovisada"
+						then track.Length * 1.5 -- metade normal + metade a 0.5x
+						else track.Length
+					session.endsAt = math.max(session.endsAt, os.clock() + playedLength + 0.15)
 				end
 			elseif not ok then
 				warn(string.format("[SurvivorPowerVFX] Não foi possível carregar a animação de %s (%s).", id, asset.AnimationId))
@@ -201,6 +211,18 @@ function VFX.Step()
 		local session = sessions[index]
 		local character = session.character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if session.id == "ArmadilhaImprovisada" and session.track and not session.trapSlowed then
+			local originalLength = session.trapOriginalLength
+			if (not originalLength or originalLength <= 0) and session.track.Length > 0 then
+				originalLength = session.track.Length
+				session.trapOriginalLength = originalLength
+				session.endsAt = math.max(session.endsAt, now + originalLength * 1.5 + 0.15)
+			end
+			if originalLength and originalLength > 0 and session.track.TimePosition >= originalLength * 0.5 then
+				session.track:AdjustSpeed(0.5)
+				session.trapSlowed = true
+			end
+		end
 		local expired = now >= session.endsAt or (character and (not character.Parent or not humanoid or humanoid.Health <= 0))
 		if session.persistent and now - session.born > 0.3 and not character:GetAttribute(watchedAttributes[session.id]) then expired = true end
 		if expired then clean(session); table.remove(sessions, index)

@@ -163,6 +163,8 @@ local function roomSnapshot()
 end
 
 local config = loadModule("GameConfig")
+-- Este spec cobre também o fluxo solo; o produto mantém SoloStart desligado.
+config.Testing.SoloStart = true
 local data = loadModule("CharacterData")
 local selectionConfig = loadModule("SurvivorSelectionConfig")
 local selection = loadModule("CharacterStatsApplier")
@@ -192,8 +194,12 @@ roomRequest(alice, "Ready")
 roomRequest(bob, "Ready")
 roomRequest(monster, "Ready")
 
+local countdown = roomSnapshot()
+assert(countdown.state == "Countdown" and countdown.endsAt > clock,
+	"all ready must open the five-second queue countdown")
+advance(config.WaitingRoom.StartCountdownDuration)
 local revealing = roomSnapshot()
-assert(revealing.state == "Revealing", "all ready must reveal roles before selection")
+assert(revealing.state == "Revealing", "countdown must reveal roles before selection")
 advance(selectionConfig.RoleRevealDuration)
 local opened = roomSnapshot()
 assert(opened.state == "Selecting", "reveal must open the selection phase")
@@ -233,18 +239,19 @@ local late = player(4)
 room.Join(late)
 assert(late:GetAttribute("InWaitingRoom") == nil, "late joins stay outside an active match")
 
--- Sem clique, o prazo confirma automaticamente o default e inicia a partida.
+-- Sem clique, o fallback curto confirma automaticamente o default e inicia a partida.
 room.Reset()
 room.OpenLobby()
 room.Join(alice)
 roomRequest(alice, "DevRole", config.Roles.Survivor)
 roomRequest(alice, "Ready")
+advance(config.WaitingRoom.StartCountdownDuration)
 assert(roomSnapshot().state == "Revealing")
 advance(selectionConfig.RoleRevealDuration)
 assert(roomSnapshot().state == "Selecting" and selection.GetChoice(alice) == nil)
-advance(selectionConfig.Duration + 0.1)
+advance(selectionConfig.AutoConfirmDelay + 0.1)
 flushSpawned()
-assert(#started == 2 and selection.IsConfirmed(alice), "timeout must auto-confirm and start")
+assert(#started == 2 and selection.IsConfirmed(alice), "client fallback must auto-confirm and start")
 assert(alice:GetAttribute("CharacterId") == first)
 
 -- Estados futuros bloqueados tambem sao validados pelo servidor, nao so pela UI.
@@ -254,6 +261,7 @@ selectionConfig.Availability[first] = "Locked"
 room.Join(bob)
 roomRequest(bob, "DevRole", config.Roles.Survivor)
 roomRequest(bob, "Ready")
+advance(config.WaitingRoom.StartCountdownDuration)
 advance(selectionConfig.RoleRevealDuration)
 assert(selection.GetChoice(bob) == nil, "locked survivor must not be auto-selected")
 pick(bob, first)
@@ -274,6 +282,7 @@ room.OpenLobby()
 room.Join(alice)
 roomRequest(alice, "DevRole", config.Roles.Survivor)
 roomRequest(alice, "Ready")
+advance(config.WaitingRoom.StartCountdownDuration)
 advance(selectionConfig.RoleRevealDuration)
 pick(alice, third)
 advance(selectionConfig.Duration + 0.1)
@@ -281,13 +290,41 @@ flushSpawned()
 assert(#started == 4 and selection.IsConfirmed(alice) and alice:GetAttribute("CharacterId") == third,
 	"timeout must confirm the selected survivor, not replace it with the default")
 
--- Fora do modo solo, um unico jogador nao abre a selecao.
+-- O painel Dev pode liberar um teste solo sem alterar o modo de producao.
 room.Reset()
 room.OpenLobby()
 config.Testing.SoloStart = false
 room.Join(monster)
+roomRequest(monster, "DevRole", config.Roles.Survivor)
+assert(roomSnapshot().minimum == 1, "Dev role selection must allow a solo test")
 roomRequest(monster, "Ready")
-assert(roomSnapshot().state == "Waiting" and roomSnapshot().endsAt == 0)
+advance(config.WaitingRoom.StartCountdownDuration)
+advance(selectionConfig.RoleRevealDuration)
+assert(roomSnapshot().state == "Selecting")
+advance(selectionConfig.AutoConfirmDelay + 0.1)
+flushSpawned()
+assert(#started == 5 and monster:GetAttribute("InRound") == true, "Dev solo test must enter the match")
+
+-- Monstro solo pula a seleção humana, mas percorre o mesmo Starting e deve
+-- chegar à partida sem o RoundManager exigir um segundo jogador.
+room.Reset()
+room.OpenLobby()
+room.Join(monster)
+roomRequest(monster, "DevRole", config.Roles.Monster)
+assert(roomSnapshot().minimum == 1, "Dev monster role must allow a solo test")
+roomRequest(monster, "Ready")
+advance(config.WaitingRoom.StartCountdownDuration)
+advance(selectionConfig.RoleRevealDuration)
+flushSpawned()
+assert(#started == 6 and started[6][1]:GetAttribute("Role") == config.Roles.Monster,
+	"Dev monster solo test must skip human selection and enter the match")
+
+-- Fora do modo solo e sem um papel Dev selecionado, um unico jogador nao abre a selecao.
+room.Reset()
+room.OpenLobby()
+room.Join(monster)
+roomRequest(monster, "Ready")
+assert(roomSnapshot().state == "Waiting" and roomSnapshot().endsAt == 0 and roomSnapshot().minimum == 2)
 
 -- Perks continuam mecanicos apenas durante a rodada.
 local scaling = loadModule("StatScaling")

@@ -31,6 +31,7 @@ local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local ItemRegistry = require(ReplicatedStorage.Modules.ItemRegistry)
 local SafeAttribute = require(ReplicatedStorage.Modules.SafeAttribute)
 local DamageSystem = require(script.Parent.DamageSystem)
+local MatchStateService = require(script.Parent.MatchStateService)
 
 local UtilityItemSystem = {}
 
@@ -41,6 +42,7 @@ local watchedTools: { [Tool]: true } = {}
 --------------------------------------------------------------------------------
 
 local function onChocolateActivated(player: Player, tool: Tool)
+	if not MatchStateService.IsGameplayEnabled(player) then return end
 	local character = player.Character
 	if character and (character:GetAttribute("ShadowRushBusy") == true
 		or character:GetAttribute("GrabLocked") == true) then return end
@@ -98,6 +100,7 @@ local function playHealAnimation(humanoid: Humanoid): AnimationTrack?
 end
 
 local function onBandagemActivated(player: Player, tool: Tool)
+	if not MatchStateService.IsGameplayEnabled(player) then return end
 	if player.Character and (player.Character:GetAttribute("ShadowRushBusy") == true
 		or player.Character:GetAttribute("GrabLocked") == true) then return end
 	if healingNow[player] then

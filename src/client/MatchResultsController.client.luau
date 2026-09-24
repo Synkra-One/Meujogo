@@ -264,10 +264,29 @@ local function build(payload: Types.ResultsPayload)
 	reason.TextTruncate = Enum.TextTruncate.None
 
 	makeRow("Seu papel", tostring(payload.Role), TEXT)
+	if payload.Escaped then
+		local method = if payload.EscapeMethod == "Helicoptero" then "helicóptero" else payload.EscapeMethod
+		makeRow("Seu destino", if method then "Escapou de " .. method else "Escapou", POSITIVE)
+	elseif payload.Eliminated then
+		makeRow("Seu destino", "Eliminado", NEGATIVE)
+	end
 
 	if payload.IsMVP then
 		local mvp = makeLabel("★  MELHOR DA PARTIDA", 18, GOLD, Enum.Font.SourceSansBold, 26)
 		mvp.Name = "MVPBadge"
+	end
+	makeSectionTitle("Seus destaques")
+	local hasMine = false
+	for _, highlight in payload.Highlights do
+		if highlight.UserId == LocalPlayer.UserId then
+			hasMine = true
+			local row = makeRow(highlight.Name, tostring(highlight.Value), GOLD)
+			local name = row:FindFirstChildOfClass("TextLabel")
+			if name then name.TextColor3 = GOLD end
+		end
+	end
+	if not hasMine then
+		makeRow("Nenhum destaque nesta partida", "", DIM)
 	end
 
 	----------------------------------------------------------------------------
@@ -357,23 +376,14 @@ local function build(payload: Types.ResultsPayload)
 	----------------------------------------------------------------------------
 	-- Destaques da partida (públicos)
 	----------------------------------------------------------------------------
-	makeSectionTitle("Destaques da partida")
-	if #payload.Highlights == 0 then
-		makeRow("Nenhum destaque nesta partida", "", DIM)
-	else
-		for _, highlight in payload.Highlights do
-			local isMine = highlight.UserId == LocalPlayer.UserId
-			local row = makeRow(
-				string.format("%s — %s", highlight.Name, highlight.PlayerName),
-				tostring(highlight.Value),
-				if isMine then GOLD else TEXT
-			)
-			if isMine then
-				local mine = row:FindFirstChildOfClass("TextLabel")
-				if mine then
-					mine.TextColor3 = GOLD
-				end
+	local hasOthers = false
+	for _, highlight in payload.Highlights do
+		if highlight.UserId ~= LocalPlayer.UserId then
+			if not hasOthers then
+				makeSectionTitle("Outros destaques")
+				hasOthers = true
 			end
+			makeRow(string.format("%s — %s", highlight.Name, highlight.PlayerName), tostring(highlight.Value), TEXT)
 		end
 	end
 end

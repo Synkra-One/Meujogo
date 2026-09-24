@@ -81,7 +81,7 @@ end)
 
 -- Remove our previous impulse before the existing camera controller runs.
 RunService:BindToRenderStep("ShadowRushUnshake", Enum.RenderPriority.Camera.Value - 1, view.Unshake)
-RunService:BindToRenderStep("ShadowRushPresentation", Enum.RenderPriority.Camera.Value + 1, function(dt)
+RunService:BindToRenderStep("ShadowRushPresentation", Enum.RenderPriority.Camera.Value + 4, function(dt)
 	accumulator += dt
 	local char = player.Character
 	if oldCharacter ~= char then

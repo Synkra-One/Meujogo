@@ -71,6 +71,9 @@ local function activeRoot(player: Player, role: string): BasePart?
 	return root
 end
 
+-- Porta de validação compartilhada com a audição de batimentos.
+NoiseService.GetActiveRoot = activeRoot
+
 -- Descarte silencioso é o comportamento normal (não revela nada pro cliente),
 -- mas em desenvolvimento ele é exatamente o que esconde o motivo de "não
 -- aparece nada". Com Debug.Verbose cada recusa diz por quê.
@@ -271,7 +274,7 @@ local function sample(player: Player, character: Model, humanoid: Humanoid, root
 	end
 	observeState(player, record, humanoid, root, humanoid:GetState())
 	if not record.grounded or root.Anchored or humanoid.Sit
-		or player:GetAttribute("Amarrado") == true or character:GetAttribute("GrabLocked") == true
+		or character:GetAttribute("GrabLocked") == true
 		or character:GetAttribute("PowerStunned") == true then return end
 	local now = os.clock()
 	if now - record.bornAt < CFG.SpawnGrace or now - record.lastLanding < CFG.MinAirTime then return end

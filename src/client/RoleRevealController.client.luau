@@ -16,7 +16,7 @@
 	Reaparece toda rodada -- o papel muda entre partidas.
 
 	SEQUÊNCIA (~7s):
-	  0.0s  overlay escurece
+	  0.0s  a tela escurece completamente
 	  0.4s  começa a embaralhar "SOBREVIVENTE / MONSTRO / ESPIÃO" (tick a cada troca)
 	  ~3s   trava no papel real: flash branco, punch de escala, cor do papel, som
 	  ~3.3s aparece "VOCÊ É O MONSTRO" + objetivo em 1 linha
@@ -24,7 +24,6 @@
 ]]
 
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -85,6 +84,15 @@ local function setControlsEnabled(enabled: boolean)
 	end
 end
 
+local function releaseControlsAfterReveal()
+	-- O sorteio termina antes de CharacterSelection/Loading. Só InMatch pode
+	-- liberar controles; o controlador central mantém a trava até lá.
+	if ReplicatedStorage:GetAttribute("MatchState") == "InMatch"
+		and LocalPlayer:GetAttribute("GameplayEnabled") == true then
+		setControlsEnabled(true)
+	end
+end
+
 --------------------------------------------------------------------------------
 -- UI (construída uma vez)
 --------------------------------------------------------------------------------
@@ -93,13 +101,15 @@ local gui = Instance.new("ScreenGui")
 gui.Name = "RoleRevealHUD"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
-gui.DisplayOrder = 20
+-- Acima de qualquer HUD de lobby/gameplay: durante o sorteio só o texto do
+-- papel pode aparecer sobre o preto.
+gui.DisplayOrder = 900
 gui.Enabled = false
 gui.Parent = playerGui
 
 local overlay = Instance.new("Frame")
 overlay.Size = UDim2.fromScale(1, 1)
-overlay.BackgroundColor3 = Color3.fromRGB(6, 6, 8)
+overlay.BackgroundColor3 = Color3.new(0, 0, 0)
 overlay.BackgroundTransparency = 1
 overlay.BorderSizePixel = 0
 overlay.Parent = gui
@@ -202,7 +212,7 @@ local function playReveal(role: string)
 	-- volta sozinho em 12s (a sequência normal leva ~7s).
 	task.delay(12, function()
 		if runToken == myToken then
-			setControlsEnabled(true)
+			releaseControlsAfterReveal()
 		end
 	end)
 
@@ -221,12 +231,16 @@ local function playReveal(role: string)
 	objectiveLabel.TextTransparency = 1
 	kicker.TextTransparency = 1
 
-	fade(overlay, { BackgroundTransparency = 0.12 }, 0.35)
-	fade(kicker, { TextTransparency = 0.15 }, 0.4)
-	fade(roleLabel, { TextTransparency = 0 }, 0.3)
+	-- Primeiro fecha o mundo até preto total. O texto só começa depois, para
+	-- nunca enxergar o lobby ou o mapa por trás das palavras rodando.
+	fade(overlay, { BackgroundTransparency = 0 }, 0.35)
 
 	-- Caça-níquel: troca o texto com intervalo crescente (ease-out) até parar.
 	task.spawn(function()
+		task.wait(0.38)
+		if runToken ~= myToken then return end
+		fade(kicker, { TextTransparency = 0.15 }, 0.3)
+		fade(roleLabel, { TextTransparency = 0 }, 0.25)
 		local elapsed = 0
 		local duration = 2.6
 		local wheelIndex = 1
@@ -304,7 +318,7 @@ local function playReveal(role: string)
 		task.wait(0.55)
 		if runToken == myToken then
 			gui.Enabled = false
-			setControlsEnabled(true)
+			releaseControlsAfterReveal()
 		end
 	end)
 end

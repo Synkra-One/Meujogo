@@ -30,8 +30,8 @@
 	  (ToolFactory já copia pro TextureId). Enquanto o ID não vier, o slot
 	  mostra o modelo 3D real da arma, então nunca fica vazio.
 
-	Map aceita as duas chaves: a CHAVE de ItemRegistry.Items (ex:
-	"FacaImprovisada") ou o NOME da Tool (ex: "Glock17").
+	Map aceita as duas chaves: a CHAVE de ItemRegistry.Items ou o NOME da Tool
+	(ex: "Glock17").
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -43,9 +43,7 @@ local ItemIcons = {}
 -- existe -> usa miniatura do AssetId (se houver) ou o ícone-letra.
 ItemIcons.Map = {
 	-- Itens do ItemRegistry (chave = id do item)
-	FacaImprovisada = "",
 	LancaDeBambu = "",
-	PedraAfiada = "",
 	TacoBeisebol = "",
 	Tocha = "",
 	Lanterna = "",
