@@ -7,8 +7,8 @@ algo é suposição ou não foi verificado, está dito.
 
 > **Regra de ouro:** o código é a fonte da verdade. Os arquivos em `docs/`
 > foram escritos junto com cada funcionalidade e alguns já estão defasados
-> (por exemplo, um comentário no boot do servidor ainda fala em "fuga por
-> barco", mas a fuga hoje é por helicóptero). Quando um doc e o código
+> (por exemplo, `CombateParte1.md` ainda diz que a recarga da pistola está
+> desligada). Quando um doc e o código
 > divergirem, confie no código e corrija o doc.
 
 ---
@@ -37,7 +37,7 @@ Definido em `src/server/RoundManager.lua` (o cabeçalho do arquivo explica tudo)
 
 | Vencedor | Condição |
 | --- | --- |
-| **Sobreviventes** | o helicóptero decola com pelo menos um deles a bordo |
+| **Sobreviventes** | o helicóptero decola com pelo menos um deles a bordo, **ou** o barco de fuga cruza o limite do mapa com alguém a bordo ([Barco.md](Barco.md)) |
 | **Monstro** | não resta nenhum Sobrevivente vivo (`GameConfig.Round.MonsterWinsAtSurvivorsAlive = 0`); o Espião não conta como Sobrevivente |
 | **Espião** | o tempo acaba, ninguém escapou e ele ainda está vivo |
 | **Ninguém (empate)** | o tempo acaba, ninguém escapou e o Espião já morreu — esse caso não foi especificado pelo dono do jogo; o código escolheu empate (fácil de trocar em `resolveTimeout()`) |
@@ -51,7 +51,7 @@ Uma partida dura **20 minutos**, em 4 fases (`GameConfig.Phases`):
 ## 2. O ciclo completo do jogador
 
 1. **Menu inicial** (`src/ReplicatedFirst/`) — tela de carregamento própria,
-   "clique para começar", cena 3D escura com o monstro, botão **JOGAR**.
+   "clique para começar", cena 3D com Rafael, botão **ENTRAR** e créditos no rodapé.
    Ver [MenuInicial.md](MenuInicial.md).
 2. **Lobby** — um terminal de aeroporto abandonado, gerado por código.
    O jogador entra na fila pelo botão Jogar ou pelo prompt "Iniciar partida".
@@ -168,6 +168,14 @@ extração. O passo a passo completo está em [Radio.md](Radio.md) e
 
 Concluir o rádio **não ganha** a partida: até o helicóptero decolar o Monstro
 ainda pode virar o jogo.
+
+### 3.5b A outra fuga: o barco
+
+Independente do rádio. Achar Hélice, Vela de ignição, Chave e Gasolina,
+montar o motor da lancha (no píer perto do Farol, ou o barco do mapa marcado
+com `BarcoFuga = true`), dar partida e pilotar até o anel de boias do limite
+do mapa. Barco na areia = motor morre, como na vida real. Cruzou as boias com
+alguém a bordo: cena de fuga e vitória. Tudo em [Barco.md](Barco.md).
 
 ### 3.6 O mapa
 
@@ -328,7 +336,7 @@ publicado no Roblox / Team Create do dono. Ver seção 8 (primeiros passos).
 Loop completo de partida (fila → papéis → seleção → ilha → fases → resultado →
 lobby); 7 sobreviventes com poderes; Monstro com golpe, grab, shadow rush,
 teleporte, apagão e super audição; Espião com sabotagem, letal e confronto;
-objetivo do rádio de 6 passos e extração por helicóptero; medo, stamina,
+objetivo do rádio de 6 passos e extração por helicóptero; fuga de barco; medo, stamina,
 ruído, lanterna com disparo concentrado; loot, caixas, pistola; minigame de
 reparo; menu inicial; lobby de aeroporto; mapa gerado com 10+ POIs; XP, nível
 persistente e tela de resultados.
@@ -381,12 +389,14 @@ persistente e tela de resultados.
 **D. Limpeza antes de publicar** — flags de desenvolvimento ainda ligadas em
 `GameConfig.Testing`:
 - `SoloStart = true` (permite iniciar sozinho), `DevRoleChooser = true` +
-  `DevRoleUserIds` (painel para escolher o papel; **adicione o UserId do seu
-  amigo aqui** para ele usar o "Acesso rápido" do menu),
+  `DevRoleUserIds` (permissão de teste para escolher o papel no servidor;
+  o botão "Acesso rápido" foi removido da tela inicial),
 - `GiveTestWeapons = { "Glock17" }` (todo mundo nasce armado),
   `ItemsNearSpawn = true`, `LobbyPistol = true`,
 - as 3 peças do rádio nascem **ao lado do gerador** "para teste rápido"
   ([Radio.md](Radio.md)), quando o desenho do jogo é espalhá-las pelo mapa,
+- `Voar = true` (modo voar de teste, `client/FlyTest.client.luau`: 2x Espaço,
+  Shift = turbo; só roda dentro do Studio, mas desligue mesmo assim),
 - `Fear.DebugMode`, `Noise.Debug.*` devem ficar `false` no jogo final.
 
 **E. Publicação (não verificado)** — não há nada no repositório sobre ícone,

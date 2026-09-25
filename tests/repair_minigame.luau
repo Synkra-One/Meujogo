@@ -153,6 +153,9 @@ local services = {
 	ReplicatedStorage = { Modules = moduleNames },
 }
 local modules = {
+	MatchStateService = { IsGameplayEnabled = function(p)
+		return p.Parent == players and p:GetAttribute("InRound") == true and p:GetAttribute("ExtractionBoarded") ~= true
+	end },
 	Remotes = remotes, RoundManager = roundManager, DamageSystem = damageSystem,
 	NoiseService = noiseService, StatScaling = statScaling, GameConfig = gameConfig,
 }

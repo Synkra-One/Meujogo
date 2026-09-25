@@ -24,7 +24,7 @@ e sem massa. A normalizacao para 1,8 studs fica apenas para o fallback via asset
 - Controle: ativacao da Tool ou `Y`.
 - Celular: botao com a miniatura da lanterna.
 - Disparo concentrado: `V` no PC, `L2` no controle ou botao `Clarao` no celular.
-  Custa 25% da mesma bateria e tem cooldown de 8 segundos. Configuracao,
+  Custa 25% da reserva de bateria e tem cooldown de 8 segundos. Configuracao,
   arquitetura e roteiro completo: [Disparo concentrado](FlashBurst.md).
 
 `F` continua reservado para interagir com os objetos do jogo. O braco acompanha
@@ -34,9 +34,13 @@ parte desse movimento. A Tool permanece presa ao `RightGrip` criado pelo Roblox.
 O emissor e as duas pontas do feixe ficam no espaco local do Handle: a luz segue
 a lente fisica, sem uma segunda rotacao independente da camera.
 
-A mira da camera e recalculada a cada frame. A verificacao de parede do feixe
-tambem se renova quando a lente muda de posicao ou direcao, mesmo antes do
-intervalo normal de 1/15 segundo.
+A mira da camera e recalculada a cada frame. A falta temporaria de atualizacoes
+da mira nao desliga a Tool. A verificacao de parede do feixe tambem se renova
+quando a lente muda de posicao ou direcao, mesmo antes do intervalo normal de
+1/15 segundo. Se a lente atravessar uma parede, somente a origem visual da luz
+recua para o lado do jogador; a origem de gameplay continua validada pelo
+servidor. A iluminacao permanece ligada mesmo com a lente muito perto de uma
+superficie.
 
 ## Animacoes R6
 
@@ -74,8 +78,11 @@ joints sem keyframes. O cleanup preserva a animacao-base e escritas posteriores
 de outros sistemas. Essa ordem segue o ciclo documentado de
 [Motor6D.Transform](https://create.roblox.com/docs/reference/engine/classes/Motor6D/Transform).
 
-O feixe combina foco principal com luz periferica e preenchimento proximo;
-abaixo de 18% de bateria, a intensidade fica levemente instavel.
+O feixe combina foco principal com luz periferica e preenchimento proximo. A
+iluminacao continua nao consome bateria e nao pisca com carga baixa. A carga
+serve apenas para os claraoes; mesmo em 0%, a luz normal pode ser ligada e
+permanece acesa ate o jogador desliga-la ou uma regra do jogo interrompe-la
+(por exemplo, desequipar, morte ou apagao do Monstro).
 
 ## Balanceamento
 
@@ -84,7 +91,7 @@ Todos os parametros ficam em `src/ReplicatedStorage/Modules/FlashlightConfig.lua
 | Parametro | Inicial |
 | --- | --- |
 | BatteryMax | 100 |
-| BatteryDrainRate | 100 / 60 por segundo |
+| BatteryDrainRate | 0 para iluminacao continua |
 | FlashlightRange | 36 studs |
 | BeamAngle | 38 graus |
 | LightRange (iluminacao visual) | 44 studs |
@@ -120,11 +127,12 @@ uma arma de dano alto. Chamadas existentes sem esse campo mantem seu comportamen
 ## Bateria e Ciclo de Vida
 
 A carga exata fica no servidor; o atributo `Tool.Battery` publica decimos de
-porcentagem para a HUD. So ha consumo enquanto ligada. Ao zerar, a luz apaga,
-soa um aviso e a HUD mostra `BATERIA ESGOTADA`. Nao existe regeneracao passiva.
+porcentagem para a HUD. A iluminacao nao gasta carga; cada clarao consome 25
+pontos percentuais. Ao zerar, apenas novos claroes ficam indisponiveis. Nao
+existe regeneracao passiva.
 Trocar de item, largar, recolher ou trocar de dono nao recarrega a Tool.
 Uma Tool nova comeca cheia. Desequipar, morrer, perder a funcao de sobrevivente,
-ficar preso, encerrar a rodada ou deixar de enviar mira desliga a luz.
+ficar preso ou encerrar a rodada desliga a luz.
 
 API de recarga para uso por outros sistemas do servidor:
 
@@ -184,7 +192,8 @@ lanternas nao multiplicam essas taxas. Dano/efeitos exigem rodada ativa e ambos
 os jogadores na partida; invulnerabilidade e ForceField sao respeitados.
 
 O servidor verifica a cada 0,1 segundo, sem Raycast nos callbacks dos remotes.
-O cliente envia mira no maximo a 8 Hz e reduz envios quando ela nao muda.
+O cliente envia mira no maximo a 8 Hz e reduz envios quando ela nao muda;
+a ultima direcao valida permanece enquanto a luz esta ligada.
 HUD atualiza a 20 Hz; apresentacao e suavizada localmente. O servidor publica
 somente atributos alterados. A lentidao usa `MonsterCombat.MonsterSpeedMul`,
 que o pacote de movimento ja le, sem um segundo escritor de WalkSpeed.
@@ -216,7 +225,7 @@ renderizacao no Studio.
 
 Roteiro de playtest: dois sobreviventes apontando para um monstro, com uma
 parede entre eles; alternar cobertura, conferir o dano e o pico, largar e
-recolher a Tool, esgotar a carga e trocar de rodada. Conferir caminhada,
+recolher a Tool, esgotar a reserva de claroes e trocar de rodada. Conferir caminhada,
 corrida, agachamento, mira vertical e layout em tela pequena.
 
 Referencias das APIs: [SpotLight](https://create.roblox.com/docs/reference/engine/classes/SpotLight)

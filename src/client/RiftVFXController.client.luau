@@ -4,7 +4,7 @@
 	Apresenta as fendas do teleporte do Monstro pro jogador local. O servidor
 	(server/MonsterTeleport) manda os "beats" por Remotes.RiftVFX -- SÓ pra
 	quem está perto -- e este script constrói / anima / limpa a fenda com
-	Modules/RiftVFX (que usa TweenService, nada de loop por frame) e toca os
+	Modules/RiftVFX (geometria procedural local, animada a 30 Hz) e toca os
 	sons 3D. Um Sobrevivente perto do destino ouve/vê a fenda surgindo antes
 	do Monstro sair -- isso é de propósito (antecipação).
 
@@ -22,27 +22,6 @@ local AssetRegistry = require(ReplicatedStorage.Modules.AssetRegistry)
 
 local CFG = GameConfig.Monster.Teleport
 local SOUNDS = AssetRegistry.RiftTeleport.Sounds
-
---------------------------------------------------------------------------------
--- Template do asset (publicado pelo servidor; pode não existir -> reserva)
---------------------------------------------------------------------------------
-
-local function getTemplate(): Model?
-	local folder = ReplicatedStorage:FindFirstChild("RiftAssets")
-	if not folder then
-		folder = ReplicatedStorage:WaitForChild("RiftAssets", 20) :: Folder?
-	end
-	local tpl = folder and folder:FindFirstChild("Template")
-	return (tpl and tpl:IsA("Model")) and tpl or nil
-end
-
-local function templateFaceAxis(template: Model?): string
-	if CFG.RiftAssetFaceAxis ~= "auto" then
-		return CFG.RiftAssetFaceAxis
-	end
-	local a = template and template:GetAttribute("FaceAxis")
-	return (type(a) == "string") and a or "Y"
-end
 
 --------------------------------------------------------------------------------
 -- Som 3D na fenda
@@ -96,22 +75,18 @@ local function onOpen(data: { [string]: any })
 	-- nunca duplica: se já existe uma fenda com esse id, some com a antiga
 	destroyRift(id)
 
-	local template = getTemplate()
 	local kind = tostring(data.kind or "entrada")
 	local width = tonumber(data.width) or 6
 
 	local ok, handle = pcall(function()
 		return RiftVFX.new({
-			template = template,
 			cframe = data.cframe,
 			width = width,
-			faceAxis = templateFaceAxis(template),
 			upright = CFG.RiftUpright,
 			groundOffset = CFG.RiftGroundOffset,
 			extraRotDeg = CFG.RiftExtraRotationDeg,
 			lightBrightness = CFG.RiftLightBrightness,
 			lightRangeFactor = CFG.RiftLightRangeFactor,
-			into = -data.cframe.UpVector,
 		})
 	end)
 	if not ok or not handle then
@@ -120,7 +95,8 @@ local function onOpen(data: { [string]: any })
 	end
 
 	rifts[id] = { handle = handle, kind = kind }
-	handle:Open(CFG.RiftOpenDuration)
+	-- O destino tem só o lead time para abrir antes de o monstro emergir.
+	handle:Open(if kind == "destino" then math.min(CFG.RiftOpenDuration, CFG.DestRiftLeadTime) else CFG.RiftOpenDuration)
 
 	-- entrada -> som de abertura; destino -> som de "viagem"/surgindo (antecipação)
 	playAt(handle.Core, if kind == "destino" then SOUNDS.RiftTravel else SOUNDS.RiftOpen)

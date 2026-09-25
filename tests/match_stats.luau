@@ -137,6 +137,7 @@ local function fixture()
 	local StaminaSystem = { MovementSampled = bindable() }
 	local DamageSystem = { DamageApplied = bindable(), Healed = bindable() }
 	local ExtractionSystem = { SurvivorsExtracted = bindable() }
+	local BoatSystem = { SurvivorsEscaped = bindable(), StepCompleted = bindable(), EngineStarted = bindable() }
 	local DropItemSystem = { ItemPickedUp = bindable() }
 	local RadioPieces = { PiecePickedUp = bindable() }
 	local RadioInstallSystem = { PieceInstalled = bindable(), AllInstalled = bindable() }
@@ -176,6 +177,7 @@ local function fixture()
 		StaminaSystem = StaminaSystem,
 		DamageSystem = DamageSystem,
 		ExtractionSystem = ExtractionSystem,
+		BoatSystem = BoatSystem,
 		DropItemSystem = DropItemSystem,
 		RadioPieces = RadioPieces,
 		RadioInstallSystem = RadioInstallSystem,

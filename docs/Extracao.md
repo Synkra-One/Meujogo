@@ -3,9 +3,15 @@
 Fim da linha do objetivo do Rádio. **Concluir o rádio não ganha mais a
 partida**: ele só CHAMA o resgate. Quem ganha é quem chega na praia.
 
+É uma das duas fugas: a outra é o barco, independente do rádio (ver
+[Barco.md](Barco.md)).
+
 | Arquivo | Papel |
 |---|---|
 | `server/ExtractionSystem.lua` | Zona na praia, fumaça vermelha, contagem, helicóptero, embarque. |
+| `server/ExtractionPassenger.lua` | Oculta e restaura corpo, acessórios e colisões. |
+| `client/ExtractionCamera.lua` | Câmera externa em terceira pessoa, independente da fuselagem. |
+| `client/ExtractionController.client.luau` | Partir, esperar e sair, confirmados pelo servidor. |
 | `server/RoundManager.lua` | `onRescueCountdownStarted` chama `Begin`; `onExtracted` encerra a partida. |
 | `client/ObjectivesController.client.luau` | Aviso na tela + relógio da contagem. |
 
@@ -27,9 +33,8 @@ partida**: ele só CHAMA o resgate. Quem ganha é quem chega na praia.
                     prompt "Embarcar" liberado
         │ você embarca
         ▼
-  A BORDO           senta num assento + DUAS opções na tela:
-                    [ PARTIR AGORA ]  [ ESPERAR ]
-                    sair exige o prompt "Sair"
+  A BORDO           corpo oculto + câmera externa do helicóptero
+                    [ PARTIR AGORA ]  [ ESPERAR ]  [ SAIR ]
         │ alguém escolhe partir
         ▼
   PARTINDO (9s)     sobe reto, vira e acelera pro mar
@@ -72,20 +77,22 @@ então nada no resto do sistema precisa saber qual dos dois está no mapa.
 ## Embarcar, esperar e sair
 
 - **Embarcar**: prompt `Embarcar` no helicóptero (só depois do pouso). O
-  personagem senta num assento — a pose acompanha o helicóptero pela mesma
-  técnica de manter o root ancorado + CFrame relativo por frame.
-- **As duas opções** aparecem na tela ao embarcar
+  corpo e acessórios ficam invisíveis e sem colisão. O root acompanha o
+  helicóptero e a câmera observa o veículo em terceira pessoa, por fora.
+- **Três opções** aparecem na tela ao embarcar
   (`client/ExtractionController.client.luau`):
 
   | Botão | O que faz |
   |---|---|
   | **PARTIR AGORA** | decola imediatamente com quem estiver a bordo |
-  | **ESPERAR** | fecha o painel e segura o voo pelos colegas |
+  | **ESPERAR** | mantém o painel e a possibilidade de sair/partir |
+  | **SAIR DO HELICÓPTERO** | restaura corpo, controles e câmera no solo |
 
-- **Sair**: prompt `Sair` no helicóptero — ninguém é ejetado sozinho, e quem
-  desembarca é reposicionado **do lado de fora** (soltar alguém dentro da
-  fuselagem sólida deixaria o personagem preso na geometria).
-- Morrer ou ser amarrado no assento **perde a vaga** (checado a cada tique).
+- **Sair**: botão no painel ou prompt `Sair`. Só enquanto pousado e para
+  quem está registrado a bordo; volta à posição de solo onde embarcou.
+- Durante a viagem, ações de gameplay e dano ficam bloqueados. Morte,
+  desconexão, troca de personagem e fim da rodada liberam a vaga e restauram
+  o corpo. A restauração nunca solta alguém da altitude do helicóptero.
 - São 6 assentos; lotado, o prompt de embarcar some.
 
 O servidor valida tudo: quem manda `"Partir"` sem estar a bordo é ignorado em
@@ -120,12 +127,21 @@ praia!"** no primeiro segundo da contagem, mais o relógio no texto da torre.
 
 ## Quem pode embarcar
 
-Qualquer um que **não seja o Monstro**, vivo e não amarrado; um Espião
-infiltrado também consegue subir. Quem decide o vencedor é o
-`RoundManager`.
+Sobreviventes e Espião vivos, participantes da rodada ativa (`InRound`),
+fora da sala de espera. Embarcar exige proximidade 3D e ausência de stun ou
+agarrão. Jogadores do lobby, atrasados e Monstro são recusados pelo servidor.
 
-Vale quem está **sentado** na decolagem: ser arrastado pra fora pelo Monstro,
-morrer no assento ou desembarcar antes custa a vaga.
+Só passageiros válidos no fim da decolagem são reportados ao `RoundManager`.
+Se todos desconectarem durante o voo, o helicóptero retorna para novo embarque.
+O reset libera todos os passageiros, inclusive quando a partida acaba por tempo.
+
+O modelo usa streaming `Atomic` e a câmera tolera o remote chegar antes do
+modelo, conforme o [contrato de streaming do Roblox](https://create.roblox.com/docs/workspace/streaming).
+
+No Studio, testar embarque/saída repetidos, esperar e sair, decolar, morte,
+desconexão, fim por tempo e segunda rodada. Conferir câmera com mouse, toque e
+controle e em tela estreita. Os testes locais verificam estado e enquadramento
+matemático; não substituem a inspeção da câmera renderizada.
 
 ## Ajustes
 

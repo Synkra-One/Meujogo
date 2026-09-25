@@ -7,8 +7,9 @@ export type Config = {
 	MaxProximityFearPerSecond: number, ProximityCurveExponent: number,
 	FearRecoveryDelay: number, BaseFearRecoveryPerSecond: number,
 	MaxFearGainPerSecond: number,
+	ExposureRampSeconds: number, ExposureInitialMultiplier: number,
 }
-export type State = { value: number, safeFor: number }
+export type State = { value: number, safeFor: number, exposureFor: number? }
 
 function FearRules.ProximityRate(distance: number, config: Config): number
 	local t = math.clamp((config.MaxFearDistance - distance)
@@ -27,11 +28,16 @@ function FearRules.Step(state: State, distance: number, gainMultiplier: number,
 	recoveryMultiplier: number, dt: number, config: Config): (number, boolean, number)
 	if distance < config.MaxFearDistance then
 		state.safeFor = 0
-		local gain = math.min(config.MaxFearGainPerSecond, FearRules.ProximityRate(distance, config) * gainMultiplier)
+		local exposure = math.min(config.ExposureRampSeconds, (state.exposureFor or 0) + dt)
+		state.exposureFor = exposure
+		local ramp = config.ExposureInitialMultiplier + (1 - config.ExposureInitialMultiplier)
+			* (exposure / config.ExposureRampSeconds)
+		local gain = math.min(config.MaxFearGainPerSecond, FearRules.ProximityRate(distance, config) * gainMultiplier * ramp)
 		state.value = math.clamp(state.value + gain * dt, 0, config.MaxFear)
 		return gain, false, 0
 	end
 	local previousSafe = state.safeFor
+	state.exposureFor = 0
 	state.safeFor = math.min(config.FearRecoveryDelay, previousSafe + dt)
 	-- Só a fração do tick DEPOIS dos 4s recupera; não antecipa um tick inteiro.
 	local recoveryDt = math.max(0, dt - math.max(0, config.FearRecoveryDelay - previousSafe))

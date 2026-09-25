@@ -28,7 +28,7 @@
 	alfabética) não aparecem -- e a mochila padrão está desligada.
 
 	Este ScreenGui vive sozinho (não depende da MainHUD nem do estado da
-	partida): aparece assim que o jogador tem Tools, some quando não tem.
+	partida): fica SEMPRE visível (slots vazios sem itens), exceto na tela inicial.
 ]]
 
 local Players = game:GetService("Players")
@@ -50,14 +50,26 @@ local DROP_KEY = Enum.KeyCode.G -- G pra não colidir com C/Ctrl (agachar) nem R
 local LocalPlayer = Players.LocalPlayer
 local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 
--- Desliga a mochila/hotbar padrão do Roblox (tenta em loop: nos primeiros
--- frames o CoreGui às vezes ainda não aceita).
+-- Desliga a mochila/hotbar padrão do Roblox. Nunca pode aparecer: além de
+-- tentar em loop nos primeiros frames (o CoreGui às vezes ainda não aceita),
+-- religa o "desligado" a cada segundo caso algo (respawn, sentar num veículo)
+-- reative -- senão o slot padrão surge por cima da nossa
+-- barra, duplicando o item.
+local function killDefaultBackpack()
+	local ok, enabled = pcall(function()
+		return StarterGui:GetCoreGuiEnabled(Enum.CoreGuiType.Backpack)
+	end)
+	if ok and not enabled then
+		return true
+	end
+	return pcall(function()
+		StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
+	end)
+end
+
 task.spawn(function()
 	for _ = 1, 10 do
-		local ok = pcall(function()
-			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
-		end)
-		if ok then
+		if killDefaultBackpack() then
 			break
 		end
 		task.wait(0.5)
@@ -385,7 +397,6 @@ end
 -- arquivo não calcula nada de medo.
 --------------------------------------------------------------------------------
 
-local hasTools = false
 local hotbarHidden = 0
 
 local function applyVisibility()
@@ -394,8 +405,10 @@ local function applyVisibility()
 	-- Enquanto a tela inicial (ReplicatedFirst/MenuBoot) estiver aberta, a
 	-- barra de itens não pode aparecer por baixo dela.
 	local introMenuOpen = LocalPlayer:GetAttribute("IntroMenuOpen") == true
-	gui.Enabled = hasTools and hotbarHidden < 0.999 and not introMenuOpen
-		and LocalPlayer:GetAttribute("GameplayEnabled") == true
+	-- Sempre visível (3 slots, vazios quando não há itens): com a mochila
+	-- padrão desligada esta barra é o único jeito de equipar. Só some na tela
+	-- inicial e com medo alto (esmaecimento de propósito).
+	gui.Enabled = hotbarHidden < 0.999 and not introMenuOpen
 end
 
 local function refresh()
@@ -403,7 +416,6 @@ local function refresh()
 	for i = 1, SLOT_COUNT do
 		paintSlot(slots[i], tools[i])
 	end
-	hasTools = #tools > 0
 	applyVisibility()
 end
 
@@ -511,6 +523,7 @@ LocalPlayer.CharacterAdded:Connect(onCharacter)
 task.spawn(function()
 	while true do
 		task.wait(1)
+		killDefaultBackpack()
 		refresh()
 	end
 end)

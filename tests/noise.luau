@@ -67,6 +67,7 @@ local remotes = { NoiseDetected = noiseRemote, SprintIntent = { OnServerEvent = 
 local fear = { PanicSoundTriggered = object("BindableEvent"), GetStaminaRegenMultiplier = function() return 1 end }
 local weapon = { NoiseMade = object("BindableEvent") }
 local modules = { RoundManager = round, FearSystem = fear, WeaponSystem = weapon, Remotes = remotes,
+	MatchStateService = { IsGameplayEnabled = function() return active end },
 	LoadoutData = { GetPerk = function() return nil end } }
 -- math.random controlado: sem isso a chance por distancia e o embaralhamento
 -- da posicao fariam o teste depender de sorte. randomRoll = 0 e "sempre ouve,

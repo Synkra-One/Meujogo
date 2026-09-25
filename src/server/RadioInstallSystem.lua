@@ -56,6 +56,7 @@ local lights: { [string]: PointLight } = {}
 local indicators: { [string]: BasePart } = {}
 local installing = false
 local completionSent = false
+local initialized = false
 
 local function installedAttribute(pieceType: string): string
 	return pieceType .. "Instalada"
@@ -251,7 +252,7 @@ local function ensureInstallPrompt(foundTower: Instance): ProximityPrompt?
 		return foundPrompt
 	end
 
-	local host = firstBasePart(foundTower)
+	local host = foundTower:FindFirstChild("ConsoleInstalacao", true) or firstBasePart(foundTower)
 	if not host then return nil end
 	local promptInstance = Instance.new("ProximityPrompt")
 	promptInstance.Name = PROMPT_NAME
@@ -297,11 +298,8 @@ local function installFromPlayer(player: Player)
 end
 
 function RadioInstallSystem.Init()
-	local ilha = getOrCreateIlha()
-	local foundTower = ilha and ilha:FindFirstChild("TorreDeRadio")
-	if not foundTower then
-		foundTower = RadioTowerGenerator.Build()
-	end
+	if initialized then return end
+	local foundTower = RadioTowerGenerator.Ensure()
 
 	local foundPrompt = ensureInstallPrompt(foundTower)
 	if not foundPrompt then
@@ -316,6 +314,7 @@ function RadioInstallSystem.Init()
 		warn("[RadioInstallSystem] A TorreDeRadio não possui BasePart para alcance e feedback visual.")
 		return
 	end
+	initialized = true
 
 	foundPrompt.Enabled = false
 	foundPrompt.ActionText = "Instalar peca"

@@ -126,15 +126,26 @@ end
 local function strength() local s=tick(); return if s[1] then s[1].strength else 0 end
 target:SetAttribute("Fear",100); assert(#tick()==0,"replicated attribute is not authority")
 fears[target]=25; assert(#tick()==0,"threshold")
-fears[target]=26; local low=strength(); local lowBPM=tick()[1].bpm
+fears[target]=26; assert(#tick()==0,"low fear is private to survivor")
 local targetSelfPackets = {}
 for _, packet in remote.packets do if packet.player == target then targetSelfPackets = packet.snapshot end end
 assert(#targetSelfPackets == 1 and targetSelfPackets[1].player == target, "survivor hears only their own heartbeat")
-fears[target]=60; local middle=strength(); local midBPM=tick()[1].bpm
+fears[target]=cfg.MonsterMinFear; assert(#tick()==0,"monster detection is delayed")
+fears[target]=cfg.MonsterMinFear+1; local low=strength(); local lowBPM=tick()[1].bpm
+fears[target]=80; local middle=strength(); local midBPM=tick()[1].bpm
 fears[target]=100; local high=strength(); local highBPM=tick()[1].bpm
 assert(low>0 and low<middle and middle<high)
 assert(lowBPM<midBPM and midBPM<highBPM and highBPM==cfg.MaxBPM,"fear drives beat interval")
-blocked=true; local wall=strength(); assert(wall>0 and wall<high,"wall attenuates without suppressing")
+blocked=true; assert(strength()==0,"wall requires sustained high fear")
+for _=1,math.ceil(cfg.WallRevealHold/cfg.UpdateInterval) do tick() end
+local wall=strength(); assert(wall>0 and wall<high,"qualified wall pulse is attenuated: " .. tostring(wall) .. " / " .. tostring(high))
+blocked=false
+tick(); blocked=true; assert(strength()==0,"exposure resets when sight opens")
+blocked=false
+fears[target]=cfg.WallMinFear; blocked=true; assert(strength()==0,"wall needs higher fear")
+blocked=false; fears[target]=100
+blocked=true; tick(); fears[target]=cfg.WallMinFear; assert(#tick()==0)
+fears[target]=100; assert(#tick()==0,"fear dip restarts wall exposure")
 blocked=false
 targetRoot.Position=vec(80); assert(strength()<high,"distance attenuation")
 targetRoot.Position=vec(cfg.MaxRange); local raysBefore=raycasts; assert(strength()==0 and raysBefore==raycasts,"range before raycast")

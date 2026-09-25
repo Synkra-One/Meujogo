@@ -265,7 +265,8 @@ local function build(payload: Types.ResultsPayload)
 
 	makeRow("Seu papel", tostring(payload.Role), TEXT)
 	if payload.Escaped then
-		local method = if payload.EscapeMethod == "Helicoptero" then "helicóptero" else payload.EscapeMethod
+		local method = if payload.EscapeMethod == "Helicoptero" then "helicóptero"
+			elseif payload.EscapeMethod == "Barco" then "barco" else payload.EscapeMethod
 		makeRow("Seu destino", if method then "Escapou de " .. method else "Escapou", POSITIVE)
 	elseif payload.Eliminated then
 		makeRow("Seu destino", "Eliminado", NEGATIVE)

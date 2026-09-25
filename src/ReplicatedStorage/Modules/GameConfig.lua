@@ -282,14 +282,13 @@ GameConfig.Fear = {
 	-- sem NUNCA recuperar. Com 160 a "zona de perigo" é o entorno do Monstro.
 	MaxFearDistance = 160,
 	MinFearDistance = 20,
-	-- Teto de ganho por segundo ANTES dos multiplicadores. Com 3,5: colado no
-	-- Monstro, com linha de visão e Compostura média, a barra vai de 0 a 100
-	-- em ~21 s; sendo perseguido, em ~15 s; no pior caso possível (Compostura
-	-- 0 + visão + perseguição, limitado por MaxFearGainPerSecond) ~12,5 s.
-	MaxProximityFearPerSecond = 3.5,
+	-- Aproximação prolongada importa mais que um encontro de um instante.
+	MaxProximityFearPerSecond = 2.3,
+	ExposureRampSeconds = 5,
+	ExposureInitialMultiplier = 0.2,
 	-- smoothstep(t ^ expoente); maior = menos medo à distância. Com 2 a curva
 	-- virava um penhasco (quase nada além de 100 studs); 1,4 dá presença ao
-	-- meio da zona de perigo -- ~1,5/s a 80 studs -- sem estourar de perto.
+	-- meio da zona de perigo -- ~1/s a 80 studs antes da rampa -- sem estourar.
 	ProximityCurveExponent = 1.4,
 	-- Recuperação: some da zona de perigo (>= MaxFearDistance), espere
 	-- FearRecoveryDelay e a barra desce. 3,5/s = 100 -> 0 em ~29 s com
@@ -314,7 +313,16 @@ GameConfig.Fear = {
 	ChaseAwayDot = 0, -- vítima não pode estar avançando contra o monstro
 	ChaseRequiresLineOfSight = true,
 	ChaseConfirmTime = 0.6, -- evita classificar um movimento passageiro como perseguição
-	MaxFearGainPerSecond = 8, -- teto DEPOIS de Compostura, LOS e Chase
+	MaxFearGainPerSecond = 5.5, -- teto DEPOIS de Compostura, LOS e Chase
+	-- Choques por combate (pontos finais, após Compostura). Somente dano real.
+	DamageFearBase = 2,
+	DamageFearPerHealth = 0.16,
+	DamageFearMax = 12,
+	WitnessRange = 72,
+	WitnessMinDamage = 5,
+	WitnessDamageFear = 6,
+	WitnessDeathFear = 18,
+	WitnessCooldown = 5,
 	FearStates = { Nervous = 25, Scared = 50, Panicked = 75, ExtremePanic = 90 },
 	StaminaPenaltyStartFear = 25,
 	MinStaminaRegenMultiplier = 0.5,
@@ -410,28 +418,27 @@ GameConfig.Monster = {
 	SpeedMultiplier = 1.16, -- Monstro ~16% mais rápido -> alcança quem foge
 	WeakenedSpeedMultiplier = 0.7, -- enquanto fraco pela luz (Zona Segura / Tocha)
 
-	-- Visão local do Monstro: clareia apenas o suficiente para ler o chão e
-	-- silhuetas em curta/média distância, sem transformar a noite em dia.
+	-- Visão noturna local do Monstro: levanta sombras suavemente, com bloom
+	-- desativado para manter as luzes pontuais nítidas e o quadro sem brilho.
 	Vision = {
-		Brightness = 0.08,
-		Contrast = 0.14,
-		Saturation = -0.16,
-		TintColor = Color3.fromRGB(207, 192, 255),
-		BloomIntensity = 0.10,
-		BloomSize = 18,
-		BloomThreshold = 1.25,
-		CornerOpacity = 0.13,
+		Brightness = 0.03,
+		Contrast = -0.08,
+		Saturation = -0.08,
+		TintColor = Color3.fromRGB(235, 240, 255),
+		BloomIntensity = 0,
+		BloomSize = 12,
+		BloomThreshold = 1.8,
+		CornerOpacity = 0.045,
 		CornerSize = 0.20,
-		-- Perfil do Desaparecer: a visão fica mais aberta e luminosa durante
-		-- o deslocamento, inclusive para leitura de pontos mais distantes.
-		ShadowRushBrightness = 0.20,
-		ShadowRushContrast = 0.22,
-		ShadowRushSaturation = -0.08,
-		ShadowRushTintColor = Color3.fromRGB(225, 214, 255),
-		ShadowRushBloomIntensity = 0.16,
-		ShadowRushBloomSize = 22,
-		ShadowRushBloomThreshold = 1.10,
-		ShadowRushCornerOpacity = 0.05,
+		-- Shadow Rush: lift de sombras quase igual, sem clarão na tela.
+		ShadowRushBrightness = 0.045,
+		ShadowRushContrast = -0.06,
+		ShadowRushSaturation = -0.04,
+		ShadowRushTintColor = Color3.fromRGB(241, 244, 255),
+		ShadowRushBloomIntensity = 0,
+		ShadowRushBloomSize = 12,
+		ShadowRushBloomThreshold = 1.8,
+		ShadowRushCornerOpacity = 0.025,
 	},
 
 	Attack = {
@@ -640,13 +647,9 @@ GameConfig.Monster = {
 		RiftWidthFactor = 1.7, -- fenda ~1.7x a altura do monstro de largura
 		SinkDepth = 7.0, -- quanto o monstro afunda ao ser engolido
 
-		-- ORIENTAÇÃO DO ASSET (ver AssetRegistry.RiftTeleport.AssetId)
-		-- "auto" mede o asset e deita a menor dimensão no chão. Se a fenda
-		-- renderizar de lado/em pé, force "Y" | "Z" | "X" (qual eixo local é a
-		-- "face" da fenda), ou mexa em RiftExtraRotationDeg.
-		RiftAssetFaceAxis = "auto",
+		-- FENDA PROCEDURAL: normal alinhada ao chão, borda 3D acima da superfície.
 		RiftExtraRotationDeg = { 0, 0, 0 }, -- ajuste fino da rotação, em graus (X, Y, Z)
-		RiftGroundOffset = -0.2, -- <0 crava a fenda um pouco no chão (nunca flutua)
+		RiftGroundOffset = 0.08, -- evita enterrar a energia no terreno / z-fighting
 		RiftUpright = false, -- true = fenda vertical virada pro monstro, em vez de deitada
 
 		-- ANIMAÇÕES (opcionais). VAZIO = usa só o afundar+fade, que funciona em
@@ -656,8 +659,8 @@ GameConfig.Monster = {
 
 		-- REDE / PERFORMANCE
 		VFXBroadcastRadius = 190, -- só clientes a até isto recebem os VFX da fenda
-		RiftLightBrightness = 0.55, -- PointLight MUITO sutil (0 = sem luz)
-		RiftLightRangeFactor = 1.6, -- Range da luz = largura da fenda * isto
+		RiftLightBrightness = 2.2, -- iluminação violeta local no chão e no monstro
+		RiftLightRangeFactor = 2.2, -- Range da luz = largura da fenda * isto
 	},
 }
 
@@ -984,6 +987,117 @@ GameConfig.Extraction = {
 }
 
 --------------------------------------------------------------------------------
+-- BARCO DE FUGA (server/BoatSystem.lua) -- ver docs/Barco.md
+--------------------------------------------------------------------------------
+-- Segunda rota de fuga, independente do rádio: consertar o barco (hélice +
+-- vela de ignição), abastecer com Gasolina, pôr a chave e pilotar até o
+-- LIMITE do mapa (anel de boias no mar). Quem estiver a bordo ao cruzar o
+-- limite vence -- com a câmera subindo e o barco seguindo pro mar aberto.
+--
+-- Velocidades em studs/s, ângulos em GRAUS, tempos em segundos.
+
+GameConfig.Boat = {
+	-- ONDE ESTÁ O BARCO ------------------------------------------------------
+	-- Um Model no Workspace com o Attribute BarcoFuga = true é o barco de
+	-- fuga. Sem o Attribute, procura por nome (fora das decorações geradas da
+	-- ilha) um Model perto do mar. Nada encontrado = monta um barco padrão
+	-- em Parts, com píer, na praia perto do Farol.
+	NomesProcurados = { "BarcoFuga", "Boat", "SpeedBoat", "Speedboat", "MotorBoat", "Motorboat", "Lancha", "Bote", "Barco", "Yacht", "Iate" },
+
+	-- Correção de guinada do barco do MAPA (0 / 90 / 180 / 270). A frente é
+	-- deduzida do assento do piloto (VehicleSeat/Seat olham pra proa); sem
+	-- assento, do eixo maior do modelo. Se ele andar de lado ou de ré, ajuste.
+	GuinadaModelo = 0,
+
+	-- Quanto do casco fica abaixo da linha d'água, medido do fundo do modelo.
+	-- Barco do mapa com água "dentro" do casco: diminua.
+	CaladoModelo = 0.8,
+
+	-- MONTAGEM ----------------------------------------------------------------
+	-- Peças que precisam ser instaladas no motor (ids de ItemRegistry).
+	Pecas = { "HeliceBarco", "VelaIgnicao" },
+	HoldAbastecer = 4, -- segurar E no bocal do tanque, consome 1 Gasolina
+	HoldEmpurrar = 2.5, -- segurar E pra desencalhar
+	AlcanceInteracao = 12, -- checagem do servidor (o prompt limita antes)
+	TempoPartida = 1.3, -- motor de arranque girando antes de pegar
+
+	-- TESTE: Hélice, Vela, Chave e uma Gasolina nascem no píer, do lado do
+	-- barco, a cada rodada (igual às peças do rádio ao lado do gerador).
+	-- false = espalha: hélice na casa de barcos, chave no farol, vela e
+	-- gasolina em construções aleatórias.
+	ItensPertoDoBarco = true,
+
+	-- LOTAÇÃO -----------------------------------------------------------------
+	Assentos = 6, -- piloto incluído (barco do mapa usa os assentos que tiver)
+
+	-- FÍSICA NA ÁGUA (BoatRules.Drive) --------------------------------------
+	VelocidadeMax = 58, -- ~ 30 nós. Monstro correndo faz ~27
+	VelocidadeRe = 11,
+	Aceleracao = 15, -- studs/s² saindo da inércia; cai perto do máximo
+	AceleracaoRe = 8,
+	Frenagem = 26, -- ré puxada com o barco andando pra frente
+	-- Sem acelerador a água freia: desaceleração = Base + Proporcional * v.
+	-- Com estes números, de 58 cai pra ~12 em 5s (sai do planeio) e para em
+	-- ~9,5s -- casco planador perde velocidade rápido, não desliza feito gelo.
+	ArrastoBase = 1.5, -- studs/s²
+	ArrastoProporcional = 0.25, -- 1/s
+	-- Giro: graus/s na velocidade ideal. Parado, só o empuxo do motor gira
+	-- (GiroParado). Muito rápido, o raio de curva abre (PerdaGiroAlta).
+	GiroMax = 58,
+	GiroParado = 0.3,
+	VelocidadeGiroIdeal = 24,
+	PerdaGiroAlta = 0.32,
+	RespostaGiro = 3.2, -- rad/s² até o giro pedido: o leme não é instantâneo
+	Aderencia = 2.4, -- 1/s: quanto o casco segura o deslize lateral na curva
+	-- Planeio: a proa sobe acelerando e o casco "sai" da água em velocidade.
+	InicioPlaneio = 12,
+	PlaneioCompleto = 32,
+	ProaArrancada = 7.5, -- graus de proa pra cima no meio da arrancada
+	TrimPlaneio = 2.2, -- graus de proa em cruzeiro
+	ElevacaoPlaneio = 0.35, -- studs que o casco sobe planando
+	InclinacaoCurva = 9, -- graus: o barco deita pra dentro da curva
+	-- Ondas (mar calmo à noite): arfagem, caturro e balanço.
+	OndaAltura = 0.32,
+	OndaPeriodo = 4.6,
+	OndaCaturro = 1.4,
+	OndaBalanco = 2.2,
+	OndaPicado = 1.1, -- batida do casco nas ondas em alta velocidade (graus)
+
+	-- ENCALHE -----------------------------------------------------------------
+	-- Profundidade (studs) debaixo do casco. Com menos que Calado*0.55 no
+	-- meio ele assenta no fundo/areia: o motor MORRE e só volta a funcionar
+	-- depois de empurrado de volta pra água funda.
+	Calado = 0.9,
+	FatorRaso = 0.35, -- velocidade máxima raspando o fundo (proa/popa)
+	ArrastoRaso = 1.1,
+	ArrastoAreia = 3.4, -- casco arrastando na areia: para rápido
+
+	-- LIMITE DO MAPA (chegada) -----------------------------------------------
+	-- Anel em volta do centro da ilha. Cruzou com gente a bordo = fuga.
+	-- Precisa ficar dentro das paredes invisíveis (IslandLayout.AreaHalf - 8).
+	RaioChegada = 900,
+	BoiasEspacamento = 105,
+	DuracaoCinematica = 9, -- segundos de cena antes da partida acabar
+
+	-- RUÍDO (super audição do Monstro) ----------------------------------------
+	-- Motor de popa é barulhento, igual o gerador do rádio: dar partida e
+	-- manter ligado vira ping pro Monstro (NoiseService). Quanto mais
+	-- acelerado, mais longe se ouve.
+	RuidoIntervalo = 3.5, -- s entre pings com o motor ligado
+	RuidoIntensidade = 3, -- mesma "altura" de um passo correndo
+	RuidoRaioLento = 220, -- motor em marcha lenta, barco parado
+	RuidoRaioMaximo = 480, -- acelerando tudo (NoiseService corta em MaxNoiseRadius)
+	RuidoPartida = 420, -- o ronco do motor pegando
+
+	-- SERVIDOR ----------------------------------------------------------------
+	IntervaloChecagem = 0.1,
+	-- Anti-teleporte: deslocamento por tique acima de VelocidadeMax * isto
+	-- (+ folga de replicação) devolve o barco pra última posição válida.
+	ValidacaoFolga = 1.5,
+	FolgaReplicacao = 6,
+}
+
+--------------------------------------------------------------------------------
 -- OBJETIVO: ESTAÇÃO DE RÁDIO (o local físico)
 --------------------------------------------------------------------------------
 -- A corrente de interações do sítio da torre, na ordem em que o jogador faz:
@@ -1005,13 +1119,11 @@ GameConfig.RadioSite = {
 	SinalRaio = 9, -- distância máxima do console durante a canalização
 	SinalDecaimento = 6, -- % por segundo que o progresso cai se interromper
 
-	-- Gerador: cada galão rende este tanto de tempo ligado (segundos).
-	-- 3 galões fixos no local = ~4,5 min de energia se ninguém desperdiçar.
-	-- MESMO valor vale pro item "Gasolina" (ItemRegistry) achado pelo mapa e
-	-- carregado como Tool -- RadioSiteSystem.onRefuel aceita as duas fontes,
-	-- preferindo a Gasolina carregada.
-	CombustivelPorGalao = 90,
+	-- Um galão enche o tanque e rende o tempo máximo ligado (segundos).
+	-- Somente a Tool "Gasolina" do próprio jogador abastece. RadioPieces
+	-- repõe um item ao lado do gerador a cada rodada enquanto estiver em teste.
 	CombustivelMaximo = 270,
+	CombustivelPorGalao = 270,
 
 	-- Enquanto roda, o gerador faz barulho: dispara WeaponSystem.NoiseMade
 	-- neste intervalo (segundos) pra quem quiser reagir ao ruído, e avisa o
@@ -1129,7 +1241,10 @@ GameConfig.Weapons = {
 	MeleeConeCos = 0.5,
 	-- IDs de armas disponíveis para inventário, drops e pickups.
 	Definitions = {
-		LancaDeBambu = { DisplayName = "Pé de cabra", Kind = "Melee", Damage = 15, Range = 7, Cooldown = 1.5, StunDuration = 0.4 },
+		-- ClientDriven: usa as mesmas animações do Taco (BatController dispara o
+		-- remote no impacto). Sem Heavy: segurar o clique não muda o golpe.
+		LancaDeBambu = { DisplayName = "Pé de cabra", Kind = "Melee", Damage = 15, Range = 7, Cooldown = 1.5, StunDuration = 0.4,
+			ClientDriven = true },
 		Sinalizador = { DisplayName = "Sinalizador", Kind = "Signal", Damage = 0, Range = 35, Cooldown = 2,
 			RevealMonster = false, RepelMonster = false }, -- somente pontos de extensão
 		Glock17 = { DisplayName = "Pistola", Kind = "Firearm", Damage = 25, Range = 300, Cooldown = 0.4,
@@ -1215,6 +1330,14 @@ GameConfig.Environment = {
 -- itens de brinde no desembarque).
 
 GameConfig.Testing = {
+	-- Modo voar (client/FlyTest.client.luau), só pra testar sem atravessar o
+	-- mapa correndo: 2 toques rápidos no Espaço liga/desliga, Espaço sobe, X
+	-- desce, Shift segurado = turbo. Só funciona dentro do Studio
+	-- (RunService:IsStudio()), mesmo se esquecer ligado no jogo publicado.
+	Voar = true,
+	VelocidadeVoo = 70, -- studs/s
+	VelocidadeVooRapido = 280, -- studs/s com Shift
+
 	-- Mantém o mínimo de dois jogadores no servidor publicado. Um teste solo
 	-- também pode ser liberado escolhendo um papel no painel Dev da sala;
 	-- SoloStart continua disponível para cenários automatizados.

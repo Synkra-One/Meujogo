@@ -9,7 +9,7 @@ mas as distâncias e os tempos são de gameplay, não de engenharia.
 |---|---|
 | `Tools/RadioTowerGenerator.lua` | **Constrói** o local (ferramenta de editor). Terraplana o pátio, abre a estrada e monta tudo. |
 | `server/RadioSiteSystem.lua` | **Faz funcionar**: combustível, fusível, gerador, painel, pedido de socorro, baliza, barulho, sabotagem. |
-| `server/RadioPieces.lua` | As 3 peças (Antena/Bateria/Transmissor) espalhadas pelo mapa. |
+| `server/RadioPieces.lua` | Teste: três peças e um item Gasolina junto do gerador, repostos por rodada. |
 | `server/RadioInstallSystem.lua` | Instala as peças no rack do abrigo. |
 | `server/InteractionGuard.lua` | Valida distância e caminho sem obstáculos no servidor para coleta e tasks. |
 | `Modules/ItemRegistry.lua` + `ToolFactory.lua` | Item "Gasolina" (`Tool`, achado no mapa via `ItemSpawner`) que também abastece o gerador. |
@@ -25,7 +25,7 @@ Attribute `InteracaoRadio` das Parts geradas.
 | # | Onde | Ação | Exige | Como |
 |---|---|---|---|---|
 | 1 | Rack, dentro do abrigo | **Instalar peça** | as 3 peças achadas no mapa | minigame: 3 acertos seguidos |
-| 2 | Bocal do gerador | **Abastecer** | um galão cheio no pátio OU Gasolina carregada | segurar E, 4s |
+| 2 | Bocal do gerador | **Abastecer** | item Gasolina no inventário do jogador | segurar E, 4s |
 | 3 | Prateleira → caixa na parede | **Pegar fusível** → abrir a caixa e arrastar o fusível até o encaixe vazio | carregar o fusível | 0s / arrasta-e-solta |
 | 4 | Painel de partida | **Ligar gerador** | fusível + combustível + não sabotado | minigame: 3 acertos seguidos |
 | 5 | Painel de controle, dentro | **Ativar painel** | gerador ligado + peças instaladas | minigame: 3 acertos seguidos |
@@ -49,31 +49,27 @@ ganha a partida** -- ainda é preciso atravessar a ilha e embarcar. Ver
 [Extracao.md](Extracao.md).
 
 **Onde as peças ficam agora para teste rápido:** Antena, Bateria e Transmissor
-nascem ao lado do gerador da estação de rádio. Assim dá para validar coleta,
+nascem ao lado do gerador da estação de rádio, junto de um item Gasolina. Assim dá para validar coleta,
 instalação no rack, combustível, fusível, partida, painel e transmissão sem
 atravessar a ilha.
 
-## Combustível: dois jeitos de abastecer
+## Combustível: somente o item Gasolina
 
-O bocal do gerador (etapa 2, "Abastecer") aceita **duas fontes**, e
-`RadioSiteSystem.onRefuel` sempre prefere a que o jogador está carregando:
+O bocal exige uma Tool `Gasolina` no Character ou Backpack de quem interage.
+O servidor valida tempo de interação, alcance, partida e posse novamente ao
+concluir. Só então consome um item e enche o tanque com até 270s. Gasolina de
+outro jogador não é aceita; tanque cheio não consome o item.
 
-1. **Galão de Gasolina** (`ItemRegistry.Gasolina`, asset `8679995948`) — item
-   de verdade, achado espalhado pelo mapa como qualquer outro (mesmas zonas
-   de destroços/construções da Lanterna e do Chocolate, raridade Média).
-   Carrega no inventário como Tool; usar no bocal consome e destrói o item.
-2. **Galão fixo do pátio** — os 3 galões já parados do lado do gerador
-   (`Tools/RadioTowerGenerator.buildFuel`), que voltam cheios a cada rodada
-   (`RadioSiteSystem.Reset`). Só entra em jogo quando ninguém tem Gasolina
-   carregada.
+Os galões fixos antigos, incluindo alças e bicos, são removidos por
+`RadioTowerGenerator.Ensure()` nos mapas salvos. O tanque grande é cenográfico.
+`Ensure()` valida pontos únicos de interação, motor, escapamento e rack antes
+de conectar os sistemas; uma estação incompleta é reconstruída no boot.
 
-As duas rendem os mesmos `GameConfig.RadioSite.CombustivelPorGalao` (90s), até
-o teto de `CombustivelMaximo` (270s). Isso significa que os galões fixos
-GARANTEM o objetivo sempre completável mesmo se toda a Gasolina do mapa já
-tiver sido gasta em rodadas anteriores (itens de `ItemSpawner` não respawnam
-sozinhos entre rodadas, igual Lanterna/Chocolate/Bandagem já funcionavam) —
-a Gasolina é um reforço que recompensa quem sai catando pelo mapa, não uma
-dependência.
+O item de teste usa `ToolFactory` e `DropItemSystem`, como os demais itens.
+Cada rodada remove a cópia anterior, mesmo carregada, e cria uma nova.
+Falha no asset visual usa uma Tool funcional de reserva; `ItemSpawner` só
+contabiliza Tools realmente criadas. Após enviar o socorro, o gerador desliga
+e as ações da estação são bloqueadas. O resgate continua válido sem energia.
 
 ## Planta do sítio
 
@@ -94,7 +90,7 @@ de manutenção chega.
   │  │    console   │                                    parabólica cerca│
   │  └──┬───────────┘        [GERADOR]        ╔═════════╗          (14) │
   │  [caixa fusíveis]         cabos           ║ TANQUE  ║               │
-  │   [bateria]                               ║ galões  ║               │
+  │   [bateria]                               ║ tanque  ║               │
   │                                           ╚═════════╝               │
   │   ○ holofote            ‖ ‖ manobra                     holofote ○   │
   └──────────────────────── PORTÃO (18) ────────────────────────────────┘
@@ -125,7 +121,7 @@ acessos de pedestres têm marcação própria e não atravessam as bancadas.
   que solta fumaça quando roda, bocal de combustível e painel de partida.
   Asset `10685426940`, com fallback em Parts.
 - **Combustível** (canto direito, longe do abrigo): tanque horizontal sobre
-  cavaletes dentro de uma bacia de contenção + 3 galões. Cada galão = 90s.
+  cavaletes dentro de uma bacia de contenção. Tanque apenas cenográfico.
 - **Elétrica**: caixa de fusíveis na parede externa do abrigo (com o soquete
   vazio à vista), bateria reserva no estrado logo embaixo, eletroduto, haste de
   aterramento e os cabos com barriga ligando gerador → caixa → abrigo → torre.
@@ -284,24 +280,21 @@ posições de dentro do abrigo são fração de W/D, não números soltos.
 
 1. Modo de edição, Command Bar: `require(...RadioTowerGenerator).Build()` e
    salve. Confira visualmente torre, abrigo, gerador, tanque, cerca, estrada.
-2. Ainda em modo de edição: `require(...ItemSpawner).Generate()` e salve —
-   sem isso a Gasolina (e Lanterna/Chocolate/Bandagem/etc.) não existe no
-   mapa nenhuma. Confira que apareceram uns galões portáteis pelo cenário
-   (zonas de destroços/construções).
+2. Confira que não existem galões decorativos na estação. No Play, há um
+   item Gasolina junto das peças. `ItemSpawner.Generate()` continua criando
+   os itens distribuídos pelo restante do mapa.
 3. **Teste a cerca**: ande contra ela em vários pontos (não só nos postes) e
    tente pular — só deve dar pra entrar pelo portão ou pelo rasgo da lateral.
 4. Play Solo com pelo menos os jogadores mínimos pra rodada começar.
-5. Ache a Antena (destroços do avião), a Bateria (caverna) e o Transmissor
-   (vila nativa) — ou olhe o Attribute de cada um (`PecaRadio`/`TipoPeca`).
+5. Ache Antena, Bateria, Transmissor e Gasolina ao lado do gerador.
 6. Leve as 3 até o rack do abrigo, instale (prompt "Instalar peça"). HUD deve
    ir a 3/3 e notificar.
 7. No pátio: "Pegar" o fusível reserva → "Instalar fusível" na caixa externa.
-8. **Gasolina**: ache um Galão de Gasolina pelo mapa, carregue até o bocal do
-   gerador e "Abastecer" — deve consumir o item (some do inventário) em vez
-   do galão fixo do pátio. Teste também sem Gasolina no inventário: o prompt
-   ainda usa o galão fixo normalmente.
-9. "Abastecer" de novo com um galão fixo do pátio (repare que ele fica
-   caído/vazio depois).
+8. Sem Gasolina no inventário, tente abastecer: o combustível deve continuar
+   zerado. Repita com outro jogador carregando gasolina longe do bocal.
+9. Pegue o item, segure Abastecer por 4s: deve consumir exatamente uma Tool
+   e encher o tanque com 270s. Interrompa, largue o item durante a ação e
+   repita o evento: nunca deve duplicar combustível. Tanque cheio não consome item.
 10. "Ligar gerador" no painel de partida — luzes/baliza aceleram, escapamento
     solta fumaça, e (quando o som existir) o motor toca.
 11. Dentro do abrigo: "Ativar painel" — o som `RadioLigado` deve começar.
@@ -316,14 +309,18 @@ posições de dentro do abrigo são fração de W/D, não números soltos.
     se alguém chegar na praia depois do pouso (ver [Extracao.md](Extracao.md)).
 14. Rode uma segunda rodada e confira que tudo volta a zero (combustível,
     fusível, peças, HUD) — `RadioSiteSystem.Reset()`/`RadioObjective.Reset()`
-    rodam no preparo de cada rodada. A Gasolina NÃO respawna sozinha entre
-    rodadas (mesmo comportamento de Lanterna/Chocolate/Bandagem); os 3
-    galões fixos do pátio, sim.
+    rodam no preparo de cada rodada. As três peças e o item Gasolina de teste
+    reaparecem uma única vez, inclusive se alguém os carregava antes.
 15. Do lado de fora, encoste na parede: não deve aparecer a etiqueta nem ser
     possível coletar itens internos. Repita com as duas portas fechadas e a
     janela. Abra uma porta e aproxime-se pela passagem: a coleta deve funcionar.
 16. Aproxime a câmera de paredes/cantos em terceira pessoa e com mira;
     confira que não atravessa nem torna o abrigo transparente.
+
+Regressão determinística: `python3 tests/run_radio_escape.py` executa os
+módulos reais de rádio, instalação, extração, passageiros e câmera, cobrindo
+interrupções, consumo, autorização e resets. O timing do reparo é coberto por
+`python3 tests/run_repair_minigame.py`. Renderização/física exigem Play no Studio.
 
 ## Som
 

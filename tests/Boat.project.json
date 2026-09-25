@@ -1,0 +1,25 @@
+{
+  "name": "BoatValidation",
+  "tree": {
+    "$className": "DataModel",
+    "ServerScriptService": {
+      "Server": {
+        "$path": "../src/server",
+        "$properties": {
+          "Disabled": true
+        }
+      }
+    },
+    "ReplicatedStorage": {
+      "Modules": {
+        "$path": "../src/ReplicatedStorage/Modules"
+      },
+      "Remotes": {
+        "$path": "../src/ReplicatedStorage/Remotes"
+      },
+      "ClienteTeste": {
+        "$path": "../src/client"
+      }
+    }
+  }
+}

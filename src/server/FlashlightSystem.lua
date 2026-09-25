@@ -37,7 +37,7 @@ end
 
 local function setOn(tool: Tool, state: Lamp, enabled: boolean)
 	drain(tool, state, os.clock())
-	state.on = enabled and state.battery > 0
+	state.on = enabled
 	publish(tool, "FlashlightOn", state.on)
 	if not state.on then publish(tool, "FlashlightDirection", nil) end
 end
@@ -195,7 +195,6 @@ local function burst(player: Player, tool: Tool, state: Lamp, direction: any, se
 	state.battery -= Config.FlashBurstCost
 	state.burstReadyAt, burstCooldowns[player] = now + Config.FlashBurstCooldown, now + Config.FlashBurstCooldown
 	drain(tool, state, now)
-	if state.battery <= 0 then setOn(tool, state, false) end
 	publish(tool, "FlashBurstReadyAt", serverNow + Config.FlashBurstCooldown)
 	publish(player, "FlashBurstReadyAt", serverNow + Config.FlashBurstCooldown)
 	publish(tool, "FlashBurstAt", serverNow)
@@ -274,7 +273,7 @@ local function step(dt: number)
 		drain(tool, state, now)
 		local character = tool.Parent
 		local player = if character and character:IsA("Model") then Players:GetPlayerFromCharacter(character) else nil
-		if state.battery <= 0 or not player or not canUse(player, tool) or now - state.aimAt > Config.AimTimeout then
+		if not player or not canUse(player, tool) then
 			setOn(tool, state, false)
 			continue
 		end

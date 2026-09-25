@@ -81,6 +81,7 @@ local function fixture()
 	end
 	local Config = {
 		Players = { Min = 2, Max = 10 },
+		WaitingRoom = { StartCountdownDuration = 0 },
 		Testing = { SoloStart = false, DevRoleChooser = true, DevRoleUserIds = { 1 } },
 		Roles = { Survivor = "Sobrevivente", Monster = "Monstro", Spy = "Espiao" },
 		Round = { MonsterWinsAtSurvivorsAlive = 0, WinCheckInterval = 0.1 },
@@ -135,6 +136,7 @@ local function fixture()
 	}
 	local modules = {
 		GameConfig = Config, Remotes = Remotes,
+		MatchStateService = { Set = function(value) RS:SetAttribute("MatchState", value) end },
 		Elimination = {
 			IsEliminated = function(p) return p:GetAttribute("Eliminado") == true end,
 			Reset = function(p) p:SetAttribute("Eliminado", nil) end,
@@ -142,6 +144,11 @@ local function fixture()
 		RadioObjective = { Reset = function() end, RescueCountdownStarted = { Event = signal() } },
 		RadioSiteSystem = { Reset = function() end },
 		ExtractionSystem = { Reset = function() end, Begin = function() return true end, SurvivorsExtracted = { Event = signal() } },
+		BoatSystem = {
+			Reset = function() end, EndRound = function() end,
+			IsEscaping = function() return false end, EscapingPlayers = function() return {} end,
+			SurvivorsEscaped = { Event = signal() },
+		},
 		CharacterData = { Characters = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 } },
 		SurvivorSelectionConfig = { Duration = 30, GetSelectableCharacters = function() return { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 } end },
 		LoadoutData = {},
@@ -277,7 +284,11 @@ test("old rescue timer cannot end the next round", function()
 	local f = fixture()
 	local roster = { f.player(1), f.player(2) }
 	f.task.spawn(function() f.round.StartRound(roster) end)
+	-- Force the no-beach fallback timer, then finish this round through the
+	-- real extraction hook before starting another one.
+	f.modules.ExtractionSystem.Begin = function() return false end
 	f.modules.RadioObjective.RescueCountdownStarted.Event:Fire(5)
+	f.modules.ExtractionSystem.SurvivorsExtracted.Event:Fire({ roster[1] })
 	f.advance(0.3)
 	f.task.spawn(function() f.round.StartRound(roster) end)
 	f.advance(6)
@@ -311,7 +322,7 @@ test("any account opens the room; two ready members start one round", function()
 	b:SetAttribute("CharacterSelectionConfirmed", true)
 	f.modules.CharacterStatsApplier.SelectionChanged.Event:Fire(a, "Confirmed")
 	f.advance(3)
-	assert(f.round.IsRoundActive() and f.storage:GetAttribute("MatchState") == "Playing")
+	assert(f.round.IsRoundActive() and f.storage:GetAttribute("MatchState") == "InMatch")
 	assert(a.loads == 2 and b.loads == 2, "Duplicate round or membership")
 	local late = f.player(400)
 	room.Join(late)

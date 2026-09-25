@@ -76,6 +76,7 @@ end
 function Status.Stun(character: Model, duration: number, source: string?): boolean
 	if Status.Active(character, "PowerStunImmune") or character:GetAttribute("Imune") == true
 		or character:GetAttribute("Invulneravel") == true
+		or character:GetAttribute("ExtractionBoarded") == true
 		or character:FindFirstChildOfClass("ForceField") then return false end
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	local root = character:FindFirstChild("HumanoidRootPart")
@@ -120,6 +121,7 @@ end
 -- Returns whether the entire attack was negated (damage AND secondary effects).
 function Status.BlockAttack(character: Model): boolean
 	if character:GetAttribute("Imune") == true or character:GetAttribute("Invulneravel") == true
+		or character:GetAttribute("ExtractionBoarded") == true
 		or character:FindFirstChildOfClass("ForceField") then return true end
 	if Status.Active(character, "PowerLuckyDodge") then
 		Status.Clear(character, "PowerLuckyDodge")

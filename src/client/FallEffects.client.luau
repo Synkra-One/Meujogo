@@ -369,6 +369,12 @@ RunService.Heartbeat:Connect(function()
 	if not currentHumanoid or not hrp then
 		return
 	end
+	-- Modo voar de teste (FlyTest): no ar de propósito, nada de altura de queda.
+	-- Sem isto o fallback abaixo contava a altura do voo e matava no pouso.
+	if hrp.Parent and hrp.Parent:GetAttribute("Voando") == true then
+		freefallStart = 0
+		return
+	end
 	local state = currentHumanoid:GetState()
 	local floor = currentHumanoid.FloorMaterial
 	local airborneState = state == Enum.HumanoidStateType.Freefall

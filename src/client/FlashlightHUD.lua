@@ -67,8 +67,8 @@ function HUD:Update(visible: boolean, battery: number, enabled: boolean, now: nu
 	self.Count.Text = string.format("%d%%", math.ceil(fraction * 100))
 	self.Count.TextColor3, self.Fill.BackgroundColor3 = color, color
 	self.Fill.Size = UDim2.new(fraction, -2 * fraction, 1, -2)
-	self.Status.Text = if battery <= 0 then "BATERIA ESGOTADA" elseif enabled then "LIGADA" else "DESLIGADA"
-	self.Status.TextColor3 = if battery <= 0 then color else Color3.fromRGB(174, 184, 182)
+	self.Status.Text = if enabled then "LIGADA" else "DESLIGADA"
+	self.Status.TextColor3 = Color3.fromRGB(174, 184, 182)
 	self.Count.TextTransparency = if fraction > 0 and fraction <= 0.1 then 0.12 + 0.12 * math.sin(now * 4) else 0
 	self.Dot.Visible = enabled
 	local remaining = cooldown or 0

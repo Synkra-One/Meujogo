@@ -3,14 +3,14 @@
 	MenuConfig
 	CONFIGURAÇÃO CENTRAL DA TELA INICIAL. É o único arquivo que você precisa
 	abrir para trocar textos, cores, tempos, sons, logo, fundo e a cena 3D.
-	Nenhum outro módulo do menu tem número mágico ou ID solto.
+	As medidas responsivas dos componentes ficam em MenuTheme.Layout.
 
 	>>> ONDE TROCAR CADA COISA <<<
 	  LOGO .............. Brand.LogoImage        (vazio = usa o texto do título)
 	  IMAGEM DE FUNDO ... Background.Image       (vazio = usa a cena 3D)
 	  MÚSICA ............ Sounds.Music
 	  SONS DOS BOTÕES ... Sounds.Hover / Click / Back / Start
-	  MODELO DO MONSTRO . Scene.MonsterSources   (lista de caminhos tentados)
+	  MODELO DO RAFAEL .. Scene.MonsterSources   (lista de caminhos tentados)
 	  ANIMAÇÃO .......... Scene.MonsterAnimationId
 	  CÂMERA/CENÁRIO .... Scene.Camera* e Scene.Set*
 
@@ -82,7 +82,7 @@ Config.Motion = {
 	ButtonHover = 0.16,
 	ButtonPress = 0.08,
 	StartFade = 0.9, -- saída da tela "clique para começar"
-	PlayFade = 0.75, -- saída do menu ao clicar em Jogar
+	PlayFade = 0.75, -- saída do menu ao clicar em Entrar
 	Easing = Enum.EasingStyle.Quint,
 	Direction = Enum.EasingDirection.Out,
 	-- Trava anti-clique-duplo: nenhum botão responde enquanto uma transição
@@ -91,18 +91,18 @@ Config.Motion = {
 }
 
 --------------------------------------------------------------------------------
--- PALETA -- preto, cinza e vermelho escuro
+-- PALETA -- carvão, marfim e âmbar
 --------------------------------------------------------------------------------
 Config.Palette = {
-	Background = Color3.fromRGB(6, 6, 8),
-	Panel = Color3.fromRGB(13, 13, 16),
-	PanelStroke = Color3.fromRGB(46, 46, 54),
-	Text = Color3.fromRGB(226, 226, 230),
-	TextDim = Color3.fromRGB(138, 138, 148),
-	Accent = Color3.fromRGB(150, 26, 26), -- vermelho escuro
-	AccentBright = Color3.fromRGB(206, 48, 40),
-	Danger = Color3.fromRGB(120, 30, 28),
-	Highlight = Color3.fromRGB(255, 255, 255),
+	Background = Color3.fromRGB(8, 13, 16),
+	Panel = Color3.fromRGB(17, 25, 29),
+	PanelStroke = Color3.fromRGB(86, 101, 104),
+	Text = Color3.fromRGB(241, 238, 226),
+	TextDim = Color3.fromRGB(158, 175, 177),
+	Accent = Color3.fromRGB(207, 166, 95),
+	AccentBright = Color3.fromRGB(241, 199, 124),
+	OnAccent = Color3.fromRGB(29, 24, 17),
+	Highlight = Color3.fromRGB(255, 249, 231),
 }
 
 Config.Fonts = {
@@ -119,10 +119,10 @@ Config.Background = {
 	Image = "", -- TROQUE AQUI: "rbxassetid://0000000000"
 	ImageTransparency = 0.15,
 	-- Vinheta desenhada em código (não precisa de arte).
-	VignetteOpacity = 0.55,
+	VignetteOpacity = 0.38,
 	VignetteSize = 0.34,
 	-- Escurecimento geral por cima da cena, pra UI ficar legível.
-	Scrim = 0.28,
+	Scrim = 0.12,
 }
 
 --------------------------------------------------------------------------------
@@ -134,16 +134,23 @@ Config.Sounds = {
 	Music = "",
 	MusicVolume = 0.35,
 	MusicFade = 2.5,
-	-- Sons embutidos da Roblox: existem sempre, e são só placeholders.
+	-- Cliques secos e discretos; arquivos embutidos verificados no cliente.
 	Hover = "rbxasset://sounds/volume_slider.ogg",
-	HoverVolume = 0.12,
-	Click = "rbxasset://sounds/electronicpingshort.wav",
-	ClickVolume = 0.22,
+	HoverVolume = 0.07,
+	HoverPlaybackSpeed = 1.65,
+	HoverCooldown = 0.09,
+	Click = "rbxasset://sounds/volume_slider.ogg",
+	ClickVolume = 0.18,
+	ClickPlaybackSpeed = 0.88,
 	Back = "rbxasset://sounds/volume_slider.ogg",
-	BackVolume = 0.16,
-	Start = "rbxasset://sounds/impact_water.mp3",
-	StartVolume = 0.4,
-	StartPlaybackSpeed = 0.7,
+	BackVolume = 0.11,
+	BackPlaybackSpeed = 0.65,
+	Start = "rbxasset://sounds/volume_slider.ogg",
+	StartVolume = 0.2,
+	StartPlaybackSpeed = 0.55,
+	Enter = "rbxasset://sounds/volume_slider.ogg",
+	EnterVolume = 0.24,
+	EnterPlaybackSpeed = 0.72,
 }
 
 --------------------------------------------------------------------------------
@@ -172,36 +179,34 @@ Config.Scene = {
 	PropCount = 14,
 	PropColor = Color3.fromRGB(28, 29, 32),
 
-	-- MODELO DO MONSTRO ----------------------------------------------------
-	-- Tenta cada caminho nesta ordem e clona o primeiro que existir. Se
-	-- nenhum existir, monta uma silhueta provisória com Parts.
-	-- TROQUE AQUI pelo seu modelo: basta pôr o caminho dele no topo da lista.
+	-- Rafael usa o mesmo perfil da seleção de sobreviventes. Os nomes
+	-- Monster* permanecem compatíveis com a cena já montada no Explorer.
+	CharacterId = "RafaelMonteiro",
+	CharacterName = "RAFAEL MONTEIRO",
+	CharacterSubtitle = "O ATLÉTICO",
 	MonsterSources = {
-		"ReplicatedStorage/MenuMonster",
-		"Workspace/R6 Monster",
+		"ReplicatedStorage/SelectionAssets/PreviewModels/RafaelMonteiro",
+		"ReplicatedStorage/SurvivorPreviewRigs/RafaelMonteiro",
+		"ReplicatedStorage/RafaelMonteiro",
+		"Workspace/RafaelMonteiro",
 	},
-	-- Perto o bastante para dominar o enquadramento, como o Jason parado no
-	-- menu do F13 -- mas sem entrar dentro do plano da câmera (near clip).
-	MonsterOffset = Vector3.new(2, 0, -3), -- à direita do centro, bem perto
-	MonsterFacing = 200, -- graus; para onde ele olha
-	MonsterScale = 1.2,
-	-- ANIMAÇÃO: cole o id de uma Animation sua para o monstro do menu.
-	-- Vazio = usa a respiração procedural abaixo (sobe/desce + balanço),
-	-- que funciona em QUALQUER modelo, inclusive sem Humanoid.
+	MonsterOffset = Vector3.new(2, 0, -3),
+	MonsterFacing = 200,
+	MonsterScale = 1.05,
 	MonsterAnimationId = "",
-	BreathHeight = 0.13, -- studs de sobe e desce
-	BreathSpeed = 0.42, -- ciclos por segundo
-	SwayDegrees = 1.1, -- balanço lateral
-	SwaySpeed = 0.17,
+	BreathHeight = 0.045,
+	BreathSpeed = 0.28,
+	SwayDegrees = 0.6,
+	SwaySpeed = 0.12,
 
 	-- CÂMERA ---------------------------------------------------------------
 	CameraOffset = Vector3.new(-2, 3.6, 4), -- posição relativa à Origin
-	CameraLookAt = Vector3.new(1.6, 2.8, -3), -- mira a altura do peito/rosto dele
+	CameraLookAt = Vector3.new(0, 2.8, -3), -- mira a altura do peito/rosto dele
 	CameraFieldOfView = 58,
 	-- Movimento cinematográfico lento: uma deriva suave, sem enjoar.
-	CameraDriftRadius = 1.35,
+	CameraDriftRadius = 0.32,
 	CameraDriftSpeed = 0.055,
-	CameraBreath = 0.16,
+	CameraBreath = 0.07,
 
 	-- CLIMA ----------------------------------------------------------------
 	Fog = true,
@@ -210,7 +215,7 @@ Config.Scene = {
 	KeyLightColor = Color3.fromRGB(150, 170, 200), -- luz fria de lua
 	KeyLightBrightness = 5,
 	KeyLightRange = 140, -- cobre o baú de 150x150 studs de ponta a ponta
-	RimLightColor = Color3.fromRGB(180, 40, 30), -- contraluz vermelha no monstro
+	RimLightColor = Color3.fromRGB(225, 170, 95), -- contraluz âmbar no Rafael
 	RimLightBrightness = 6,
 	RimLightRange = 45,
 	-- Efeitos presos à CÂMERA (não ao Lighting): somem junto com o menu.
@@ -227,7 +232,7 @@ Config.Scene = {
 -- "soon = true" abre um painel provisório "Em breve" já navegável.
 --------------------------------------------------------------------------------
 Config.MainButtons = {
-	{ id = "Play", label = "JOGAR", primary = true },
+	{ id = "Play", label = "ENTRAR", primary = true, subtitle = "SEU PRÓXIMO DESTINO: A ILHA" },
 	{ id = "Characters", label = "PERSONAGENS", soon = true,
 		blurb = "Fichas, atributos, skins e perks dos sobreviventes." },
 	{ id = "Shop", label = "LOJA", soon = true,
@@ -236,44 +241,12 @@ Config.MainButtons = {
 		blurb = "O que você carrega entre as partidas." },
 	{ id = "Settings", label = "CONFIGURAÇÕES", soon = true,
 		blurb = "Gráficos, áudio, sensibilidade e controles." },
-	{ id = "Credits", label = "CRÉDITOS", soon = true,
-		blurb = "Quem fez, e com o quê." },
-	-- Sair: a Roblox não tem "fechar o jogo" pela API. O que dá para fazer é
-	-- desconectar o jogador do servidor (Player:Kick). Deixe false para
-	-- esconder o botão.
-	{ id = "Quit", label = "SAIR", quit = true },
 }
 
-Config.ShowQuitButton = true
-
---------------------------------------------------------------------------------
--- ACESSO RÁPIDO (SÓ PARA VOCÊ)
--- Um botão extra que entra na fila, escolhe o papel e marca Pronto de uma vez,
--- sem andar até o pilar e sem passar pela seleção de personagem.
---
--- NÃO É UM SISTEMA NOVO: usa o Testing.DevRoleChooser que JÁ existe em
--- GameConfig, e quem valida o UserId continua sendo o servidor
--- (WaitingRoomManager.isDevRoleTester). Se o seu id não estiver em
--- GameConfig.Testing.DevRoleUserIds, o botão nem aparece -- e se alguém
--- forjar o pedido, o servidor entra na fila normalmente e ignora o papel.
---------------------------------------------------------------------------------
-Config.QuickPlay = {
-	Enabled = true,
-	Label = "ACESSO RÁPIDO",
-	Hint = "Entra na fila, escolhe o papel e marca pronto de uma vez.",
-	Options = {
-		{ id = "Survivor", label = "SOBREVIVENTE" },
-		{ id = "Monster", label = "MONSTRO" },
-		{ id = "Spy", label = "ESPIÃO" },
-		{ id = "Random", label = "ALEATÓRIO" },
-	},
-	-- Escolhe sozinho o primeiro personagem livre do roster, para não parar
-	-- na tela de seleção. false = você escolhe o personagem normalmente.
-	AutoPickCharacter = true,
-	-- Marca Pronto sozinho depois de entrar (dispara a contagem).
-	AutoReady = true,
-	-- Tempo máximo esperando o servidor confirmar cada passo.
-	StepTimeout = 4,
+-- Separado da navegação principal: sempre no canto inferior direito.
+Config.Credits = {
+	id = "Credits", label = "CRÉDITOS",
+	blurb = "Quem fez, e com o quê.",
 }
 
 --------------------------------------------------------------------------------

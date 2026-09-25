@@ -73,6 +73,8 @@ type Spec = {
 	configId: string,
 	part: BasePart,
 	range: number,
+	-- Instancias que nao bloqueiam o alcance (ver InteractionGuard.CanReach).
+	ignore: { Instance }?,
 	canStart: (Player) -> (boolean, string?),
 	onComplete: (Player) -> (),
 }
@@ -374,7 +376,7 @@ local function stepSession(session: Session)
 		stop(session, "O ponto de reparo sumiu.", false)
 		return
 	end
-	if not InteractionGuard.CanReach(player, spec.part, spec.range) then
+	if not InteractionGuard.CanReach(player, spec.part, spec.range, spec.ignore) then
 		stop(session, "Você se afastou do reparo.", false)
 		return
 	end
@@ -425,7 +427,7 @@ local function begin(player: Player, spec: Spec)
 		end
 		return
 	end
-	if not InteractionGuard.CanReach(player, spec.part, spec.range) then
+	if not InteractionGuard.CanReach(player, spec.part, spec.range, spec.ignore) then
 		return
 	end
 	local ok, refuseReason = spec.canStart(player)

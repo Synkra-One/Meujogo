@@ -3,7 +3,10 @@
 return {
 	Enabled = true,
 	MaxRange = 96,
-	MinFear = 25,
+	MinFear = 25, -- batimento que o próprio sobrevivente escuta
+	MonsterMinFear = 55, -- percepção do monstro começa só com tensão estabelecida
+	WallMinFear = 75,
+	WallRevealHold = 3, -- segundos contínuos de medo alto atrás de cobertura
 	UpdateInterval = 0.2,
 	SnapshotTimeout = 1.2,
 	MaxVolume = 0.85,

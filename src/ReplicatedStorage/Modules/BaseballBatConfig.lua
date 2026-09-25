@@ -1,6 +1,7 @@
 --!strict
--- Visual + animacao do Taco de Beisebol. Dano/alcance/cooldown ficam em
--- GameConfig.Weapons.Definitions.TacoBeisebol (o servidor e a autoridade).
+-- Visual + animacao do Taco de Beisebol; as Animations e o Grip por eixo
+-- tambem valem para o Pe de cabra (Crowbar, abaixo). Dano/alcance/cooldown
+-- ficam em GameConfig.Weapons.Definitions (o servidor e a autoridade).
 return table.freeze({
 	MeshId = "rbxassetid://54983181",
 	-- Textura do mesh (cole o rbxassetid). "" = madeira lisa via Color/Material.
@@ -21,15 +22,17 @@ return table.freeze({
 	HandleEndFraction = 0.32, -- distancia do centro ate a mao, em fracao do comprimento
 	GripOverride = nil :: CFrame?,
 
+	-- Pe de cabra: segurado igual ao Taco (eixo longo ao longo do braco).
+	Crowbar = table.freeze({
+		HandleEndSign = -1, -- troque para 1 se o pe de cabra aparecer de cabeca pra baixo
+		HandleEndFraction = 0.32,
+	}),
+
 	Animations = table.freeze({
 		Idle = "rbxassetid://137364111320171",
 		Hit = "rbxassetid://138409446604086",
 		Finish = "rbxassetid://122663486568815",
 	}),
-	-- Idle compartilha a camada Movement com o Animate. Isso permite que o
-	-- clip do Taco e walk/run sejam misturados em vez de o Taco bloquear o
-	-- corpo inteiro com uma prioridade Action.
-	IdleMovingWeight = 0.22,
 	AnimationFadeTime = 0.12,
 	AnimationLoadWarningDelay = 2,
 	-- Espera curta pelo marker AttackStart antes de usar o fallback. Isto so

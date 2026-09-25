@@ -30,7 +30,7 @@ local function get(tool: Tool): any
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	local entry = { handle = handle, origin = origin, emitter = emitter, endpoint = endpoint,
 		light = light, spill = spill, fill = fill, beam = beam, rayAt = 0, distance = 0,
-		blocked = false, params = params,
+		clipped = false, source = nil, params = params,
 		flickerSeed = (#tool.Name * 7 + math.floor(handle.Size.Magnitude * 10)) }
 	local sound = Instance.new("Sound")
 	sound.Name, sound.SoundId, sound.Volume = "FlashBurstDischarge", Config.FlashBurstSound, Config.FlashBurstSoundVolume
@@ -62,21 +62,28 @@ function Visuals.Update(tool: Tool, enabled: boolean)
 	-- space, so camera motion cannot swing the cone away from the lens.
 	local position = entry.origin.WorldPosition
 	local aim = entry.origin.WorldCFrame.LookVector
-	entry.emitter.CFrame = entry.origin.CFrame
 	local now = os.clock()
 	if now >= entry.rayAt or not entry.lastPosition
 		or (position - entry.lastPosition).Magnitude > 0.05
 		or aim:Dot(entry.lastAim) < 0.99995 then
 		entry.rayAt = now + Config.VisualRayInterval
-		entry.lastPosition, entry.lastAim = position, aim
 		entry.params.FilterDescendantsInstances = { character }
 		local head = character:FindFirstChild("Head")
-		entry.blocked = head and head:IsA("BasePart")
-			and workspace:Raycast(head.Position, position - head.Position, entry.params) ~= nil
-		local result = workspace:Raycast(position, aim * Config.LightRange, entry.params)
-		entry.distance = if result then (result.Position - position).Magnitude else Config.LightRange
+		local obstruction = if head and head:IsA("BasePart")
+			then workspace:Raycast(head.Position, position - head.Position, entry.params) else nil
+		-- Quando a mao atravessa uma parede, a lente fica dentro da geometria.
+		-- Mover so a luz visual para o lado do jogador evita o blackout; o
+		-- servidor continua validando a origem real para acertar o monstro.
+		entry.clipped = obstruction ~= nil
+		entry.source = if entry.clipped then head.Position else position
+		entry.lastPosition, entry.lastAim = position, aim
+		local result = workspace:Raycast(entry.source, aim * Config.LightRange, entry.params)
+		entry.distance = if result then (result.Position - entry.source).Magnitude else Config.LightRange
 	end
-	entry.endpoint.CFrame = entry.origin.CFrame * CFrame.new(0, 0, -entry.distance)
+	entry.emitter.CFrame = if entry.clipped
+		then entry.handle.CFrame:ToObjectSpace(CFrame.lookAt(entry.source, entry.source + aim))
+		else entry.origin.CFrame
+	entry.endpoint.CFrame = entry.emitter.CFrame * CFrame.new(0, 0, -entry.distance)
 	entry.beam.Width1 = math.min(4.8, entry.distance * 0.18)
 	local battery = tool:GetAttribute("Battery")
 	local low = if type(battery) == "number"
@@ -87,10 +94,10 @@ function Visuals.Update(tool: Tool, enabled: boolean)
 	entry.light.Brightness = Config.Brightness * normal + Config.FlashBurstBrightness * burst
 	if entry.spill then entry.spill.Brightness = Config.SpillBrightness * normal + 3 * burst end
 	if entry.fill then entry.fill.Brightness = Config.FillBrightness * normal + 2 * burst end
-	local visible = not entry.blocked
-	entry.light.Enabled, entry.beam.Enabled = visible, visible and entry.distance > 0.2
-	if entry.spill then entry.spill.Enabled = visible end
-	if entry.fill then entry.fill.Enabled = visible end
+	entry.light.Shadows = not entry.clipped
+	entry.light.Enabled, entry.beam.Enabled = true, entry.distance > 0.2
+	if entry.spill then entry.spill.Enabled = true end
+	if entry.fill then entry.fill.Enabled = true end
 end
 
 function Visuals.UpdateImpacts(players: { Player })

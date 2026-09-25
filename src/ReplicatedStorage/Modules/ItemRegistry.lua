@@ -9,6 +9,9 @@
 	CATEGORIAS
 	  "PecaRadio" -- Antena/Bateria/Transmissor: peças únicas criadas por
 	    RadioPieces.lua. Viram Tools no inventário e caem quando o portador morre.
+	  "PecaBarco" -- Hélice/Vela de ignição/Chave do barco: únicas por rodada,
+	    criadas por BoatItems.lua (docs/Barco.md). Sem Rarity de propósito:
+	    não entram no ItemSpawner, nas caixas nem nas gavetas.
 	  "Tool" -- LancaDeBambu/Tocha/LancaAncestral:
 	    Tools de verdade no Backpack (WeaponSystem.lua / já existentes).
 
@@ -71,6 +74,34 @@ ItemRegistry.Items = {
 		Function = "Peça de reparo do rádio.",
 	},
 
+	HeliceBarco = {
+		DisplayName = "Hélice",
+		Category = "PecaBarco",
+		AttributeName = "HeliceBarco",
+		Rarity = nil,
+		Zones = {},
+		MaxPerMap = 1,
+		Function = "Peça do motor do barco de fuga. Leve até o motor e instale (reparo de precisão).",
+	},
+	VelaIgnicao = {
+		DisplayName = "Vela de Ignição",
+		Category = "PecaBarco",
+		AttributeName = "VelaIgnicao",
+		Rarity = nil,
+		Zones = {},
+		MaxPerMap = 1,
+		Function = "Peça do motor do barco de fuga. Sem ela o motor não faz faísca.",
+	},
+	ChaveBarco = {
+		DisplayName = "Chave do Barco",
+		Category = "PecaBarco",
+		AttributeName = "ChaveBarco",
+		Rarity = nil,
+		Zones = {},
+		MaxPerMap = 1,
+		Function = "Liga o motor do barco de fuga. Coloque na ignição do console ou dê a partida carregando ela.",
+	},
+
 	LancaDeBambu = {
 		DisplayName = "Pé de cabra",
 		Category = "Tool",
@@ -102,7 +133,7 @@ ItemRegistry.Items = {
 		Rarity = "Media",
 		Zones = { Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta, Zone.Construcoes, Zone.Construcoes },
 		AssetId = 6715358554, -- modelo unico da lanterna: "Flashlight", por MikesDSL
-		Function = "Feixe direcional com bateria de 60s. Exposicao continua incomoda e desacelera o Monstro, com dano leve e resistencia temporaria.",
+		Function = "Feixe direcional de luz continua. A bateria alimenta o clarao; a exposicao desacelera o Monstro e causa dano leve.",
 	},
 	Chocolate = {
 		DisplayName = "Chocolate",
@@ -128,7 +159,7 @@ ItemRegistry.Items = {
 		Rarity = "Media",
 		Zones = { Zone.DestrocosMar, Zone.DestrocosPraia, Zone.DestrocosFloresta, Zone.Construcoes, Zone.Construcoes },
 		AssetId = 8679995948, -- modelo REAL do Toolbox (ver ToolFactory.lua)
-		Function = "Combustível portátil pro gerador da Estação de Rádio (server/RadioSiteSystem.lua). Levar até o bocal e segurar 'Abastecer': soma GameConfig.RadioSite.CombustivelPorGalao segundos e se destrói -- concorre com os galões fixos já presentes no local, mas vale carregar porque não depende de estar perto da estação pra achar.",
+		Function = "Um galão enche o tanque do gerador da Estação de Rádio (server/RadioSiteSystem.lua). Leve ao bocal e segure 'Abastecer'; o item é consumido ao completar a ação.",
 	},
 	TacoBeisebol = {
 		DisplayName = "Taco de Beisebol",

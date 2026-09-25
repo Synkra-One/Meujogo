@@ -34,6 +34,8 @@ MapMarkers.Category = {
 	Heal = "Heal", -- Chocolate, Bandagem
 	Radio = "Radio", -- Antena, Bateria, Transmissor
 	Fuel = "Fuel", -- Gasolina
+	Boat = "Boat", -- Hélice, Vela de ignição, Chave do barco
+	Escape = "Escape", -- o próprio barco de fuga (BoatSystem marca pra todos)
 	Rare = "Rare", -- Crowbar Ancestral
 	Crate = "Crate", -- caixa de loot (sem itemId específico)
 }
@@ -45,6 +47,8 @@ local STYLE: { [string]: { Color: Color3, Glyph: string } } = {
 	[MapMarkers.Category.Heal] = { Color = Color3.fromRGB(120, 220, 150), Glyph = "+" },
 	[MapMarkers.Category.Radio] = { Color = Color3.fromRGB(150, 200, 240), Glyph = "R" },
 	[MapMarkers.Category.Fuel] = { Color = Color3.fromRGB(230, 140, 60), Glyph = "G" },
+	[MapMarkers.Category.Boat] = { Color = Color3.fromRGB(96, 196, 214), Glyph = "B" },
+	[MapMarkers.Category.Escape] = { Color = Color3.fromRGB(64, 150, 230), Glyph = "⚓" },
 	[MapMarkers.Category.Rare] = { Color = Color3.fromRGB(233, 193, 99), Glyph = "★" },
 	[MapMarkers.Category.Crate] = { Color = Color3.fromRGB(180, 150, 110), Glyph = "▪" },
 }
@@ -62,6 +66,9 @@ local ITEM_CATEGORY: { [string]: string } = {
 	Bateria = MapMarkers.Category.Radio,
 	Transmissor = MapMarkers.Category.Radio,
 	Gasolina = MapMarkers.Category.Fuel,
+	HeliceBarco = MapMarkers.Category.Boat,
+	VelaIgnicao = MapMarkers.Category.Boat,
+	ChaveBarco = MapMarkers.Category.Boat,
 	LancaAncestral = MapMarkers.Category.Rare,
 }
 

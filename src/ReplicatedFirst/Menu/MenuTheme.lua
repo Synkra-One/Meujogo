@@ -4,8 +4,7 @@
 	Construtores visuais do menu: tudo que é "como uma coisa se parece e como
 	ela se move" mora aqui. MenuScreens cuida de "o que aparece quando".
 
-	Nenhuma cor, tempo ou fonte é escolhida neste arquivo -- todas vêm do
-	MenuConfig. Toda transição passa pelo TweenService.
+	A paleta, os tempos e as famílias de fonte vêm do MenuConfig. Toda transição passa pelo TweenService.
 
 	RESPONSIVO: o layout usa escala (fração da tela), não pixels fixos, e o
 	Scale() abaixo ajusta o tamanho do texto/botões por tamanho de viewport,
@@ -60,6 +59,27 @@ function Theme.Scale(viewport: Vector2): number
 	if Theme.IsTouch() then factor *= 1.18 end
 	if Theme.IsConsole() then factor *= 1.22 end
 	return factor
+end
+
+-- Medidas em pixels lógicos. O canvas compensa o UIScale para os cantos
+-- continuarem presos à tela real, inclusive em retrato e ultrawide.
+function Theme.Layout(viewport: Vector2)
+	local factor = math.min(Theme.Scale(viewport), viewport.Y / 540)
+	local width, height = viewport.X / factor, viewport.Y / factor
+	local portrait = viewport.Y > viewport.X
+	local compact = height < 680
+	local margin = if portrait then 28 else math.clamp(width * 0.065, 36, 120)
+	local logoTop = if compact then 42 else height * 0.14
+	return {
+		factor = factor, width = width, height = height, portrait = portrait,
+		margin = margin, logoTop = logoTop,
+		columnTop = if portrait then height * 0.42 else logoTop + (if compact then 112 else 150),
+		columnWidth = if portrait then width - margin * 2 else math.clamp(width * 0.29, 310, 390),
+		primaryHeight = if compact then 62 else 78,
+		buttonHeight = if compact then 44 else 50,
+		gap = if compact then 8 else 10,
+		footerBottom = 24,
+	}
 end
 
 function Theme.Corner(parent: Instance, radius: number): UICorner
@@ -158,23 +178,27 @@ function Theme.Logo(parent: Instance, zIndex: number): GuiObject
 	holder.Size = UDim2.fromScale(0.62, Config.Brand.LogoHeightScale * 1.5)
 	holder.Parent = parent
 
+	local eyebrow = Theme.Label(holder, "Eyebrow", "UMA ILHA. NENHUMA GARANTIA.", 11,
+		Config.Fonts.Button, Config.Palette.Accent, zIndex + 1)
+	eyebrow.Position, eyebrow.Size = UDim2.fromOffset(2, 0), UDim2.new(1, 0, 0, 18)
+
 	local title = Theme.Label(holder, "Title", Config.Brand.Title, 58, Config.Fonts.Display,
 		Config.Palette.Text, zIndex + 1)
-	title.Size = UDim2.fromScale(1, 0.62)
-	Theme.Stroke(title, Color3.new(0, 0, 0), 2, 0.45)
+	title.Position, title.Size = UDim2.fromOffset(0, 20), UDim2.new(1, 0, 0, 62)
+	title.TextScaled = true
+	local limits = Instance.new("UITextSizeConstraint")
+	limits.MinTextSize, limits.MaxTextSize = 24, 58
+	limits.Parent = title
 
-	local subtitle = Theme.Label(holder, "Subtitle", Config.Brand.Subtitle, 17, Config.Fonts.Body,
-		Config.Palette.Accent, zIndex + 1)
-	subtitle.Position, subtitle.Size = UDim2.fromScale(0, 0.64), UDim2.fromScale(1, 0.24)
-	-- Espaçamento largo dá o ar de "abertura de filme" sem precisar de fonte
-	-- customizada (a Roblox não expõe letter-spacing).
-	subtitle.Text = string.upper(table.concat(string.split(Config.Brand.Subtitle, ""), " "))
+	local subtitle = Theme.Label(holder, "Subtitle", Config.Brand.Subtitle, 13, Config.Fonts.Body,
+		Config.Palette.TextDim, zIndex + 1)
+	subtitle.Position, subtitle.Size = UDim2.fromOffset(2, 88), UDim2.new(1, 0, 0, 20)
+
 	return holder
 end
 
 --------------------------------------------------------------------------------
--- BOTÃO -- minimalista: barra de acento à esquerda que cresce no hover, fundo
--- que acende, texto que clareia e desloca. Teclado/controle usam o MESMO
+-- BOTÃO -- cartões arredondados, ação principal em âmbar e seta animada. Teclado/controle usam o MESMO
 -- caminho visual (SetFocus), então "selecionado" é sempre legível.
 --------------------------------------------------------------------------------
 export type Button = {
@@ -185,79 +209,84 @@ export type Button = {
 }
 
 function Theme.Button(parent: Instance, name: string, text: string, zIndex: number,
-	options: { primary: boolean?, danger: boolean?, compact: boolean? }?): Button
+	options: { primary: boolean?, compact: boolean?, subtitle: string?, index: number? }?): Button
 	local opts = options or {}
-	local accent = if opts.danger then Config.Palette.Danger
-		elseif opts.primary then Config.Palette.AccentBright
-		else Config.Palette.Accent
+	local palette = Config.Palette
+	local primary = opts.primary == true
+	local compact = opts.compact == true
 
 	local button = Instance.new("TextButton")
 	button.Name, button.ZIndex = name, zIndex
-	button.AutoButtonColor = false -- o realce é todo nosso, via tween
-	button.BackgroundColor3 = Config.Palette.Panel
-	button.BackgroundTransparency = 0.35
-	button.BorderSizePixel = 0
-	button.Text = ""
-	button.Size = UDim2.fromScale(1, if opts.compact then 0.5 else 1)
+	button.AutoButtonColor = false
+	button.BackgroundColor3 = if primary then palette.Accent else palette.Panel
+	button.BackgroundTransparency = if primary then 0 else 0.24
+	button.BorderSizePixel, button.Text = 0, ""
+	button.Size = UDim2.fromScale(1, 1)
 	button.Parent = parent
-	Theme.Corner(button, 3)
+	Theme.Corner(button, if compact then 8 else 12)
+	local stroke = Theme.Stroke(button, if primary then palette.AccentBright else palette.PanelStroke,
+		1, if primary then 0.2 else 0.65)
+	local gradient = Instance.new("UIGradient")
+	gradient.Rotation = 20
+	gradient.Color = ColorSequence.new(palette.Highlight, if primary then palette.Accent else palette.TextDim)
+	gradient.Parent = button
 
-	local stroke = Theme.Stroke(button, Config.Palette.PanelStroke, 1, 0.55)
+	local inset = if opts.index then 48 else 22
+	local ink = if primary then palette.OnAccent else palette.Text
+	local label = Theme.Label(button, "Label", text, if primary then 26 elseif compact then 13 else 15,
+		Config.Fonts.Button, ink, zIndex + 1)
+	label.Position = UDim2.fromOffset(inset, if opts.subtitle then -9 else 0)
+	label.Size = UDim2.new(1, -inset - 46, 1, 0)
 
-	local bar = Instance.new("Frame")
-	bar.Name, bar.ZIndex = "Bar", zIndex + 1
-	bar.AnchorPoint = Vector2.new(0, 0.5)
-	bar.Position = UDim2.fromScale(0, 0.5)
-	bar.Size = UDim2.new(0, 3, 0.42, 0)
-	bar.BackgroundColor3 = accent
-	bar.BackgroundTransparency, bar.BorderSizePixel = 0.25, 0
-	bar.Parent = button
+	if opts.subtitle then
+		local subtitle = Theme.Label(button, "Subtitle", opts.subtitle, 10, Config.Fonts.Body, ink, zIndex + 1)
+		subtitle.Position, subtitle.Size = UDim2.new(0, inset, 0.5, 10), UDim2.new(1, -inset - 40, 0, 16)
+		subtitle.TextTransparency = 0.22
+	end
+	if opts.index then
+		local index = Theme.Label(button, "Index", string.format("%02d", opts.index), 10,
+			Config.Fonts.Body, palette.Accent, zIndex + 1)
+		index.Position, index.Size = UDim2.fromOffset(18, 0), UDim2.new(0, 24, 1, 0)
+	end
+	local arrow = Theme.Label(button, "Arrow", "›", if primary then 32 else 23,
+		Config.Fonts.Body, ink, zIndex + 1)
+	arrow.AnchorPoint = Vector2.new(1, 0.5)
+	arrow.Position, arrow.Size = UDim2.new(1, -16, 0.5, 0), UDim2.fromOffset(20, 32)
+	arrow.TextXAlignment = Enum.TextXAlignment.Center
+	arrow.TextTransparency = if primary then 0 else 0.5
 
-	local label = Theme.Label(button, "Label", text, if opts.compact then 15 else 19,
-		Config.Fonts.Button, Config.Palette.TextDim, zIndex + 1)
-	label.Position = UDim2.new(0, 18, 0, 0)
-	label.Size = UDim2.new(1, -30, 1, 0)
-
-	local enabled = true
-	local focused = false
-
+	local enabled, hovered, selected, manualFocus = true, false, false, false
 	local function apply(instant: boolean?)
 		local info = Theme.Info(if instant then 0 else Config.Motion.ButtonHover,
 			Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-		local on = focused and enabled
+		local on = enabled and (hovered or selected or manualFocus)
 		Theme.Tween(button, info, {
-			BackgroundTransparency = if not enabled then 0.75 elseif on then 0.08 else 0.35,
+			BackgroundColor3 = if primary then (if on then palette.AccentBright else palette.Accent) else palette.Panel,
+			BackgroundTransparency = if not enabled then 0.65 elseif primary then 0 elseif on then 0.02 else 0.24,
 		})
-		Theme.Tween(stroke, info, { Transparency = if on then 0.1 else 0.55,
-			Color = if on then accent else Config.Palette.PanelStroke })
-		Theme.Tween(bar, info, {
-			Size = if on then UDim2.new(0, 4, 1, 0) else UDim2.new(0, 3, 0.42, 0),
-			BackgroundTransparency = if not enabled then 0.7 elseif on then 0 else 0.25,
+		Theme.Tween(stroke, info, {
+			Transparency = if on then 0 else if primary then 0.2 else 0.65,
+			Color = if on or primary then palette.AccentBright else palette.PanelStroke,
 		})
 		Theme.Tween(label, info, {
-			TextColor3 = if not enabled then Config.Palette.TextDim
-				elseif on then Config.Palette.Highlight else Config.Palette.Text,
-			Position = if on then UDim2.new(0, 26, 0, 0) else UDim2.new(0, 18, 0, 0),
+			TextColor3 = if primary then palette.OnAccent elseif on then palette.Highlight else palette.Text,
+			Position = UDim2.fromOffset(inset + (if on then 4 else 0), if opts.subtitle then -9 else 0),
 			TextTransparency = if enabled then 0 else 0.45,
 		})
+		Theme.Tween(arrow, info, {
+			Position = UDim2.new(1, if on then -10 else -16, 0.5, 0),
+			TextTransparency = if on or primary then 0 else 0.5,
+		})
 	end
-	apply(true)
-
 	local connections: { RBXScriptConnection } = {
-		button.MouseEnter:Connect(function() focused = true; apply() end),
-		button.MouseLeave:Connect(function() focused = false; apply() end),
-		-- Controle/teclado: a própria Roblox move o SelectionObject.
-		button.SelectionGained:Connect(function() focused = true; apply() end),
-		button.SelectionLost:Connect(function() focused = false; apply() end),
+		button.MouseEnter:Connect(function() hovered = true; apply() end),
+		button.MouseLeave:Connect(function() hovered = false; apply() end),
+		button.SelectionGained:Connect(function() selected = true; apply() end),
+		button.SelectionLost:Connect(function() selected = false; apply() end),
 	}
-
-	local api: Button
-	api = {
+	return {
 		Instance = button,
-		SetFocus = function(value: boolean)
-			focused = value
-			apply()
-		end,
+		SetFocus = function(value: boolean) manualFocus = value; apply() end,
 		SetEnabled = function(value: boolean)
 			enabled = value
 			button.Active, button.Selectable = value, value
@@ -269,7 +298,6 @@ function Theme.Button(parent: Instance, name: string, text: string, zIndex: numb
 			button:Destroy()
 		end,
 	}
-	return api
 end
 
 --[[
@@ -288,7 +316,7 @@ function Theme.Press(button: TextButton)
 end
 
 --------------------------------------------------------------------------------
--- PAINEL -- caixa usada pelos submenus ("Em breve", acesso rápido, etc).
+-- PAINEL -- caixa usada pelos submenus ("Em breve", créditos, etc).
 --------------------------------------------------------------------------------
 function Theme.Panel(parent: Instance, name: string, title: string, zIndex: number): (Frame, Frame)
 	local panel = Instance.new("Frame")
@@ -301,7 +329,7 @@ function Theme.Panel(parent: Instance, name: string, title: string, zIndex: numb
 	panel.BorderSizePixel = 0
 	panel.Visible = false
 	panel.Parent = parent
-	Theme.Corner(panel, 4)
+	Theme.Corner(panel, 16)
 	Theme.Stroke(panel, Config.Palette.PanelStroke, 1, 0.35)
 
 	local header = Instance.new("Frame")

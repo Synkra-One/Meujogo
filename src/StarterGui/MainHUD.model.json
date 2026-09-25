@@ -7,34 +7,6 @@
   },
   "children": [
     {
-      "name": "PhaseFrame",
-      "className": "Frame",
-      "properties": {
-        "Size": { "UDim2": [[0, 420], [0, 46]] },
-        "Position": { "UDim2": [[0.5, 0], [0, 10]] },
-        "AnchorPoint": [0.5, 0],
-        "BackgroundColor3": [0, 0, 0],
-        "BackgroundTransparency": 0.4,
-        "BorderSizePixel": 0
-      },
-      "children": [
-        {
-          "name": "PhaseText",
-          "className": "TextLabel",
-          "properties": {
-            "Size": { "UDim2": [[1, 0], [1, 0]] },
-            "BackgroundTransparency": 1,
-            "Text": "Fase: -- | Tempo: --:--",
-            "TextColor3": [1, 1, 1],
-            "TextSize": 22,
-            "Font": "SourceSansBold",
-            "TextXAlignment": "Center",
-            "TextYAlignment": "Center"
-          }
-        }
-      ]
-    },
-    {
       "name": "RoleFrame",
       "className": "Frame",
       "properties": {

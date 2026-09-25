@@ -1,5 +1,6 @@
 --!strict
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ContentProvider = game:GetService("ContentProvider")
 local Config = require(ReplicatedStorage.Modules.FlashlightConfig)
 
 local Pose = {}
@@ -115,11 +116,37 @@ function Pose.new(playTracks: boolean?)
 	}, Pose)
 end
 
+-- Idle (the hold pose) sits above the crouch clips (Action) so the right arm
+-- keeps the same flashlight pose while crouched/crouch-walking.
 local function priorityFor(name: string): Enum.AnimationPriority
-	if name == "Click" or name == "Burst" then return Enum.AnimationPriority.Action3 end
-	if name == "Equip" then return Enum.AnimationPriority.Action2 end
-	return Enum.AnimationPriority.Action
+	if name == "Click" or name == "Burst" then return Enum.AnimationPriority.Action4 end
+	if name == "Equip" then return Enum.AnimationPriority.Action3 end
+	return Enum.AnimationPriority.Action2
 end
+
+local EQUIP_SPEED = 0.8
+
+-- The first equip used to play before the clip content had streamed in, so the
+-- arm snapped to the pose. Preload once, ahead of the first pickup.
+local preloaded = false
+local function preloadAnimations()
+	if preloaded then return end
+	preloaded = true
+	task.spawn(function()
+		local list = {}
+		for _, rawId in Config.Animations do
+			local id = animationId(rawId)
+			if id then
+				local animation = Instance.new("Animation")
+				animation.AnimationId = id
+				table.insert(list, animation)
+			end
+		end
+		pcall(function() ContentProvider:PreloadAsync(list) end)
+		for _, animation in list do animation:Destroy() end
+	end)
+end
+preloadAnimations()
 
 function Pose:_stopTrack(name: string, fadeTime: number)
 	local track = self.tracks[name]
@@ -184,7 +211,7 @@ function Pose:_playOnce(name: string)
 	local track = self.tracks[name]
 	if not track or self.failedStates[name] then return end
 	track:Stop(0)
-	track:Play(Config.AnimationFadeTime, 1, 1)
+	track:Play(Config.AnimationFadeTime, 1, if name == "Equip" then EQUIP_SPEED else 1)
 	self:_warnIfUnloaded(name, track)
 end
 

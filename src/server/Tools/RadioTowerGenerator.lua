@@ -2,7 +2,7 @@
 --[[
 	RadioTowerGenerator (ferramenta de editor)
 	Monta a ESTAÇÃO DE RÁDIO inteira: torre de transmissão, abrigo técnico,
-	gerador externo, tanque/galões de combustível, caixa de fusíveis, bateria
+	gerador externo, tanque decorativo, caixa de fusíveis, bateria
 	reserva, cabeamento, cerca com placas de perigo, holofotes, baliza
 	vermelha no topo e a estrada de manutenção chegando no portão.
 
@@ -27,7 +27,6 @@
 	  Model "TorreDeRadio"      EstacaoRadio = true
 	  InteracaoRadio (string)   "Abastecer" | "Partida" | "Fusivel"
 	                            | "PegarFusivel" | "Painel" | "Socorro"
-	  GalaoCombustivel = true   galão; "Cheio" diz se ainda tem combustível
 	  MotorGerador = true       corpo do gerador (som + fumaça saem daqui)
 	  EscapeGerador = true      ponta do escapamento
 	  BalizaRadio = true        luz vermelha do topo (pisca sempre; mais rápido com o gerador ligado)
@@ -882,11 +881,10 @@ local function buildGenerator(parent: Instance, cf: CFrame): { [string]: BasePar
 	return out
 end
 
-local function buildFuel(parent: Instance, cf: CFrame, geradorPos: Vector3): { BasePart }
+local function buildFuel(parent: Instance, cf: CFrame, geradorPos: Vector3)
 	local folder = Instance.new("Folder")
 	folder.Name = "Combustivel"
 	folder.Parent = parent
-	local cans: { BasePart } = {}
 
 	-- Bacia de contenção (mureta baixa em volta).
 	part(folder, "PisoContencao", Vector3.new(14, 0.5, 10), cf * CFrame.new(0, 0.25, 0), Enum.Material.Concrete, COL.ConcreteDark)
@@ -915,16 +913,7 @@ local function buildFuel(parent: Instance, cf: CFrame, geradorPos: Vector3): { B
 	-- Mangueira do tanque indo pro lado do gerador.
 	cableRun(folder, "Mangueira", (cf * CFrame.new(-1.5, 5.6, 0)).Position, geradorPos + Vector3.new(0, 1.2, 0), 1.2, 0.28, COL.HazardDark)
 
-	-- Galões: é o que o jogador despeja no gerador.
-	for i = 1, 3 do
-		local can = part(folder, "GalaoCombustivel_" .. i, Vector3.new(1.7, 2.4, 1.1), cf * CFrame.new(-4.6 + (i - 1) * 1.9, 1.7, -3.2) * CFrame.Angles(0, math.rad(-8 + i * 7), 0), Enum.Material.Metal, COL.FuelRed)
-		can:SetAttribute("GalaoCombustivel", true)
-		can:SetAttribute("Cheio", true)
-		part(folder, "AlcaGalao_" .. i, Vector3.new(1.1, 0.25, 0.25), can.CFrame * CFrame.new(0, 1.3, 0), Enum.Material.Metal, COL.SteelDark, DECO)
-		part(folder, "BicoGalao_" .. i, Vector3.new(0.35, 0.8, 0.35), can.CFrame * CFrame.new(0.6, 1.2, 0.3) * CFrame.Angles(math.rad(25), 0, 0), Enum.Material.Metal, COL.HazardDark, DECO)
-		table.insert(cans, can)
-	end
-	return cans
+	-- Gasolina coletável é criada por RadioPieces/ToolFactory a cada rodada.
 end
 
 -- Quadro de fusíveis, bateria reserva e todo o cabeamento visível.
@@ -1347,6 +1336,46 @@ function RadioTowerGenerator.Build(seed: number?): Model
 		))
 	end
 	return model
+end
+
+-- Validação estrutural antes de conectar prompts: mapas antigos não podem
+-- deixar metade do objetivo ativa. Uma chave duplicada também é inválida.
+function RadioTowerGenerator.Validate(model: Instance?): boolean
+	if not model or not model:IsA("Model") then return false end
+	local counts: { [string]: number } = {}
+	for _, part in model:GetDescendants() do
+		if not part:IsA("BasePart") then continue end
+		local key = part:GetAttribute("InteracaoRadio")
+		if type(key) == "string" then counts[key] = (counts[key] or 0) + 1 end
+		for _, attribute in { "MotorGerador", "EscapeGerador" } do
+			if part:GetAttribute(attribute) == true then counts[attribute] = (counts[attribute] or 0) + 1 end
+		end
+	end
+	for _, key in { "Abastecer", "Partida", "Fusivel", "PegarFusivel", "Painel", "Socorro", "MotorGerador", "EscapeGerador" } do
+		if counts[key] ~= 1 then return false end
+	end
+	local rack = model:FindFirstChild("ConsoleInstalacao", true)
+	return rack ~= nil and rack:IsA("BasePart")
+end
+
+function RadioTowerGenerator.Ensure(): Model
+	local model = getIlha():FindFirstChild("TorreDeRadio")
+	if not RadioTowerGenerator.Validate(model) then
+		warn("[RadioTowerGenerator] Estação ausente/incompleta: reconstruindo antes de conectar as interações.")
+		model = RadioTowerGenerator.Build()
+	end
+	assert(model and model:IsA("Model") and RadioTowerGenerator.Validate(model), "Estação de rádio inválida")
+	-- Migração restrita aos antigos galões decorativos, incluindo suas alças
+	-- e bicos separados. Tools Gasolina reais são preservadas.
+	for _, object in model:GetDescendants() do
+		if object:IsA("BasePart") and not object:FindFirstAncestorOfClass("Tool")
+			and (object:GetAttribute("GalaoCombustivel") == true
+				or object.Name:match("^GalaoCombustivel_%d+$")
+				or object.Name:match("^AlcaGalao_%d+$") or object.Name:match("^BicoGalao_%d+$")) then
+			object:Destroy()
+		end
+	end
+	return model :: Model
 end
 
 return RadioTowerGenerator

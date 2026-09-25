@@ -135,6 +135,9 @@ RepairMinigameConfig.Tasks = {
 	RadioInstalar = { Enabled = true, Label = "Instalando peça" },
 	RadioPartida = { Enabled = true, Label = "Partida do gerador" },
 	RadioPainel = { Enabled = true, Label = "Painel de controle" },
+	-- Barco de fuga (server/BoatSystem.lua): hélice e vela entram no motor
+	-- pelo mesmo minigame. O choque é do GERADOR do rádio, não do barco.
+	BarcoMotor = { Enabled = true, Label = "Montando o motor", GeneratorShock = false },
 }
 
 --------------------------------------------------------------------------------

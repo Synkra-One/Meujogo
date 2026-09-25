@@ -23,6 +23,7 @@ export type Controller = typeof(setmetatable({} :: {
 	folder: Folder,
 	effects: { [string]: Sound },
 	music: Sound?,
+	lastHover: number,
 }, Sounds))
 
 local function makeSound(parent: Instance, name: string, id: string, volume: number,
@@ -45,10 +46,11 @@ function Sounds.new(): Controller
 	local cfg = Config.Sounds
 	local effects: { [string]: Sound } = {}
 	for name, data in {
-		Hover = { cfg.Hover, cfg.HoverVolume },
-		Click = { cfg.Click, cfg.ClickVolume },
-		Back = { cfg.Back, cfg.BackVolume },
+		Hover = { cfg.Hover, cfg.HoverVolume, cfg.HoverPlaybackSpeed },
+		Click = { cfg.Click, cfg.ClickVolume, cfg.ClickPlaybackSpeed },
+		Back = { cfg.Back, cfg.BackVolume, cfg.BackPlaybackSpeed },
 		Start = { cfg.Start, cfg.StartVolume, cfg.StartPlaybackSpeed },
+		Enter = { cfg.Enter, cfg.EnterVolume, cfg.EnterPlaybackSpeed },
 	} do
 		local sound = makeSound(folder, name, data[1] :: string, data[2] :: number, false, data[3] :: number?)
 		if sound then effects[name] = sound end
@@ -57,7 +59,7 @@ function Sounds.new(): Controller
 	-- TROQUE A MÚSICA em MenuConfig.Sounds.Music. Vazia = menu em silêncio.
 	local music = makeSound(folder, "Music", cfg.Music, 0, true)
 
-	local self = setmetatable({ folder = folder, effects = effects, music = music }, Sounds)
+	local self = setmetatable({ folder = folder, effects = effects, music = music, lastHover = -math.huge }, Sounds)
 	return self
 end
 
@@ -72,6 +74,9 @@ end
 -- Hover em celular seria um tapa a cada toque: só toca onde existe ponteiro.
 function Sounds.Hover(self: Controller)
 	if Theme.IsTouch() then return end
+	local now = os.clock()
+	if now - self.lastHover < Config.Sounds.HoverCooldown then return end
+	self.lastHover = now
 	Sounds.Play(self, "Hover")
 end
 

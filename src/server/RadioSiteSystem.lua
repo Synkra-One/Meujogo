@@ -12,11 +12,8 @@
 	  5. PAINEL      energiza o transmissor no painel        (segurar E)
 	  6. SOCORRO     transmite o pedido, parado no console   (canalizado)
 
-	COMBUSTÍVEL tem DUAS fontes, e o bocal aceita as duas: os galões fixos já
-	no pátio (`GalaoCombustivel`, ver Tools/RadioTowerGenerator.lua) e o item
-	"Gasolina" (ItemRegistry/ToolFactory), achado espalhado pelo mapa e
-	carregado como Tool. `onRefuel` prefere a Gasolina carregada -- assim
-	achar combustível longe da estação ainda vale a pena.
+	COMBUSTÍVEL vem exclusivamente do item "Gasolina" (ItemRegistry/ToolFactory).
+	Abastecer consome uma Tool do próprio jogador; decorações nunca são combustível.
 
 	Cada etapa é um ProximityPrompt criado a partir do Attribute
 	"InteracaoRadio" das Parts geradas -- o mapa não guarda configuração de
@@ -59,6 +56,7 @@ local WeaponSystem = require(script.Parent.WeaponSystem)
 local InteractionGuard = require(script.Parent.InteractionGuard)
 local RepairMinigameSystem = require(script.Parent.RepairMinigameSystem)
 local GeneratorErrorSound = require(script.Parent.GeneratorErrorSound)
+local RadioTowerGenerator = require(script.Parent.Tools.RadioTowerGenerator)
 
 local RadioSiteSystem = {}
 
@@ -72,7 +70,6 @@ type PoweredPart = { part: BasePart, material: Enum.Material, color: Color3 }
 local station: Model? = nil
 local hosts: { [string]: BasePart } = {} -- InteracaoRadio -> Part
 local prompts: { [string]: ProximityPrompt } = {}
-local cans: { BasePart } = {}
 local beacons: { BasePart } = {}
 local powered: { PoweredPart } = {}
 local exhaust: BasePart? = nil
@@ -90,6 +87,7 @@ local lastNoise = 0
 local noiseTicks = 0
 local lastProgressSent = 0
 local initialized = false
+local refuelStarted: { [Player]: number } = {}
 
 --------------------------------------------------------------------------------
 -- Estado
@@ -151,7 +149,20 @@ end
 -- Validação de quem interage (mesmo contrato de RadioObjective.canInteract)
 --------------------------------------------------------------------------------
 
+-- O bocal e o painel de partida ficam encostados (ou embutidos) no corpo do
+-- gerador, que tem tamanho diferente conforme o modelo do Toolbox carregado.
+-- O corpo dele nunca deve bloquear os proprios pontos de interacao; paredes e
+-- portas do abrigo continuam bloqueando.
+local function generatorOcclusion(host: BasePart?): { Instance }?
+	local key = host and host:GetAttribute("InteracaoRadio")
+	if (key == "Abastecer" or key == "Partida") and host and host.Parent and host.Parent.Name == "Gerador" then
+		return { host.Parent }
+	end
+	return nil
+end
+
 local function canAct(player: Player, target: BasePart?): boolean
+	if getFlag("SocorroEnviado") then return false end
 	if not target or not target:IsDescendantOf(Workspace) then
 		return false
 	end
@@ -171,7 +182,7 @@ local function canAct(player: Player, target: BasePart?): boolean
 	if character:GetAttribute("PowerStunned") == true or character:GetAttribute("GrabLocked") == true then
 		return false
 	end
-	return InteractionGuard.CanReach(player, target, CFG.AlcanceInteracao)
+	return InteractionGuard.CanReach(player, target, CFG.AlcanceInteracao, generatorOcclusion(target))
 end
 
 --------------------------------------------------------------------------------
@@ -232,25 +243,6 @@ end
 -- Ações
 --------------------------------------------------------------------------------
 
-local function nearestFullCan(): BasePart?
-	local best: BasePart? = nil
-	local bestDist = math.huge
-	local body = engine
-	if not body then
-		return nil
-	end
-	for _, can in cans do
-		if can.Parent and can:GetAttribute("Cheio") == true then
-			local d = (can.Position - body.Position).Magnitude
-			if d < bestDist then
-				bestDist = d
-				best = can
-			end
-		end
-	end
-	return best
-end
-
 -- Tool "Gasolina" que o jogador está carregando: equipada tem prioridade,
 -- senão a primeira que aparecer na mochila. Mesmo padrão de
 -- RadioInstallSystem.installableTool (equipado antes de vasculhar a mochila).
@@ -274,18 +266,6 @@ local function carriedGasolina(player: Player): Tool?
 	return nil
 end
 
--- Pra decidir se o prompt "Abastecer" aparece pra ALGUÉM: ProximityPrompt.
--- Enabled é global (não por jogador), então "tem combustível disponível"
--- precisa considerar todo mundo carregando Gasolina, não só quem apertou.
-local function anyPlayerCarriesGasolina(): boolean
-	for _, player in Players:GetPlayers() do
-		if carriedGasolina(player) then
-			return true
-		end
-	end
-	return false
-end
-
 -- "Por que esta etapa ainda não pode acontecer", em uma frase ou nil. O
 -- minigame de reparo revalida isto a cada tique (alguém pode gastar o último
 -- galão, sabotar o painel ou desligar o gerador no meio da sua canalização) e
@@ -294,8 +274,11 @@ local function refuelBlocked(player: Player): string?
 	if getNumber("Combustivel") >= CFG.CombustivelMaximo then
 		return "O tanque do gerador já está cheio."
 	end
-	if not carriedGasolina(player) and not nearestFullCan() then
-		return "Não sobrou combustível: nem galão no local, nem Gasolina no inventário."
+	if CFG.CombustivelMaximo - getNumber("Combustivel") < CFG.CombustivelPorGalao then
+		return "O tanque ainda não comporta um galão inteiro. Espere consumir mais combustível."
+	end
+	if not carriedGasolina(player) then
+		return "Pegue um item Gasolina e traga no inventário para abastecer."
 	end
 	return nil
 end
@@ -330,6 +313,9 @@ local function panelBlocked(_player: Player): string?
 end
 
 local function onRefuel(player: Player)
+	local started = refuelStarted[player]
+	refuelStarted[player] = nil
+	if not started or Workspace:GetServerTimeNow() - started < CFG.HoldAbastecer - 0.15 then return end
 	if not canAct(player, hosts.Abastecer) then
 		return
 	end
@@ -339,34 +325,15 @@ local function onRefuel(player: Player)
 		return
 	end
 
-	-- Prefere a Gasolina que o jogador está carregando ao galão fixo do
-	-- local -- carregar combustível de longe precisa valer o esforço, e
-	-- assim ela nunca fica "presa" atrás de um galão que ainda sobrou.
+	-- Consumo e crédito acontecem juntos, sem yield. Um mesmo item nunca
+	-- abastece duas vezes, mesmo com prompts simultâneos ou repetidos.
 	local carried = carriedGasolina(player)
 	if carried then
 		carried:Destroy()
 		setAttr("Combustivel", math.min(CFG.CombustivelMaximo, getNumber("Combustivel") + CFG.CombustivelPorGalao))
 		Remotes.LobbyMessage:FireClient(player, "Gerador abastecido com a gasolina que você trouxe.")
 		print(string.format("[RadioSite] %s abasteceu o gerador com Gasolina carregada (%.0fs de combustível).", player.Name, getNumber("Combustivel")))
-		return
 	end
-
-	local can = nearestFullCan()
-	if not can then
-		-- refuelBlocked já cobriu este caso; a guarda fica como rede de
-		-- segurança pra qualquer chamador futuro que pule a checagem.
-		Remotes.LobbyMessage:FireClient(player, "Não sobrou combustível: nem galão no local, nem Gasolina no inventário.")
-		return
-	end
-
-	-- Galão vazio fica caído do lado, pra dar pra ver o que já foi gasto.
-	can:SetAttribute("Cheio", false)
-	can.Color = Color3.fromRGB(96, 52, 44)
-	can.CFrame = can.CFrame * CFrame.new(0, -0.6, -1.2) * CFrame.Angles(math.rad(88), 0, 0)
-
-	setAttr("Combustivel", math.min(CFG.CombustivelMaximo, getNumber("Combustivel") + CFG.CombustivelPorGalao))
-	Remotes.LobbyMessage:FireClient(player, "Gerador abastecido.")
-	print(string.format("[RadioSite] %s abasteceu o gerador (%.0fs de combustível).", player.Name, getNumber("Combustivel")))
 end
 
 local function dropFuse(position: Vector3?)
@@ -501,6 +468,10 @@ local function onSignal(player: Player)
 	if signalPlayer == player then
 		return
 	end
+	if signalPlayer ~= nil then
+		Remotes.LobbyMessage:FireClient(player, "Outro sobrevivente já está transmitindo.")
+		return
+	end
 
 	signalPlayer = player
 	setAttr("SocorroEmAndamento", true)
@@ -527,6 +498,7 @@ local function completeSignal(player: Player)
 	setAttr("SocorroEmAndamento", false)
 	setAttr("SocorroEnviado", true)
 	setAttr("SinalProgresso", 100)
+	setGenerator(false)
 	Remotes.ObjectiveProgress:FireAllClients("RadioSocorro", 100, 100)
 	tellEveryone("Pedido de socorro enviado. O resgate está a caminho.")
 	RadioObjective.CompleteRescueCall(player)
@@ -578,10 +550,10 @@ local function ensurePrompt(host: BasePart, key: string): ProximityPrompt?
 	prompt.ObjectText = spec.object
 	prompt.HoldDuration = spec.hold
 	prompt.MaxActivationDistance = math.max(4, CFG.AlcanceInteracao - 2)
-	-- O bocal fica parcialmente embutido/acima do corpo do gerador. Deixe o
-	-- prompt aparecer quando o jogador está no alcance; a validação autoritativa
-	-- de distância e oclusão continua em canAct()/InteractionGuard.CanReach().
-	prompt.RequiresLineOfSight = false
+	-- Paredes/portas fechadas bloqueiam o prompt, exceto no gerador: o corpo
+	-- dele oculta o bocal/painel de partida (ver generatorOcclusion) e o
+	-- servidor continua validando alcance e oclusao.
+	prompt.RequiresLineOfSight = generatorOcclusion(host) == nil
 	prompt.KeyboardKeyCode = Enum.KeyCode.E
 	prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
 	prompt.ClickablePrompt = true
@@ -590,6 +562,24 @@ local function ensurePrompt(host: BasePart, key: string): ProximityPrompt?
 
 	local repairTask = spec.repairTask
 	if not repairTask then
+		if key == "Abastecer" then
+			prompt.PromptButtonHoldBegan:Connect(function(player: Player)
+				if canAct(player, host) and not refuelBlocked(player) then
+					refuelStarted[player] = Workspace:GetServerTimeNow()
+				else
+					refuelStarted[player] = nil
+					local reason = refuelBlocked(player)
+					if reason then Remotes.LobbyMessage:FireClient(player, reason) end
+				end
+			end)
+			prompt.PromptButtonHoldEnded:Connect(function(player: Player)
+				local started = refuelStarted[player]
+				-- Triggered e HoldEnded podem chegar no mesmo frame.
+				task.defer(function()
+					if refuelStarted[player] == started then refuelStarted[player] = nil end
+				end)
+			end)
+		end
 		prompt.Triggered:Connect(spec.handler)
 		return prompt
 	end
@@ -599,6 +589,7 @@ local function ensurePrompt(host: BasePart, key: string): ProximityPrompt?
 		configId = repairTask,
 		part = host,
 		range = CFG.AlcanceInteracao,
+		ignore = generatorOcclusion(host),
 		canStart = function(player: Player): (boolean, string?)
 			if not canAct(player, host) then
 				return false, nil
@@ -632,7 +623,8 @@ local function refreshPrompts()
 
 	local refuel = prompts.Abastecer
 	if refuel then
-		refuel.Enabled = not sent and fuel < CFG.CombustivelMaximo and (nearestFullCan() ~= nil or anyPlayerCarriesGasolina())
+		refuel.Enabled = not sent and fuel <= CFG.CombustivelMaximo - CFG.CombustivelPorGalao
+		refuel.ActionText = "Abastecer com Gasolina"
 	end
 
 	local starter = prompts.Partida
@@ -648,7 +640,7 @@ local function refreshPrompts()
 
 	local take = prompts.PegarFusivel
 	if take then
-		take.Enabled = not hasFuse and fuseCarrier == nil
+		take.Enabled = not sent and not hasFuse and fuseCarrier == nil
 	end
 
 	local panel = prompts.Painel
@@ -666,14 +658,10 @@ end
 -- Coleta das Parts do local + efeitos
 --------------------------------------------------------------------------------
 
-local canHome: { [BasePart]: { cf: CFrame, color: Color3 } } = {}
-
 local function collect(model: Model)
 	table.clear(hosts)
-	table.clear(cans)
 	table.clear(beacons)
 	table.clear(powered)
-	table.clear(canHome)
 	engine = nil
 	exhaust = nil
 
@@ -684,10 +672,6 @@ local function collect(model: Model)
 		local key = d:GetAttribute("InteracaoRadio")
 		if type(key) == "string" then
 			hosts[key] = d
-		end
-		if d:GetAttribute("GalaoCombustivel") == true then
-			table.insert(cans, d)
-			canHome[d] = { cf = d.CFrame, color = d.Color }
 		end
 		if d:GetAttribute("BalizaRadio") == true then
 			table.insert(beacons, d)
@@ -857,6 +841,11 @@ end
 local function step(dt: number)
 	local now = Workspace:GetServerTimeNow()
 	updateBeacons(now)
+	for player in refuelStarted do
+		if not canAct(player, hosts.Abastecer) or refuelBlocked(player) then
+			refuelStarted[player] = nil
+		end
+	end
 
 	-- Combustível queimando.
 	if getFlag("GeradorLigado") then
@@ -961,6 +950,12 @@ local function watchPlayer(player: Player)
 	player.CharacterAdded:Connect(function(character)
 		watchCharacter(player, character)
 	end)
+	player.CharacterRemoving:Connect(function(character)
+		watchedCharacters[character] = nil
+		refuelStarted[player] = nil
+		if signalPlayer == player then abortSignal(nil) end
+		if fuseCarrier == player then dropFuse(nil) end
+	end)
 end
 
 local function watchSabotage()
@@ -997,7 +992,8 @@ end
 	Part do console pro VFX da habilidade, ou nil se não deu.
 ]]
 function RadioSiteSystem.ApplyPowerRepair(player: Player): BasePart?
-	if signalPlayer ~= player or getFlag("SocorroEnviado") or not stillTransmitting(player) then
+	if signalPlayer ~= player or getFlag("SocorroEnviado") or not stillTransmitting(player)
+		or not getFlag("PainelAtivo") or not getFlag("GeradorLigado") or isSabotaged() then
 		return nil
 	end
 
@@ -1014,7 +1010,7 @@ end
 --[[
 	Reset()
 	Volta a estação pro estado de início de rodada: sem combustível, sem
-	fusível, gerador desligado, galões cheios de novo. RoundManager chama no
+	fusível e gerador desligado. RadioPieces repõe a Gasolina de teste no
 	preparo da partida.
 ]]
 function RadioSiteSystem.Reset()
@@ -1032,21 +1028,14 @@ function RadioSiteSystem.Reset()
 	setAttr("SinalProgresso", 0)
 	signalPlayer = nil
 	signalProgress = 0
+	lastProgressSent, lastNoise, noiseTicks = 0, 0, 0
+	table.clear(refuelStarted)
 
 	for _, player in Players:GetPlayers() do
 		player:SetAttribute("LevandoFusivel", nil)
 	end
 	fuseCarrier = nil
 	dropFuse(nil)
-
-	for _, can in cans do
-		local home = canHome[can]
-		if can.Parent and home then
-			can:SetAttribute("Cheio", true)
-			can.CFrame = home.cf
-			can.Color = home.color
-		end
-	end
 
 	if engine then
 		engine:SetAttribute("Sabotado", false)
@@ -1073,16 +1062,9 @@ function RadioSiteSystem.Init()
 		return
 	end
 
-	local ilha = Workspace:FindFirstChild("Ilha")
-	local model = ilha and ilha:FindFirstChild("TorreDeRadio")
-	if not (model and model:IsA("Model")) then
-		warn("[RadioSiteSystem] Sem Workspace.Ilha.TorreDeRadio. Rode Tools/RadioTowerGenerator.Build() no Studio e salve.")
-		return
-	end
-
-	initialized = true
-	station = model :: Model
-	collect(model :: Model)
+	local model = RadioTowerGenerator.Ensure()
+	station = model
+	collect(model)
 
 	local missing: { string } = {}
 	for key in PROMPT_SPECS do
@@ -1094,11 +1076,9 @@ function RadioSiteSystem.Init()
 		end
 	end
 	if #missing > 0 then
-		warn(string.format(
-			"[RadioSiteSystem] A estação salva não tem os pontos: %s. Regere com Tools/RadioTowerGenerator.Build().",
-			table.concat(missing, ", ")
-		))
+		error("[RadioSiteSystem] Estação inválida após validação: " .. table.concat(missing, ", "))
 	end
+	initialized = true
 
 	local fuse = hosts.PegarFusivel
 	fuseHome = if fuse then fuse.CFrame else nil
@@ -1114,6 +1094,7 @@ function RadioSiteSystem.Init()
 	end
 	Players.PlayerAdded:Connect(watchPlayer)
 	Players.PlayerRemoving:Connect(function(player)
+		refuelStarted[player] = nil
 		if signalPlayer == player then
 			abortSignal(nil)
 		end

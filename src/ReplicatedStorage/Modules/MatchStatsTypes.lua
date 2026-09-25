@@ -152,7 +152,7 @@ export type Session = {
 	AliveTime: number, -- espelho de Stats.AliveTime, congelado na morte
 	IsAlive: boolean,
 	Escaped: boolean,
-	EscapeMethod: string?, -- "Helicoptero" | nil (o barco novo será adicionado depois)
+	EscapeMethod: string?, -- "Helicoptero" | "Barco" | nil
 	Eliminated: boolean,
 	Left: boolean, -- saiu do servidor no meio da partida
 	ResultFinalized: boolean,

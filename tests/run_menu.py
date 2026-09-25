@@ -10,8 +10,14 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 MODULES = {
+    "Stub": "tests/robloxstub.luau",
+    "CharacterData": "src/ReplicatedStorage/Modules/CharacterData.lua",
     "MenuConfig": "src/ReplicatedFirst/Menu/MenuConfig.lua",
     "MenuTheme": "src/ReplicatedFirst/Menu/MenuTheme.lua",
+    "MenuScreens": "src/ReplicatedFirst/Menu/MenuScreens.lua",
+    "MenuSounds": "src/ReplicatedFirst/Menu/MenuSounds.lua",
+    "MenuScene": "src/ReplicatedFirst/Menu/MenuScene.lua",
+    "MenuBoot": "src/ReplicatedFirst/MenuBoot.client.luau",
 }
 
 boot = (ROOT / "src/ReplicatedFirst/MenuBoot.client.luau").read_text()
@@ -24,32 +30,20 @@ sounds = (ROOT / "src/ReplicatedFirst/Menu/MenuSounds.lua").read_text()
 top_level = boot.split("local sounds = Sounds.new()")[0]
 for forbidden in ("require(ReplicatedStorage.Modules", "require(ReplicatedStorage:WaitForChild"):
     assert forbidden not in top_level, f"MenuBoot nao pode fazer {forbidden} no topo"
-assert "ReplicatedStorage:WaitForChild(\"Modules\", 10)" in boot, "acesso a Modules tem de ter timeout"
 assert "RemoveDefaultLoadingScreen" in boot, "a tela de carregamento padrao tem de sair"
 
 # 2. NENHUM SISTEMA DUPLICADO. O menu so pode falar com o servidor pelos
 #    remotes que a sala de espera JA usava -- nenhum RemoteEvent novo.
 remotes_dir = ROOT / "src/ReplicatedStorage/Remotes"
 assert not (remotes_dir / "MainMenu.model.json").exists(), "o menu nao cria RemoteEvent proprio"
-for used in ("WaitingRoom", "SelectCharacter"):
-    assert f"api.{used}" in boot, f"o menu deveria usar o remote existente {used}"
+assert "FireServer" not in boot, "ENTRAR apenas libera o lobby, sem entrar na fila automaticamente"
 assert "Instance.new(\"RemoteEvent\")" not in boot
+assert "leaveMenu()" in boot.split("local function onPlay()")[1].split("-- Fluxo")[0]
+for removed in ("onQuickPlay", "canQuickPlay", "onQuit", ":Kick("):
+    assert removed not in boot, f"acao removida ainda presente: {removed}"
+assert "OnQuickPlay" not in screens and "OnQuit" not in screens
 
-# 2.5 "JOGAR" NAO PODE PULAR O LOBBY DO AEROPORTO: so fecha o menu, sem
-#    teleportar para a sala de espera. So o acesso rapido (que existe para
-#    pular etapas de proposito) chama "Join" direto.
-play_body = boot.split("local function onPlay()")[1].split("local function onQuickPlay")[0]
-assert '"Join"' not in play_body, "onPlay nao pode mais disparar Join -- isso pulava o lobby do aeroporto"
-assert "leaveMenu()" in play_body, "onPlay so fecha o menu"
-quickplay_body = boot.split("local function onQuickPlay")[1].split("local function onQuit")[0]
-assert '"Join"' in quickplay_body, "o acesso rapido continua entrando direto na sala"
-# DevRole tem de vir ANTES do auto-pick de personagem: o Monstro usa Jason
-# automaticamente, entao escolher um sobrevivente primeiro so reservaria um
-# personagem a toa para quem vai jogar de Monstro.
-assert quickplay_body.index("DevRole") < quickplay_body.index("AutoPickCharacter"), \
-    "DevRole deve ser definido antes do auto-pick de personagem"
-
-# 3. O SERVIDOR aceita a acao "Join" (botao JOGAR sem andar ate o pilar) e
+# 3. O SERVIDOR preserva a acao "Join" para a sala de espera e
 #    continua validando tudo dentro de Join().
 room = (ROOT / "src/server/WaitingRoomManager.lua").read_text()
 assert 'if action == "Join" then' in room, "WaitingRoomManager precisa aceitar Join"
@@ -167,12 +161,6 @@ assert 'player:SetAttribute("CursorLivre", nil)' in boot, "e devolver o travamen
 assert "MouseBehavior" in boot and "MouseIconEnabled" in boot, \
     "rede de seguranca contra re-lock do PlayerModule, como o MonsterTeleportController ja faz"
 
-# 6.6 O BOTAO DE ACESSO RAPIDO nao pode depender so do UserId: testes
-#    multi-cliente do Studio dao UserId falso a cada cliente. RunService:
-#    IsStudio() e a mesma valvula que FlashlightSystem.canUse ja usa.
-assert "RunService:IsStudio()" in boot, "canQuickPlay precisa relaxar em qualquer sessao do Studio"
-assert "RunService:IsStudio()" in room, "isDevRoleTester precisa da mesma valvula no servidor"
-
 # 6. TODA transicao passa pelo TweenService, e todo painel tem VOLTAR.
 theme = (ROOT / "src/ReplicatedFirst/Menu/MenuTheme.lua").read_text()
 assert 'TweenService:Create' in theme, "as animacoes usam TweenService"
@@ -190,7 +178,7 @@ sources = "local sources = {}\n" + "\n".join(
 )
 luau = sys.argv[1] if len(sys.argv) > 1 else "luau"
 runner = ROOT / "tests" / ".menu.generated.luau"
-runner.write_text(sources + "\n" + (ROOT / "tests/menu.luau").read_text())
+runner.write_text(sources + "\n" + (ROOT / "tests/menu.luau").read_text() + "\n" + (ROOT / "tests/menu_scene.luau").read_text())
 try:
     subprocess.run([luau, str(runner)], check=True)
 finally:

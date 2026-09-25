@@ -74,7 +74,8 @@ function GrabTargeting.FindBest(monsterPlayer: Player, monsterCharacter: Model, 
 			or root.Anchored or humanoid.Sit or humanoid.PlatformStand
 			or character:GetAttribute("GrabLocked") == true or character:GetAttribute("Eliminado") == true
 			or character:FindFirstChild("Dead") or character:FindFirstChildOfClass("ForceField")
-			or character:GetAttribute("Invulneravel") == true or character:GetAttribute("Imune") == true then
+			or character:GetAttribute("Invulneravel") == true or character:GetAttribute("Imune") == true
+			or character:GetAttribute("ExtractionBoarded") == true then
 			continue
 		end
 

@@ -16,6 +16,8 @@ local Asset = require(script.Parent.HeartbeatAsset)
 local Detection = {}
 local initialized = false
 local listeners: { [Player]: Model } = {}
+type WallExposure = { character: Model, seconds: number }
+local wallExposure: { [Player]: { [Player]: WallExposure } } = {}
 
 local function rootFor(player: Player, role: string): BasePart?
 	if player:GetAttribute("CharacterSelectOpen") == true then return nil end
@@ -38,9 +40,10 @@ local function clear()
 		end
 	end
 	table.clear(listeners)
+	table.clear(wallExposure)
 end
 
-local function step()
+local function step(dt: number)
 	if not CFG.Enabled or not RoundManager.IsRoundActive() then clear(); return end
 	local monsters, survivors = {}, {}
 	local survivorHeartbeats = {}
@@ -80,19 +83,32 @@ local function step()
 			listeners[player] = nil
 		end
 	end
+	local nextWallExposure: { [Player]: { [Player]: WallExposure } } = {}
 	for monster, monsterRoot in monsters do
 		local snapshot = {}
 		for _, target in survivors do
 			local delta = target.root.Position - monsterRoot.Position
 			local distance = delta.Magnitude
-			if distance >= CFG.MaxRange then continue end
+			if distance >= CFG.MaxRange or target.fear <= CFG.MonsterMinFear then continue end
 			local params = RaycastParams.new()
 			params.FilterType = Enum.RaycastFilterType.Exclude
 			params.FilterDescendantsInstances = { monsterRoot.Parent, target.root.Parent }
 			params.RespectCanCollide, params.IgnoreWater = true, true
 			local blocked = distance > 0 and Workspace:Raycast(monsterRoot.Position, delta, params) ~= nil
+			local threshold = CFG.MonsterMinFear
+			if blocked then
+				if target.fear <= CFG.WallMinFear then continue end
+				local previous = wallExposure[monster] and wallExposure[monster][target.player]
+				local seconds = if previous and previous.character == target.root.Parent
+					then previous.seconds + dt else dt
+				local exposures = nextWallExposure[monster]
+				if not exposures then exposures = {}; nextWallExposure[monster] = exposures end
+				exposures[target.player] = { character = target.root.Parent :: Model, seconds = seconds }
+				if seconds + 1e-6 < CFG.WallRevealHold then continue end
+				threshold = CFG.WallMinFear
+			end
 			local strength, bpm, tension = Rules.Evaluate(target.fear, GameConfig.Fear.MaxFear, distance,
-				target.movement, target.injury, target.stealth, blocked, CFG)
+				target.movement, target.injury, target.stealth, blocked, CFG, threshold)
 			if strength > 0 then
 				table.insert(snapshot, { player = target.player, character = target.root.Parent,
 					strength = strength, bpm = bpm, tension = tension })
@@ -101,6 +117,7 @@ local function step()
 		listeners[monster] = monsterRoot.Parent :: Model
 		Remotes.HeartbeatDetected:FireClient(monster, monsterRoot.Parent, snapshot)
 	end
+	wallExposure = nextWallExposure
 	for survivor, entry in survivorHeartbeats do
 		if survivor.Parent == Players and survivor.Character == entry.character then
 			Remotes.HeartbeatDetected:FireClient(survivor, entry.character, { entry })
@@ -112,6 +129,8 @@ function Detection.Init()
 	if initialized then return end
 	assert(RunService:IsServer(), "HeartbeatDetection é exclusivo do servidor")
 	assert(CFG.MinFear >= 0 and CFG.MinFear < GameConfig.Fear.MaxFear and CFG.MaxRange > 0)
+	assert(CFG.MinFear < CFG.MonsterMinFear and CFG.MonsterMinFear < CFG.WallMinFear
+		and CFG.WallMinFear < GameConfig.Fear.MaxFear and CFG.WallRevealHold > CFG.UpdateInterval)
 	assert(CFG.UpdateInterval > 0 and CFG.SnapshotTimeout > CFG.UpdateInterval)
 	assert(CFG.FadeIn > 0 and CFG.FadeOut > 0 and CFG.MinBPM > 0 and CFG.MaxBPM >= CFG.MinBPM)
 	assert(CFG.MinPulseDuty > 0 and CFG.MaxPulseDuty < 1 and CFG.MinPulseDuty <= CFG.MaxPulseDuty)
@@ -125,8 +144,9 @@ function Detection.Init()
 	RunService.Heartbeat:Connect(function(dt)
 		elapsed += dt
 		if elapsed < CFG.UpdateInterval then return end
+		local stepDt = elapsed
 		elapsed = 0 -- sem rajada de raycasts depois de um frame lento
-		step()
+		step(stepDt)
 	end)
 end
 

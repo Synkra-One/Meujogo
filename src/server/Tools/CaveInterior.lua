@@ -9,15 +9,12 @@
 	então dá pra usar MUITO mais espaço: aqui o salão tem raio 40 e 56 studs de
 	pé-direito, com TRÊS níveis ligados por rampa, escada e ponte.
 
-		Nível 0 (chão)  -- salão, poço de sangue no meio, câmaras laterais
+	Nível 0 (chão)  -- salão, poço rochoso no meio, câmaras laterais
 		Nível 1 (meio)  -- galeria em volta da parede + ponte de tábuas
 		Nível 2 (topo)  -- laje larga no fundo com o NINHO (spawn do Monstro)
 
-	Iluminação: quase nada de propósito. Tochas guttering perto da entrada,
-	fungo bioluminescente frio no fundo e UM feixe de luz que desce por uma
-	fenda no teto direto em cima do ninho. Nenhuma dessas luzes machuca o
-	Monstro -- MonsterLightWeakness só olha Tool com Attribute "Tocha" e Part
-	com "ZonaSegura", e nada aqui usa esses Attributes.
+	O interior não cria iluminação própria. Zonas invisíveis delimitam o efeito
+	local de escuridão dos sobreviventes e a visão exclusiva do Monstro.
 
 	ESPAÇO LOCAL: tudo é descrito em coordenadas polares em volta do centro da
 	montanha. theta = 90 graus aponta pra BOCA da caverna (o centro da ilha);
@@ -72,13 +69,10 @@ local CONFIG = {
 		Depth = 6,
 	},
 
-	-- Fenda no teto: desce luz em cima do ninho.
-	Shaft = { Theta = 245, Dist = 30, Radius = 3.4 },
-
 	-- Câmaras laterais (theta, distância do centro, raio).
 	Chambers = {
-		{ Name = "Ossuario", Theta = 178, Dist = 54, Radius = 15 },
-		{ Name = "Despensa", Theta = 352, Dist = 52, Radius = 13 },
+		{ Name = "CamaraMineral", Theta = 178, Dist = 54, Radius = 15 },
+		{ Name = "Deposito", Theta = 352, Dist = 52, Radius = 13 },
 	},
 
 	Nest = { Theta = 245, Dist = 30, Radius = 10 },
@@ -96,21 +90,14 @@ local COL = {
 	RockWarm = Color3.fromRGB(86, 78, 68),
 	Gravel = Color3.fromRGB(62, 58, 52),
 	Mud = Color3.fromRGB(48, 40, 32),
-	Bone = Color3.fromRGB(198, 190, 168),
-	BoneOld = Color3.fromRGB(150, 142, 122),
-	Socket = Color3.fromRGB(22, 18, 16),
-	BloodFresh = Color3.fromRGB(104, 12, 14),
-	Blood = Color3.fromRGB(74, 10, 12),
-	BloodOld = Color3.fromRGB(46, 10, 12),
-	Flesh = Color3.fromRGB(118, 34, 32),
+	Mineral = Color3.fromRGB(126, 145, 153),
 	Wood = Color3.fromRGB(74, 54, 36),
 	WoodDark = Color3.fromRGB(52, 38, 26),
 	Rope = Color3.fromRGB(138, 118, 84),
 	Metal = Color3.fromRGB(62, 58, 54),
 	Rust = Color3.fromRGB(92, 58, 38),
 	Rag = Color3.fromRGB(88, 78, 66),
-	Fungus = Color3.fromRGB(96, 200, 158),
-	Shaft = Color3.fromRGB(206, 218, 230),
+	Fungus = Color3.fromRGB(42, 69, 62),
 }
 
 CaveInterior.Colors = COL
@@ -238,6 +225,13 @@ local function resealMountain(f: Frame)
 			Terrain:FillCylinder(CFrame.new(f.Center.X, (bottom + top) * 0.5, f.Center.Z), top - bottom, r, Enum.Material.Rock)
 		end
 	end
+	-- Tampa a fenda de luz de versões antigas sem abrir um novo buraco na superfície.
+	local oldShaft = polar(f, 245, 30, 0)
+	local capBottom = f.FloorY + CONFIG.Hall.Height - 2
+	local capTop = f.PlanY(oldShaft.X, oldShaft.Z) - 2
+	if capTop > capBottom then
+		Terrain:FillCylinder(CFrame.new(oldShaft.X, (capBottom + capTop) * 0.5, oldShaft.Z), capTop - capBottom, 4.5, Enum.Material.Rock)
+	end
 	task.wait()
 end
 
@@ -245,7 +239,7 @@ end
 	Carve(f, rng)
 	Escava a caverna inteira no terreno da montanha: boca, túnel quebrado em
 	três trechos (não dá pra ver o salão da entrada), o salão com parede
-	recortada e abóbada, o poço, as câmaras laterais e a fenda do teto.
+	recortada e abóbada, o poço e as câmaras laterais.
 ]]
 function CaveInterior.Carve(f: Frame, rng: Random)
 	local H = CONFIG.Hall
@@ -325,14 +319,6 @@ function CaveInterior.Carve(f: Frame, rng: Random)
 		)
 	end
 
-	----------------------------------------------------------------------------
-	-- Fenda do teto (a luz do feixe entra por aqui).
-	----------------------------------------------------------------------------
-	local sh = CONFIG.Shaft
-	local shaftP = polar(f, sh.Theta, sh.Dist, 0)
-	local surfaceY = f.PlanY(shaftP.X, shaftP.Z)
-	airColumn(shaftP.X, shaftP.Z, floorY + H.Height - 10, surfaceY + 3, sh.Radius)
-
 	task.wait()
 end
 
@@ -345,8 +331,8 @@ rayParams.FilterType = Enum.RaycastFilterType.Include
 rayParams.FilterDescendantsInstances = { Terrain }
 rayParams.IgnoreWater = true
 
--- Raycast só no terreno (a rocha da caverna). Serve pra colar sangue,
--- estalactite e tocha exatamente na superfície escavada.
+-- Raycast só no terreno (a rocha da caverna). Serve pra colar estalactite
+-- e fungo exatamente na superfície escavada.
 local function castTerrain(from: Vector3, direction: Vector3, dist: number): RaycastResult?
 	if direction.Magnitude < 1e-4 then
 		return nil
@@ -532,278 +518,23 @@ local function gravelPatch(parent: Instance, center: Vector3, radius: number, rn
 end
 
 --------------------------------------------------------------------------------
--- Sangue
+-- Props: fungo, corrente, jaula, ponte, guarda-corpo
 --------------------------------------------------------------------------------
 
---[[
-	bloodPool(parent, center, radius, rng, fresh)
-	Poça no chão: um disco grande e discos menores em volta pra borda ficar
-	irregular, mais respingos. Nada colide.
-]]
-local function bloodPool(parent: Instance, center: Vector3, radius: number, rng: Random, fresh: boolean?)
-	local color = if fresh then COL.BloodFresh else COL.Blood
-	local main = disc(parent, "Poca", center + Vector3.new(0, 0.09, 0), radius * 2, 0.14, rng:NextNumber(0, TAU), Enum.Material.SmoothPlastic, color)
-	main.Reflectance = if fresh then 0.14 else 0.06
-
-	for i = 1, rng:NextInteger(3, 6) do
-		local ang = rng:NextNumber(0, TAU)
-		local d = radius * rng:NextNumber(0.5, 1.15)
-		local lobe = disc(
-			parent,
-			"PocaBorda",
-			center + Vector3.new(math.cos(ang) * d, 0.08, math.sin(ang) * d),
-			radius * rng:NextNumber(0.5, 1.1),
-			0.13,
-			rng:NextNumber(0, TAU),
-			Enum.Material.SmoothPlastic,
-			if rng:NextNumber() < 0.4 then COL.BloodOld else color
-		)
-		lobe.Reflectance = 0.05
-	end
-
-	for i = 1, rng:NextInteger(4, 9) do
-		local ang = rng:NextNumber(0, TAU)
-		local d = radius * rng:NextNumber(1.1, 2.4)
-		disc(
-			parent,
-			"Respingo",
-			center + Vector3.new(math.cos(ang) * d, 0.07, math.sin(ang) * d),
-			rng:NextNumber(0.4, 1.6),
-			0.12,
-			rng:NextNumber(0, TAU),
-			Enum.Material.SmoothPlastic,
-			COL.BloodOld
-		)
-	end
-end
-
---[[
-	bloodSplat(parent, hitPos, normal, scale, rng)
-	Mancha esparramada numa parede, colada na rocha pelo normal do raycast:
-	manchas sobrepostas (não vira um adesivo retangular) + escorridos descendo.
-]]
-local function bloodSplat(parent: Instance, hitPos: Vector3, normal: Vector3, scale: number, rng: Random)
-	local base = CFrame.lookAt(hitPos + normal * 0.08, hitPos + normal * 10)
-	for i = 1, rng:NextInteger(3, 5) do
-		local w = scale * rng:NextNumber(0.35, 1.0)
-		local h = scale * rng:NextNumber(0.3, 0.9)
-		local cf = base
-			* CFrame.new(scale * rng:NextNumber(-0.4, 0.4), scale * rng:NextNumber(-0.4, 0.4), rng:NextNumber(0, 0.05))
-			* CFrame.Angles(0, 0, rng:NextNumber(0, TAU))
-		local p = part(parent, "Mancha", Vector3.new(w, h, 0.1), cf, Enum.Material.SmoothPlastic, if i == 1 then COL.Blood else COL.BloodOld, {
-			CanCollide = false,
-			CastShadow = false,
-		})
-		p.Reflectance = 0.04
-	end
-
-	-- Escorridos.
-	for i = 1, rng:NextInteger(2, 5) do
-		local len = scale * rng:NextNumber(0.6, 2.2)
-		local cf = base * CFrame.new(scale * rng:NextNumber(-0.5, 0.5), -scale * 0.4 - len * 0.5, 0.02)
-		part(parent, "Escorrido", Vector3.new(rng:NextNumber(0.14, 0.4), len, 0.1), cf, Enum.Material.SmoothPlastic, COL.BloodOld, {
-			CanCollide = false,
-			CastShadow = false,
-		})
-	end
-end
-
--- Joga uma mancha na parede do salão na direção theta/altura pedidos.
-local function splatOnWall(parent: Instance, f: Frame, theta: number, y: number, scale: number, rng: Random): boolean
-	local from = polar(f, theta, CONFIG.Hall.Radius - 24, y)
-	local hit = castTerrain(from, radial(f, theta), 42)
-	if not hit then
-		return false
-	end
-	bloodSplat(parent, hit.Position, hit.Normal, scale, rng)
-	return true
-end
-
--- Rastro de arrasto: manchas alongadas entre dois pontos do chão.
-local function dragMark(parent: Instance, a: Vector3, b: Vector3, rng: Random)
-	local delta = b - a
-	local steps = math.max(3, math.floor(delta.Magnitude / 3))
-	local yaw = math.atan2(delta.X, delta.Z)
-	for i = 0, steps do
-		local t = i / steps
-		local p = a:Lerp(b, t) + Vector3.new(rng:NextNumber(-1.1, 1.1), 0.08, rng:NextNumber(-1.1, 1.1))
-		part(
-			parent,
-			"Rastro",
-			Vector3.new(rng:NextNumber(0.8, 2.2), 0.12, rng:NextNumber(2.5, 5.5)),
-			CFrame.new(p) * CFrame.Angles(0, yaw + rng:NextNumber(-0.2, 0.2), 0),
-			Enum.Material.SmoothPlastic,
-			if i % 3 == 0 then COL.Blood else COL.BloodOld,
-			{ CanCollide = false, CastShadow = false }
-		)
-	end
-end
-
---------------------------------------------------------------------------------
--- Ossos e carne
---------------------------------------------------------------------------------
-
-local function bone(parent: Instance, pos: Vector3, len: number, rng: Random)
-	local yaw = rng:NextNumber(0, TAU)
-	local tilt = rng:NextNumber(-0.25, 0.25)
-	local cf = CFrame.new(pos) * CFrame.Angles(0, yaw, 0) * CFrame.Angles(0, 0, math.pi / 2 + tilt)
-	local color = if rng:NextNumber() < 0.35 then COL.BoneOld else COL.Bone
-	local d = len * rng:NextNumber(0.11, 0.17)
-	part(parent, "Osso", Vector3.new(len, d, d), cf, Enum.Material.Sandstone, color, {
-		Shape = Enum.PartType.Cylinder,
-		CanCollide = false,
-		CastShadow = false,
-	})
-	-- Cabeças do fêmur.
-	for _, s in { -1, 1 } do
-		part(parent, "OssoPonta", Vector3.new(d * 1.7, d * 1.7, d * 1.7), cf * CFrame.new(s * len * 0.5, 0, 0), Enum.Material.Sandstone, color, {
-			Shape = Enum.PartType.Ball,
-			CanCollide = false,
-			CastShadow = false,
-		})
-	end
-end
-
-local function skull(parent: Instance, pos: Vector3, size: number, rng: Random)
-	local cf = CFrame.new(pos) * CFrame.Angles(rng:NextNumber(-0.3, 0.3), rng:NextNumber(0, TAU), rng:NextNumber(-0.4, 0.4))
-	local color = if rng:NextNumber() < 0.3 then COL.BoneOld else COL.Bone
-	part(parent, "Cranio", Vector3.new(size, size * 0.95, size * 1.12), cf, Enum.Material.Sandstone, color, {
-		Shape = Enum.PartType.Ball,
-		CanCollide = false,
-		CastShadow = false,
-	})
-	-- Órbitas e mandíbula.
-	for _, s in { -1, 1 } do
-		part(
-			parent,
-			"Orbita",
-			Vector3.new(size * 0.26, size * 0.28, size * 0.2),
-			cf * CFrame.new(s * size * 0.22, size * 0.1, -size * 0.46),
-			Enum.Material.SmoothPlastic,
-			COL.Socket,
-			{ Shape = Enum.PartType.Ball, CanCollide = false, CastShadow = false }
-		)
-	end
-	part(parent, "Mandibula", Vector3.new(size * 0.6, size * 0.22, size * 0.66), cf * CFrame.new(0, -size * 0.44, -size * 0.16), Enum.Material.Sandstone, color, {
-		CanCollide = false,
-		CastShadow = false,
-	})
-end
-
--- Caixa torácica aberta, meio enterrada nos ossos.
-local function ribcage(parent: Instance, pos: Vector3, scale: number, rng: Random)
-	local yaw = rng:NextNumber(0, TAU)
-	local base = CFrame.new(pos) * CFrame.Angles(0, yaw, 0)
-	part(parent, "Espinha", Vector3.new(scale * 2.6, scale * 0.2, scale * 0.2), base, Enum.Material.Sandstone, COL.BoneOld, {
-		Shape = Enum.PartType.Cylinder,
-		CanCollide = false,
-		CastShadow = false,
-	})
-	for i = 1, 6 do
-		local x = (i - 3.5) * scale * 0.42
-		local r = scale * (0.9 - math.abs(i - 3.5) * 0.1)
-		for _, s in { -1, 1 } do
-			part(
-				parent,
-				"Costela",
-				Vector3.new(r * 1.7, scale * 0.14, scale * 0.14),
-				base * CFrame.new(x, r * 0.45, s * r * 0.5) * CFrame.Angles(s * 0.9, 0, 0),
-				Enum.Material.Sandstone,
-				COL.Bone,
-				{ Shape = Enum.PartType.Cylinder, CanCollide = false, CastShadow = false }
-			)
-		end
-	end
-end
-
--- Monte de ossos: fêmures espalhados, crânios e uma caixa torácica.
-local function bonePile(parent: Instance, center: Vector3, radius: number, rng: Random, density: number?)
-	local n = math.floor((density or 1) * 14)
-	for i = 1, n do
-		local ang = rng:NextNumber(0, TAU)
-		local d = radius * math.sqrt(rng:NextNumber()) 
-		local h = rng:NextNumber(0.2, 1.4) * (1 - d / radius)
-		bone(parent, center + Vector3.new(math.cos(ang) * d, 0.35 + h, math.sin(ang) * d), rng:NextNumber(1.6, 3.4), rng)
-	end
-	for i = 1, math.max(1, math.floor((density or 1) * 3)) do
-		local ang = rng:NextNumber(0, TAU)
-		local d = radius * rng:NextNumber(0, 0.85)
-		skull(parent, center + Vector3.new(math.cos(ang) * d, 0.9, math.sin(ang) * d), rng:NextNumber(1.2, 1.8), rng)
-	end
-	if (density or 1) >= 1 then
-		ribcage(parent, center + Vector3.new(rng:NextNumber(-radius, radius) * 0.5, 0.8, rng:NextNumber(-radius, radius) * 0.5), 1.6, rng)
-	end
-end
-
---------------------------------------------------------------------------------
--- Props: tocha, fungo, corrente, jaula, ponte, guarda-corpo
---------------------------------------------------------------------------------
-
--- Tocha guttering presa na rocha (decoração: NÃO é o Tool "Tocha" da
--- fraqueza do Monstro, então não enfraquece ninguém).
-local function wallTorch(parent: Instance, f: Frame, theta: number, y: number, rng: Random): boolean
-	local from = polar(f, theta, CONFIG.Hall.Radius - 20, y)
-	local hit = castTerrain(from, radial(f, theta), 40)
-	if not hit then
-		return false
-	end
-	local n = hit.Normal
-	local base = hit.Position + n * 0.3
-	local stake = CFrame.lookAt(base + n * 0.8, base + n * 10)
-	part(parent, "Suporte", Vector3.new(0.35, 0.35, 2.2), stake * CFrame.Angles(math.rad(-18), 0, 0), Enum.Material.Wood, COL.WoodDark, {
-		CanCollide = false,
-		CastShadow = false,
-	})
-	local bowlPos = base + n * 1.7 + Vector3.new(0, 0.5, 0)
-	local bowl = part(parent, "Braseiro", Vector3.new(0.9, 1.5, 1.5), CFrame.new(bowlPos) * UPRIGHT, Enum.Material.CorrodedMetal, COL.Rust, {
-		Shape = Enum.PartType.Cylinder,
-		CanCollide = false,
-		CastShadow = false,
-	})
-
-	local fire = Instance.new("Fire")
-	fire.Heat = 0
-	fire.Size = rng:NextNumber(3.5, 5)
-	fire.Color = Color3.fromRGB(214, 122, 44)
-	fire.SecondaryColor = Color3.fromRGB(92, 26, 14)
-	fire.Parent = bowl
-
-	local light = Instance.new("PointLight")
-	light.Color = Color3.fromRGB(226, 138, 66)
-	light.Brightness = 0.9
-	light.Range = 20
-	light.Shadows = false
-	light.Parent = bowl
-	return true
-end
-
--- Fungo bioluminescente: a única luz do fundo da caverna, fria e fraca.
+-- Fungo opaco: forma visível quando a lanterna o ilumina.
 local function fungusPatch(parent: Instance, hitPos: Vector3, normal: Vector3, rng: Random)
 	local base = CFrame.lookAt(hitPos + normal * 0.2, hitPos + normal * 10)
-	local biggest: Part? = nil
 	for i = 1, rng:NextInteger(5, 9) do
 		local d = rng:NextNumber(0.3, 0.95)
-		local p = part(
+		part(
 			parent,
 			"Fungo",
 			Vector3.new(d, d, d * 0.7),
 			base * CFrame.new(rng:NextNumber(-1.6, 1.6), rng:NextNumber(-1.4, 1.4), rng:NextNumber(0, 0.35)),
-			Enum.Material.Neon,
+			Enum.Material.Slate,
 			COL.Fungus,
 			{ Shape = Enum.PartType.Ball, CanCollide = false, CastShadow = false }
 		)
-		p.Transparency = 0.25
-		if i == 1 then
-			biggest = p
-		end
-	end
-	if biggest then
-		local light = Instance.new("PointLight")
-		light.Color = Color3.fromRGB(86, 196, 158)
-		light.Brightness = 0.45
-		light.Range = 14
-		light.Shadows = false
-		light.Parent = biggest
 	end
 end
 
@@ -823,42 +554,6 @@ local function hangingChain(parent: Instance, top: Vector3, bottom: Vector3, rng
 		CanCollide = false,
 		CastShadow = false,
 	})
-end
-
--- Carcaça pendurada: tronco de carne, costelas expostas e pingos embaixo.
-local function carcass(parent: Instance, hookPos: Vector3, rng: Random)
-	local yaw = rng:NextNumber(0, TAU)
-	local cf = CFrame.new(hookPos + Vector3.new(0, -2.2, 0)) * CFrame.Angles(rng:NextNumber(-0.12, 0.12), yaw, rng:NextNumber(-0.12, 0.12))
-	local body = part(parent, "Carcaca", Vector3.new(2.1, 3.6, 1.7), cf, Enum.Material.SmoothPlastic, COL.Flesh, {
-		CanCollide = false,
-	})
-	body.Reflectance = 0.08
-	for i = 1, 4 do
-		local y = 1.2 - i * 0.6
-		for _, s in { -1, 1 } do
-			part(parent, "CostelaExposta", Vector3.new(1.5, 0.13, 0.13), cf * CFrame.new(0, y, s * 0.8) * CFrame.Angles(0, 0, 0), Enum.Material.Sandstone, COL.Bone, {
-				Shape = Enum.PartType.Cylinder,
-				CanCollide = false,
-				CastShadow = false,
-			})
-		end
-	end
-	part(parent, "Trapo", Vector3.new(1.4, 1.8, 0.12), cf * CFrame.new(rng:NextNumber(-0.6, 0.6), -1.6, 0.9), Enum.Material.Fabric, COL.Rag, {
-		CanCollide = false,
-		CastShadow = false,
-	})
-	-- Pingando.
-	for i = 1, 3 do
-		part(
-			parent,
-			"Pingo",
-			Vector3.new(0.12, rng:NextNumber(0.8, 2.4), 0.12),
-			cf * CFrame.new(rng:NextNumber(-0.7, 0.7), -2.4, rng:NextNumber(-0.5, 0.5)),
-			Enum.Material.SmoothPlastic,
-			COL.Blood,
-			{ CanCollide = false, CastShadow = false }
-		)
-	end
 end
 
 -- Jaula de barras retorcidas (sucata do acampamento/avião).
@@ -1078,14 +773,15 @@ local function buildTunnel(dest: Instance, f: Frame, rng: Random)
 		local ground = mouth + f.Side * (s * 11) + f.Dir * 5
 		local base = Vector3.new(ground.X, f.SurfaceY(ground.X, ground.Z), ground.Z)
 		part(dest, "Totem", Vector3.new(0.7, 7, 0.7), CFrame.new(base + Vector3.new(0, 3.5, 0)) * CFrame.Angles(rng:NextNumber(-0.07, 0.07), rng:NextNumber(0, TAU), rng:NextNumber(-0.07, 0.07)), Enum.Material.Wood, COL.WoodDark)
-		skull(dest, base + Vector3.new(0, 7.2, 0), 1.7, rng)
-		for j = 1, 2 do
-			bone(dest, base + Vector3.new(rng:NextNumber(-1.5, 1.5), 0.3, rng:NextNumber(-1.5, 1.5)), rng:NextNumber(1.8, 3), rng)
-		end
-		bloodPool(dest, base + Vector3.new(0, 0, 0), rng:NextNumber(1.5, 2.6), rng)
+		part(dest, "TotemPedra", Vector3.new(1.5, 1.5, 1.5), CFrame.new(base + Vector3.new(0, 7.5, 0)), Enum.Material.Rock, COL.Mineral, {
+			Shape = Enum.PartType.Ball,
+			CanCollide = false,
+			CastShadow = false,
+		})
+		gravelPatch(dest, base, 2.5, rng)
 	end
 
-	-- Sangue, ossos e escuro pelo caminho todo.
+	-- Pedras soltas e fungos discretos pelo caminho todo.
 	for i = 1, #pts - 1 do
 		local a, b = pts[i], pts[i + 1]
 		local dirSeg = (b - a)
@@ -1095,47 +791,15 @@ local function buildTunnel(dest: Instance, f: Frame, rng: Random)
 			local p = a:Lerp(b, j / steps)
 			for _, s in { -1, 1 } do
 				local hit = castTerrain(p + Vector3.new(0, rng:NextNumber(1, 8), 0), sideSeg * s, 14)
-				if hit and rng:NextNumber() < 0.75 then
-					bloodSplat(dest, hit.Position, hit.Normal, rng:NextNumber(1.6, 4.5), rng)
+				if hit and rng:NextNumber() < 0.25 then
+					fungusPatch(dest, hit.Position, hit.Normal, rng)
 				end
 			end
 			if rng:NextNumber() < 0.5 then
-				bone(dest, p + sideSeg * rng:NextNumber(-4.5, 4.5) + Vector3.new(0, 0.3, 0), rng:NextNumber(1.5, 3), rng)
-			end
-			if rng:NextNumber() < 0.35 then
-				bloodPool(dest, p + sideSeg * rng:NextNumber(-4, 4), rng:NextNumber(1.2, 2.8), rng)
+				boulder(dest, "RochaTunel", p + sideSeg * rng:NextNumber(-4.5, 4.5), rng:NextNumber(1.5, 3), rng)
 			end
 		end
-		dragMark(dest, a + sideSeg * 1.5, b + sideSeg * 0.5, rng)
-	end
-
-	-- Duas tochas moribundas: a luz acaba antes do salão, de propósito.
-	for _, spec in { { pts[2], 1 }, { pts[3], -1 } } do
-		local p = spec[1] :: Vector3
-		local s = spec[2] :: number
-		local dirSeg = (pts[3] - pts[2]).Unit
-		local sideSeg = Vector3.new(-dirSeg.Z, 0, dirSeg.X) * s
-		local hit = castTerrain(p + Vector3.new(0, 5, 0), sideSeg, 14)
-		if hit then
-			local base = hit.Position + hit.Normal * 0.3
-			local bowl = part(dest, "Braseiro", Vector3.new(0.9, 1.5, 1.5), CFrame.new(base + hit.Normal * 1.2) * UPRIGHT, Enum.Material.CorrodedMetal, COL.Rust, {
-				Shape = Enum.PartType.Cylinder,
-				CanCollide = false,
-				CastShadow = false,
-			})
-			local fire = Instance.new("Fire")
-			fire.Heat = 0
-			fire.Size = 3.2
-			fire.Color = Color3.fromRGB(206, 116, 40)
-			fire.SecondaryColor = Color3.fromRGB(84, 22, 12)
-			fire.Parent = bowl
-			local light = Instance.new("PointLight")
-			light.Color = Color3.fromRGB(222, 132, 60)
-			light.Brightness = 0.8
-			light.Range = 18
-			light.Shadows = false
-			light.Parent = bowl
-		end
+		gravelPatch(dest, (a + b) * 0.5, 2.5, rng)
 	end
 
 	-- Estalactites no teto do túnel.
@@ -1195,23 +859,13 @@ local function buildHallFloor(dest: Instance, f: Frame, rng: Random)
 		end
 	end
 
-	-- Ossada espalhada e poças.
+	-- Pedras e cascalho espalhados.
 	for i = 1, 9 do
 		local p = freeSpot(6, H.Radius - 6)
 		if p then
-			bonePile(dest, p, rng:NextNumber(2.5, 6), rng, rng:NextNumber(0.5, 1.2))
+			gravelPatch(dest, p, rng:NextNumber(2.5, 6), rng)
 		end
 	end
-	for i = 1, 10 do
-		local p = freeSpot(5, H.Radius - 5)
-		if p then
-			bloodPool(dest, p, rng:NextNumber(2, 5.5), rng, rng:NextNumber() < 0.3)
-		end
-	end
-
-	-- Rastros: da boca do túnel pro poço e do poço pro pé da rampa.
-	dragMark(dest, polar(f, 90, H.Radius - 4, 0), pitCenter + radial(f, 90) * (P.Radius + 1), rng)
-	dragMark(dest, pitCenter + radial(f, 200) * (P.Radius + 1), polar(f, LAYOUT.RampTheta0, LAYOUT.RampIn + 4, 0), rng)
 
 	-- Sucata arrastada pra dentro: caixotes quebrados e duas jaulas.
 	for i = 1, 6 do
@@ -1231,8 +885,7 @@ local function buildHallFloor(dest: Instance, f: Frame, rng: Random)
 		local theta = if i == 1 then 320 else 25
 		local p = polar(f, theta, H.Radius - 9, 0)
 		cage(dest, CFrame.new(p) * CFrame.Angles(0, math.rad(theta), 0), 5, 5, 6, rng)
-		bonePile(dest, p, 2, rng, 0.6)
-		bloodPool(dest, p, 3, rng)
+		gravelPatch(dest, p, 2.5, rng)
 	end
 end
 
@@ -1241,13 +894,11 @@ local function buildPit(dest: Instance, f: Frame, rng: Random)
 	local center = polar(f, P.Theta, P.Dist, 0)
 	local bottom = center - Vector3.new(0, P.Depth, 0)
 
-	-- Poça grande no fundo + ossada boiando.
-	bloodPool(dest, bottom, P.Radius * 0.85, rng, true)
-	bonePile(dest, bottom, P.Radius * 0.6, rng, 1.6)
-	for i = 1, 4 do
+	-- Fundo rochoso com minerais e fungos, sem elementos orgânicos.
+	for i = 1, 8 do
 		local ang = rng:NextNumber(0, TAU)
-		local d = rng:NextNumber(2, P.Radius * 0.75)
-		skull(dest, bottom + Vector3.new(math.cos(ang) * d, 0.7, math.sin(ang) * d), rng:NextNumber(1.3, 1.9), rng)
+		local d = rng:NextNumber(1, P.Radius * 0.75)
+		boulder(dest, "MineralPoco", bottom + Vector3.new(math.cos(ang) * d, 0, math.sin(ang) * d), rng:NextNumber(1.3, 2.6), rng)
 	end
 
 	-- Rampa tosca pra descer (e pra quem cair conseguir sair).
@@ -1255,13 +906,13 @@ local function buildPit(dest: Instance, f: Frame, rng: Random)
 	local low = center + radial(f, P.Theta + 50) * 2 - Vector3.new(0, P.Depth - 0.6, 0)
 	slabBetween(dest, "RampaPoco", top, low, 7, 1.4, Enum.Material.Rock, COL.RockDark)
 
-	-- Parede do poço lavada de sangue.
+	-- Fungos marcando a parede do poço.
 	for i = 1, 10 do
 		local theta = rng:NextNumber(0, 360)
 		local from = center + Vector3.new(0, -rng:NextNumber(0.5, P.Depth - 0.5), 0)
 		local hit = castTerrain(from, radial(f, theta), P.Radius + 4)
 		if hit then
-			bloodSplat(dest, hit.Position, hit.Normal, rng:NextNumber(1.5, 3.5), rng)
+			fungusPatch(dest, hit.Position, hit.Normal, rng)
 		end
 	end
 
@@ -1329,18 +980,11 @@ local function buildMidLevel(dest: Instance, f: Frame, rng: Random)
 	-- Escada de treliça do chão direto pra galeria, do lado da entrada.
 	trussLadder(dest, polar(f, L.BridgeTheta0 + 8, L.GalleryIn - 1, 0), MID, math.rad(L.BridgeTheta0))
 
-	-- O que vive na galeria: ossada, sucata, tochas e sangue.
+	-- O que vive na galeria: rocha, sucata e fungos.
 	for i = 1, 7 do
 		local theta = rng:NextNumber(L.GalleryTheta0 + 10, L.GalleryTheta1 - 10)
 		local p = polar(f, theta, rng:NextNumber(L.GalleryIn + 3, L.GalleryOut - 6), MID)
-		bonePile(dest, p, rng:NextNumber(2, 4), rng, rng:NextNumber(0.4, 0.9))
-	end
-	for i = 1, 6 do
-		local theta = rng:NextNumber(L.GalleryTheta0 + 10, L.GalleryTheta1 - 10)
-		bloodPool(dest, polar(f, theta, rng:NextNumber(L.GalleryIn + 2, L.GalleryOut - 7), MID), rng:NextNumber(1.6, 4), rng)
-	end
-	for _, theta in { 300, 355, 40, 95, 150 } do
-		wallTorch(dest, f, theta, MID + 4.5, rng)
+		gravelPatch(dest, p, rng:NextNumber(2, 4), rng)
 	end
 	for i = 1, 4 do
 		local theta = rng:NextNumber(L.GalleryTheta0 + 20, L.GalleryTheta1 - 20)
@@ -1355,7 +999,7 @@ local function buildMidLevel(dest: Instance, f: Frame, rng: Random)
 		)
 	end
 
-	-- Correntes com carcaça penduradas do teto, vistas da galeria.
+	-- Correntes e ganchos decorativos pendurados do teto, vistos da galeria.
 	for i = 1, 4 do
 		local theta = rng:NextNumber(300, 545) -- fora do vão da laje de cima
 		local p = polar(f, theta, rng:NextNumber(18, 30), MID + 9)
@@ -1363,7 +1007,6 @@ local function buildMidLevel(dest: Instance, f: Frame, rng: Random)
 		if hit then
 			local bottom = Vector3.new(p.X, at(f, 0, MID + 8, 0).Y, p.Z)
 			hangingChain(dest, hit.Position - Vector3.new(0, 0.2, 0), bottom, rng)
-			carcass(dest, bottom, rng)
 		end
 	end
 end
@@ -1377,8 +1020,7 @@ local function buildNest(dest: Instance, f: Frame, rng: Random): Vector3
 	local TOP = CONFIG.Levels.Top
 	local center = polar(f, N.Theta, N.Dist, TOP)
 
-	-- Cama de trapos, carne e sangue encharcado.
-	bloodPool(dest, center, N.Radius * 0.8, rng, true)
+	-- Cama de trapos e madeira, sem materiais orgânicos.
 	for i = 1, 14 do
 		local ang = rng:NextNumber(0, TAU)
 		local d = rng:NextNumber(0, N.Radius * 0.8)
@@ -1391,12 +1033,12 @@ local function buildNest(dest: Instance, f: Frame, rng: Random): Vector3
 			rng:NextNumber(1.6, 4.5),
 			rng:NextNumber(0.2, 0.5),
 			rng:NextNumber(0, TAU),
-			if kind < 0.5 then Enum.Material.Fabric else Enum.Material.SmoothPlastic,
-			if kind < 0.5 then COL.Rag elseif kind < 0.8 then COL.Flesh else COL.BloodOld
+			if kind < 0.7 then Enum.Material.Fabric else Enum.Material.WoodPlanks,
+			if kind < 0.7 then COL.Rag else COL.WoodDark
 		)
 	end
 
-	-- Borda do ninho: ossos grandes e madeira fincados pra dentro.
+	-- Borda do ninho: estacas de madeira e fragmentos de rocha.
 	for i = 1, 26 do
 		local ang = (i - 1) / 26 * TAU + rng:NextNumber(-0.06, 0.06)
 		local d = N.Radius * rng:NextNumber(0.92, 1.12)
@@ -1406,110 +1048,22 @@ local function buildNest(dest: Instance, f: Frame, rng: Random): Vector3
 		local cf = CFrame.new(p + Vector3.new(0, len * 0.35, 0))
 			* CFrame.Angles(0, -ang + math.pi / 2, 0)
 			* CFrame.Angles(lean, 0, 0)
-		if rng:NextNumber() < 0.6 then
-			part(dest, "OssoNinho_" .. i, Vector3.new(len, 0.45, 0.45), cf * UPRIGHT, Enum.Material.Sandstone, if rng:NextNumber() < 0.4 then COL.BoneOld else COL.Bone, {
-				Shape = Enum.PartType.Cylinder,
-				CanCollide = false,
-				CastShadow = false,
-			})
-		else
-			part(dest, "MadeiraNinho_" .. i, Vector3.new(0.5, len, 0.5), cf, Enum.Material.Wood, COL.WoodDark, {
-				CanCollide = false,
-				CastShadow = false,
-			})
-		end
+		part(dest, "EstacaNinho_" .. i, Vector3.new(0.5, len, 0.5), cf, Enum.Material.Wood, COL.WoodDark, {
+			CanCollide = false,
+			CastShadow = false,
+		})
 	end
 
-	-- Troféus: crânios encarando quem sobe a escada.
+	-- Cristais discretos substituem os antigos troféus orgânicos.
 	for i = 1, 9 do
 		local ang = rng:NextNumber(0, TAU)
 		local d = N.Radius * rng:NextNumber(0.55, 1.05)
-		skull(dest, center + Vector3.new(math.cos(ang) * d, 0.9, math.sin(ang) * d), rng:NextNumber(1.3, 2), rng)
+		spike(dest, "CristalNinho", center + Vector3.new(math.cos(ang) * d, 0.2, math.sin(ang) * d), 1, rng:NextNumber(1.3, 2.3), rng:NextNumber(0.35, 0.7), rng)
 	end
-	bonePile(dest, center + radial(f, N.Theta + 90) * (N.Radius + 3), 4, rng, 1.3)
-	bonePile(dest, center + radial(f, N.Theta - 90) * (N.Radius + 3), 4, rng, 1.1)
+	gravelPatch(dest, center + radial(f, N.Theta + 90) * (N.Radius + 3), 3.5, rng)
+	gravelPatch(dest, center + radial(f, N.Theta - 90) * (N.Radius + 3), 3.5, rng)
 
 	return center
-end
-
-local function buildLightShaft(dest: Instance, f: Frame, rng: Random)
-	local sh = CONFIG.Shaft
-	local TOP = CONFIG.Levels.Top
-	local ground = polar(f, sh.Theta, sh.Dist, TOP)
-	local topY = f.PlanY(ground.X, ground.Z) -- a fenda já é um buraco: raycast não serve
-	local chimneyBottomY = at(f, 0, CONFIG.Hall.Height - 10, 0).Y
-	local total = topY - ground.Y
-	if total < 10 then
-		return
-	end
-
-	local segments = 6
-	local segH = total / segments
-	local lowest: Part? = nil
-	for i = 1, segments do
-		local yTop = ground.Y + segH * i
-		local yMid = ground.Y + segH * (i - 0.5)
-		local k = 1 - (i - 1) / segments
-		local width = if yMid > chimneyBottomY then 5.4 else 6 + k * k * 9
-		local p = part(
-			dest,
-			"Feixe_" .. i,
-			Vector3.new(segH + 0.2, width, width),
-			CFrame.new(ground.X, yMid, ground.Z) * UPRIGHT,
-			Enum.Material.Neon,
-			COL.Shaft,
-			{ Shape = Enum.PartType.Cylinder, CanCollide = false, CastShadow = false }
-		)
-		p.Transparency = 0.93 + (i / segments) * 0.045
-		p.CanQuery = false
-		p.CanTouch = false
-		if i == 1 then
-			lowest = p
-		end
-		if yTop > topY then
-			break
-		end
-	end
-
-	-- Luz descendo pela fenda e a mancha clara no chão do ninho.
-	local emitter = part(dest, "Fenda", Vector3.new(2, 1, 2), CFrame.new(ground.X, topY - 2, ground.Z), Enum.Material.SmoothPlastic, Color3.new(0, 0, 0), {
-		CanCollide = false,
-		Transparency = 1,
-		CastShadow = false,
-	})
-	emitter.CanQuery = false
-	local spot = Instance.new("SpotLight")
-	spot.Face = Enum.NormalId.Bottom
-	spot.Angle = 42
-	spot.Range = 60
-	spot.Brightness = 2.2
-	spot.Color = Color3.fromRGB(196, 212, 228)
-	spot.Shadows = false
-	spot.Parent = emitter
-
-	local pool = disc(dest, "LuzNoChao", ground + Vector3.new(0, 0.25, 0), 15, 0.1, 0, Enum.Material.Neon, COL.Shaft)
-	pool.Transparency = 0.88
-	pool.CanQuery = false
-
-	-- Poeira boiando no feixe.
-	if lowest then
-		local dust = Instance.new("ParticleEmitter")
-		dust.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-		dust.Color = ColorSequence.new(COL.Shaft)
-		dust.Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 1),
-			NumberSequenceKeypoint.new(0.5, 0.55),
-			NumberSequenceKeypoint.new(1, 1),
-		})
-		dust.Size = NumberSequence.new(0.35)
-		dust.Rate = 7
-		dust.Lifetime = NumberRange.new(6, 12)
-		dust.Speed = NumberRange.new(0.1, 0.5)
-		dust.Acceleration = Vector3.new(0, -0.4, 0)
-		dust.SpreadAngle = Vector2.new(40, 40)
-		dust.LightEmission = 0.6
-		dust.Parent = lowest
-	end
 end
 
 local function buildTopLevel(dest: Instance, f: Frame, rng: Random): Vector3
@@ -1536,7 +1090,7 @@ local function buildTopLevel(dest: Instance, f: Frame, rng: Random): Vector3
 
 	local nest = buildNest(dest, f, rng)
 
-	-- Carcaças penduradas em volta do ninho.
+	-- Correntes vazias em volta do ninho.
 	for i = 1, 3 do
 		local theta = CONFIG.Nest.Theta + (i - 2) * 26
 		local p = polar(f, theta, CONFIG.Nest.Dist + rng:NextNumber(-6, 6), TOP + 10)
@@ -1544,28 +1098,17 @@ local function buildTopLevel(dest: Instance, f: Frame, rng: Random): Vector3
 		if hit then
 			local bottom = Vector3.new(p.X, at(f, 0, TOP + 8, 0).Y, p.Z)
 			hangingChain(dest, hit.Position - Vector3.new(0, 0.2, 0), bottom, rng)
-			carcass(dest, bottom, rng)
-			bloodPool(dest, Vector3.new(p.X, at(f, 0, TOP, 0).Y, p.Z), rng:NextNumber(2, 3.5), rng, true)
+			gravelPatch(dest, Vector3.new(p.X, at(f, 0, TOP, 0).Y, p.Z), 2, rng)
 		end
 	end
 
-	-- Sangue e ossos pela laje toda + rastro até a beirada (de onde ele pula).
+	-- Rochas e cascalho pela laje toda.
 	for i = 1, 8 do
 		local theta = rng:NextNumber(L.ShelfTheta0 + 6, L.ShelfTheta1 - 6)
 		local p = polar(f, theta, rng:NextNumber(L.ShelfIn + 3, L.ShelfOut - 9), TOP)
-		if rng:NextNumber() < 0.5 then
-			bloodPool(dest, p, rng:NextNumber(2, 4.5), rng)
-		else
-			bonePile(dest, p, rng:NextNumber(2, 4), rng, rng:NextNumber(0.4, 1))
-		end
-	end
-	dragMark(dest, nest + radial(f, CONFIG.Nest.Theta) * -(CONFIG.Nest.Radius + 1), polar(f, 250, L.ShelfIn + 2, TOP), rng)
-
-	for _, theta in { 210, 250, 290 } do
-		wallTorch(dest, f, theta, TOP + 5, rng)
+		gravelPatch(dest, p, rng:NextNumber(2, 4.5), rng)
 	end
 
-	buildLightShaft(dest, f, rng)
 	return nest
 end
 
@@ -1573,11 +1116,11 @@ end
 -- Câmaras laterais
 --------------------------------------------------------------------------------
 
-local function buildOssuary(dest: Instance, f: Frame, c: { Name: string, Theta: number, Dist: number, Radius: number }, rng: Random)
+local function buildMineralChamber(dest: Instance, f: Frame, c: { Name: string, Theta: number, Dist: number, Radius: number }, rng: Random)
 	local center = polar(f, c.Theta, c.Dist, 0)
 	local R = c.Radius
 
-	-- Prateleira de rocha em volta com fileiras de crânios.
+	-- Prateleiras de rocha com minerais e cristais.
 	for i = 1, 34 do
 		local ang = rng:NextNumber(0, TAU)
 		local d = R * rng:NextNumber(0.55, 0.95)
@@ -1588,28 +1131,26 @@ local function buildOssuary(dest: Instance, f: Frame, c: { Name: string, Theta: 
 				CastShadow = false,
 			})
 		end
-		skull(dest, p + Vector3.new(0, row * 1.8 + 1.1, 0), rng:NextNumber(1.2, 1.8), rng)
+		if row > 0 then
+			spike(dest, "CristalPrateleira", p + Vector3.new(0, row * 1.8 + 0.3, 0), 1, rng:NextNumber(0.8, 1.5), rng:NextNumber(0.25, 0.55), rng)
+		end
 	end
 
-	-- Montes de ossos encostados na parede.
+	-- Montes de pedras encostados na parede.
 	for i = 1, 6 do
 		local ang = (i - 1) / 6 * TAU
-		bonePile(dest, center + Vector3.new(math.cos(ang) * R * 0.7, 0, math.sin(ang) * R * 0.7), rng:NextNumber(3, 5), rng, 1.4)
+		gravelPatch(dest, center + Vector3.new(math.cos(ang) * R * 0.7, 0, math.sin(ang) * R * 0.7), rng:NextNumber(3, 5), rng)
 	end
 
-	-- Altar: laje de pedra encharcada no meio.
+	-- Mesa de pedra com minerais no meio.
 	local altar = center + Vector3.new(0, 0, 0)
 	part(dest, "Altar", Vector3.new(7, 1.6, 4), CFrame.new(altar + Vector3.new(0, 0.8, 0)) * CFrame.Angles(0, math.rad(c.Theta), 0), Enum.Material.Rock, COL.RockDark)
-	bloodPool(dest, altar + Vector3.new(0, 1.6, 0), 2.6, rng, true)
-	bloodPool(dest, altar, 5, rng)
-	ribcage(dest, altar + Vector3.new(0, 2.2, 0), 2, rng)
-	skull(dest, altar + Vector3.new(2.2, 2.2, 0), 1.9, rng)
-	for i = 1, 4 do
-		local ang = rng:NextNumber(0, TAU)
-		dragMark(dest, altar, altar + Vector3.new(math.cos(ang) * R * 0.9, 0, math.sin(ang) * R * 0.9), rng)
+	for i = 1, 5 do
+		local ang = (i - 1) / 5 * TAU
+		spike(dest, "CristalAltar", altar + Vector3.new(math.cos(ang) * 2.1, 1.6, math.sin(ang) * 1.1), 1, rng:NextNumber(0.8, 1.8), rng:NextNumber(0.3, 0.6), rng)
 	end
 
-	-- Fungo: a única luz aqui dentro.
+	-- Fungo opaco nas paredes.
 	for i = 1, 4 do
 		local ang = rng:NextNumber(0, TAU)
 		local hit = castTerrain(center + Vector3.new(0, rng:NextNumber(2, 8), 0), Vector3.new(math.cos(ang), 0, math.sin(ang)), R + 5)
@@ -1624,11 +1165,11 @@ local function buildOssuary(dest: Instance, f: Frame, c: { Name: string, Theta: 
 	end
 end
 
-local function buildLarder(dest: Instance, f: Frame, c: { Name: string, Theta: number, Dist: number, Radius: number }, rng: Random)
+local function buildSupplyChamber(dest: Instance, f: Frame, c: { Name: string, Theta: number, Dist: number, Radius: number }, rng: Random)
 	local center = polar(f, c.Theta, c.Dist, 0)
 	local R = c.Radius
 
-	-- Varal de carne: dois postes e uma trave com tiras penduradas.
+	-- Varal de equipamentos: dois postes e uma trave com lonas penduradas.
 	local yaw = math.rad(c.Theta)
 	local rackCF = CFrame.new(center) * CFrame.Angles(0, yaw, 0)
 	for _, s in { -1, 1 } do
@@ -1638,14 +1179,13 @@ local function buildLarder(dest: Instance, f: Frame, c: { Name: string, Theta: n
 	for i = 1, 7 do
 		local x = -4.5 + i * 1.2
 		local len = rng:NextNumber(1.6, 3.4)
-		part(dest, "Tira_" .. i, Vector3.new(0.7, len, 0.15), rackCF * CFrame.new(x, 6 - len * 0.5 - 0.3, rng:NextNumber(-0.3, 0.3)), Enum.Material.SmoothPlastic, if rng:NextNumber() < 0.5 then COL.Flesh else COL.Rag, {
+		part(dest, "Lona_" .. i, Vector3.new(0.7, len, 0.15), rackCF * CFrame.new(x, 6 - len * 0.5 - 0.3, rng:NextNumber(-0.3, 0.3)), Enum.Material.Fabric, COL.Rag, {
 			CanCollide = false,
 			CastShadow = false,
 		})
 	end
-	bloodPool(dest, center, 5, rng, true)
 
-	-- Carcaças no teto.
+	-- Correntes vazias no teto.
 	for i = 1, 4 do
 		local ang = rng:NextNumber(0, TAU)
 		local d = R * rng:NextNumber(0.35, 0.8)
@@ -1654,8 +1194,7 @@ local function buildLarder(dest: Instance, f: Frame, c: { Name: string, Theta: n
 		if hit then
 			local bottom = Vector3.new(p.X, center.Y + 5.5, p.Z)
 			hangingChain(dest, hit.Position - Vector3.new(0, 0.2, 0), bottom, rng)
-			carcass(dest, bottom, rng)
-			bloodPool(dest, Vector3.new(p.X, center.Y, p.Z), rng:NextNumber(1.8, 3), rng)
+			gravelPatch(dest, Vector3.new(p.X, center.Y, p.Z), 1.8, rng)
 		end
 	end
 
@@ -1664,7 +1203,7 @@ local function buildLarder(dest: Instance, f: Frame, c: { Name: string, Theta: n
 		local ang = (i - 1) * math.pi + yaw
 		local p = center + Vector3.new(math.cos(ang) * R * 0.72, 0, math.sin(ang) * R * 0.72)
 		cage(dest, CFrame.new(p) * CFrame.Angles(0, -ang, 0), 5, 5, 6, rng)
-		bonePile(dest, p, 2, rng, 0.7)
+		gravelPatch(dest, p, 2, rng)
 	end
 	for i = 1, 4 do
 		local ang = rng:NextNumber(0, TAU)
@@ -1679,13 +1218,6 @@ local function buildLarder(dest: Instance, f: Frame, c: { Name: string, Theta: n
 			{ Shape = Enum.PartType.Cylinder }
 		)
 	end
-	for i = 1, 5 do
-		local ang = rng:NextNumber(0, TAU)
-		local hit = castTerrain(center + Vector3.new(0, rng:NextNumber(1.5, 7), 0), Vector3.new(math.cos(ang), 0, math.sin(ang)), R + 5)
-		if hit then
-			bloodSplat(dest, hit.Position, hit.Normal, rng:NextNumber(2, 5), rng)
-		end
-	end
 	for i = 1, 2 do
 		local ang = rng:NextNumber(0, TAU)
 		local hit = castTerrain(center + Vector3.new(0, rng:NextNumber(2, 7), 0), Vector3.new(math.cos(ang), 0, math.sin(ang)), R + 5)
@@ -1698,16 +1230,16 @@ end
 local function buildChambers(dest: Instance, f: Frame, rng: Random)
 	for _, c in CONFIG.Chambers do
 		local sub = folder(dest, c.Name)
-		if c.Name == "Ossuario" then
-			buildOssuary(sub, f, c, rng)
+		if c.Name == "CamaraMineral" then
+			buildMineralChamber(sub, f, c, rng)
 		else
-			buildLarder(sub, f, c, rng)
+			buildSupplyChamber(sub, f, c, rng)
 		end
 
-		-- Corredor de ligação: rastro de arrasto e sangue nas paredes.
+		-- Corredor de ligação com cascalho e fungos.
 		local a = polar(f, c.Theta, CONFIG.Hall.Radius - 8, 0)
 		local b = polar(f, c.Theta, c.Dist - c.Radius * 0.5, 0)
-		dragMark(sub, a, b, rng)
+		gravelPatch(sub, (a + b) * 0.5, 3, rng)
 		local sideSeg = radial(f, c.Theta + 90)
 		local steps = 3
 		for i = 0, steps do
@@ -1715,7 +1247,7 @@ local function buildChambers(dest: Instance, f: Frame, rng: Random)
 			for _, s in { -1, 1 } do
 				local hit = castTerrain(p, sideSeg * s, 12)
 				if hit then
-					bloodSplat(sub, hit.Position, hit.Normal, rng:NextNumber(1.5, 3.5), rng)
+					fungusPatch(sub, hit.Position, hit.Normal, rng)
 				end
 			end
 		end
@@ -1724,7 +1256,7 @@ local function buildChambers(dest: Instance, f: Frame, rng: Random)
 end
 
 --------------------------------------------------------------------------------
--- Clima: estalactites, sangue nas paredes, fungo e névoa
+-- Clima: estalactites, fungo e névoa
 --------------------------------------------------------------------------------
 
 local function buildAmbience(dest: Instance, f: Frame, rng: Random)
@@ -1741,20 +1273,7 @@ local function buildAmbience(dest: Instance, f: Frame, rng: Random)
 		end
 	end
 
-	-- Sangue nas paredes nos três níveis (o que o jogador vê de perto).
-	local splats = 0
-	for i = 1, 70 do
-		local theta = rng:NextNumber(0, 360)
-		local y = rng:NextNumber(0.5, H.WallTop - 4)
-		if splatOnWall(dest, f, theta, y, rng:NextNumber(1.8, 6), rng) then
-			splats += 1
-		end
-		if i % 20 == 0 then
-			task.wait()
-		end
-	end
-
-	-- Fungo bioluminescente espalhado (luz fraca e fria).
+	-- Fungo opaco espalhado pelas paredes.
 	for i = 1, 14 do
 		local theta = rng:NextNumber(0, 360)
 		local y = rng:NextNumber(1.5, H.WallTop - 6)
@@ -1779,6 +1298,38 @@ end
 -- Montagem
 --------------------------------------------------------------------------------
 
+-- Volumes invisíveis lidos apenas pelo cliente; não bloqueiam movimento nem raycasts.
+local function buildDarknessZones(parent: Instance, f: Frame)
+	local zones = folder(parent, "DarknessZones")
+	local function zone(name: string, cf: CFrame, size: Vector3)
+		local marker = part(zones, name, size, cf, Enum.Material.SmoothPlastic, Color3.new(0, 0, 0), {
+			CanCollide = false,
+			Transparency = 1,
+			CastShadow = false,
+		})
+		marker.CanTouch = false
+		marker.CanQuery = false
+	end
+
+	zone("Salao", CFrame.new(at(f, 0, 24, 0)), Vector3.new(102, 62, 102))
+	for _, chamber in CONFIG.Chambers do
+		zone(chamber.Name, CFrame.new(polar(f, chamber.Theta, chamber.Dist, 9)),
+			Vector3.new(chamber.Radius * 2 + 4, 28, chamber.Radius * 2 + 4))
+		local a = polar(f, chamber.Theta, CONFIG.Hall.Radius - 6, 0)
+		local b = polar(f, chamber.Theta, chamber.Dist, 0)
+		zone(chamber.Name .. "Corredor", CFrame.lookAt((a + b) * 0.5 + Vector3.new(0, 7, 0), b + Vector3.new(0, 7, 0)),
+			Vector3.new(14, 18, (b - a).Magnitude + 8))
+	end
+
+	local waypoints = tunnelWaypoints(f)
+	for i = 1, #waypoints - 1 do
+		local a, b = waypoints[i], waypoints[i + 1]
+		local lift = Vector3.new(0, CONFIG.Tunnel.Height * 0.5, 0)
+		zone("Tunel_" .. i, CFrame.lookAt((a + b) * 0.5 + lift, b + lift),
+			Vector3.new(CONFIG.Tunnel.Width + 5, CONFIG.Tunnel.Height + 5, (b - a).Magnitude + 9))
+	end
+end
+
 --[[
 	Dress(parent, f, seed)
 	Só o cenário (pressupõe o terreno já escavado). Devolve a posição onde o
@@ -1787,6 +1338,7 @@ end
 function CaveInterior.Dress(parent: Instance, f: Frame, seed: number): Vector3
 	local rng = Random.new(seed)
 
+	buildDarknessZones(parent, f)
 	buildTunnel(folder(parent, "Tunel"), f, rng)
 	task.wait()
 	buildHallFloor(folder(parent, "Nivel0_Salao"), f, rng)

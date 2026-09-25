@@ -48,6 +48,7 @@ local function isParticipantGameplayEnabled(player: Player): boolean
 	return state == "InMatch"
 		and player:GetAttribute("InRound") == true
 		and player:GetAttribute("InWaitingRoom") ~= true
+		and player:GetAttribute("ExtractionBoarded") ~= true
 		and player.Parent == Players
 end
 
@@ -71,6 +72,11 @@ local function saveHumanoid(humanoid: Humanoid)
 
 local function setNetworkOwner(root: BasePart, player: Player?, movementAllowed: boolean)
 	if not root:CanSetNetworkOwnership() then return end
+	-- Sentado no barco de fuga, o corpo é parte do conjunto do barco: o dono
+	-- de rede é o piloto, decidido pelo BoatSystem. Trocar aqui roubaria o
+	-- barco de quem pilota.
+	local character = root.Parent
+	if character and character:GetAttribute("BarcoAssento") ~= nil then return end
 	local ok = pcall(function()
 		if movementAllowed and player then root:SetNetworkOwner(player) else root:SetNetworkOwner(nil) end
 	end)
@@ -167,7 +173,7 @@ end
 
 local function applyToPlayer(player: Player)
 	local gameplayEnabled = isParticipantGameplayEnabled(player)
-	local movementBlocked = BLOCKED[state]
+	local movementBlocked = BLOCKED[state] or player:GetAttribute("ExtractionBoarded") == true
 	setIfChanged(player, "GameplayEnabled", gameplayEnabled)
 	setIfChanged(player, "MovementLocked", movementBlocked)
 	setIfChanged(player, "MatchState", state)
@@ -229,6 +235,7 @@ function MatchStateService.Init()
 		end)
 		player:GetAttributeChangedSignal("InRound"):Connect(function() applyToPlayer(player) end)
 		player:GetAttributeChangedSignal("InWaitingRoom"):Connect(function() applyToPlayer(player) end)
+		player:GetAttributeChangedSignal("ExtractionBoarded"):Connect(function() applyToPlayer(player) end)
 	end
 
 	for _, player in Players:GetPlayers() do watch(player) end
@@ -242,7 +249,7 @@ function MatchStateService.Init()
 	RunService.Heartbeat:Connect(function()
 		for _, player in Players:GetPlayers() do
 			local gameplayEnabled = isParticipantGameplayEnabled(player)
-			local movementBlocked = BLOCKED[state]
+			local movementBlocked = BLOCKED[state] or player:GetAttribute("ExtractionBoarded") == true
 			if player:GetAttribute("GameplayEnabled") ~= gameplayEnabled
 				or player:GetAttribute("MovementLocked") ~= movementBlocked then
 				applyToPlayer(player)

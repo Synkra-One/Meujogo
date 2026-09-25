@@ -208,7 +208,7 @@ local blur=world.CurrentCamera:FindFirstChild("FearBlur")
 local function tick(n) for _=1,n do heartbeat:Fire(0.05) end end
 tick(20); assert(not gui.Enabled and heart.plays==0)
 p:SetAttribute("Role",config.Roles.Survivor); p:SetAttribute("InRound",true)
-storage:SetAttribute("MatchState","Playing"); p:SetAttribute("Fear",100); p:SetAttribute("FearState","ExtremePanic")
+storage:SetAttribute("MatchState","InMatch"); p:SetAttribute("Fear",100); p:SetAttribute("FearState","ExtremePanic")
 local count=#made
 tick(60)
 assert(gui.Enabled and blur.Size>3.9 and blur.Size<=4)
@@ -239,7 +239,7 @@ end
 remotes.RoundEnded.OnClientEvent:Fire(); assert(not gui.Enabled and blur.Size==0)
 assert(darken.BackgroundTransparency==1,"nada de escurecimento residual no reset")
 tick(5); assert(not gui.Enabled,"no lingering frame after RoundEnded")
-storage:SetAttribute("MatchState","Intermission"); storage:SetAttribute("MatchState","Playing")
+storage:SetAttribute("MatchState","Intermission"); storage:SetAttribute("MatchState","InMatch")
 tick(40); assert(gui.Enabled)
 world.CurrentCamera=object("Camera"); world.CurrentCamera.FieldOfView=66
 assert(blur.Parent==world.CurrentCamera)

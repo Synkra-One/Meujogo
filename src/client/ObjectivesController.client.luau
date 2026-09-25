@@ -191,5 +191,15 @@ Remotes.ObjectiveProgress.OnClientEvent:Connect(function(objectiveId: string, cu
 		local names = getPlayerNames(players)
 		local who = (#names > 0) and table.concat(names, ", ") or "alguém"
 		showNotification(string.format("Helicóptero decolou! Resgatados: %s", who))
+	-- Barco de fuga (server/BoatSystem.lua). O checklist do barco fica na
+	-- BarcoHUD (client/BoatHUD.lua); aqui só os avisos grandes.
+	elseif objectiveId == "BarcoPronto" then
+		showNotification("O barco está pronto! Sente no timão e dê a partida.")
+	elseif objectiveId == "BarcoLigado" then
+		showNotification("O motor do barco pegou! Pro mar aberto, até as boias do limite!")
+	elseif objectiveId == "BarcoFugiu" then
+		local names = getPlayerNames(players)
+		local who = (#names > 0) and table.concat(names, ", ") or "alguém"
+		showNotification(string.format("O barco escapou da ilha! A bordo: %s", who))
 	end
 end)

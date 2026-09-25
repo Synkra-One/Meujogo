@@ -10,7 +10,7 @@
 	  1. Carregamento próprio (rápido -- MenuConfig.Loading)
 	  2. Cena 3D assume a câmera + "clique para começar"
 	  3. Menu principal entra com os botões
-	4. JOGAR devolve câmera/controles e deixa o personagem visível no lobby
+	4. ENTRAR devolve câmera/controles e deixa o personagem visível no lobby
 
 	ONDE ESTÁ CADA COISA
 	  Menu/MenuConfig  -- TODA a configuração (cores, tempos, IDs, textos)
@@ -20,9 +20,8 @@
 	  Menu/MenuScreens -- as telas e a navegação
 
 	NADA AQUI AFETA OS OUTROS JOGADORES: a cena é local, a interface é local, e
-	os únicos pedidos que saem para o servidor são os MESMOS que a sala de
-	espera já usava (Remotes.WaitingRoom / Remotes.SelectCharacter). Nenhum
-	RemoteEvent novo foi criado.
+	ENTRAR apenas libera o lobby. A fila e a seleção continuam nos sistemas
+	existentes, sem pedidos ao servidor feitos por esta tela.
 
 	IMPORTANTE SOBRE ORDEM DE CARGA: em ReplicatedFirst o ReplicatedStorage
 	ainda não replicou. Por isso nenhum módulo do jogo é exigido no topo deste
@@ -31,7 +30,6 @@
 
 local Players = game:GetService("Players")
 local ReplicatedFirst = game:GetService("ReplicatedFirst")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
@@ -103,64 +101,6 @@ local function setCursorFree(free: boolean)
 end
 
 --------------------------------------------------------------------------------
--- Integração com a fila de partida existente
---------------------------------------------------------------------------------
-
--- Resolvido só quando precisamos: aqui o ReplicatedStorage já replicou.
-local function gameModule(name: string): any?
-	local modules = ReplicatedStorage:WaitForChild("Modules", 10)
-	if not modules then return nil end
-	local module = modules:WaitForChild(name, 10)
-	return if module then require(module :: ModuleScript) else nil
-end
-
-local function remotes(): any?
-	return gameModule("Remotes")
-end
-
---[[
-	canQuickPlay()
-	O botão de acesso rápido só APARECE para quem está em
-	GameConfig.Testing.DevRoleUserIds. Isso é só cosmético: quem valida de
-	verdade é o servidor (WaitingRoomManager.isDevRoleTester). Um jogador que
-	force o pedido simplesmente entra na fila como qualquer outro.
-]]
-local function canQuickPlay(): boolean
-	local config = gameModule("GameConfig")
-	if not config or not config.Testing or config.Testing.DevRoleChooser ~= true then return false end
-	-- Espelha WaitingRoomManager.isDevRoleTester: em QUALQUER sessão de teste
-	-- do Studio (solo ou multi-cliente) o botão aparece, porque clientes de
-	-- teste multiplayer recebem um UserId falso que nunca bate com a lista.
-	-- Isto é só cosmético -- quem decide de verdade é o servidor.
-	if RunService:IsStudio() then return true end
-	return table.find(config.Testing.DevRoleUserIds or {}, player.UserId) ~= nil
-end
-
-local function roleFromOption(optionId: string): string?
-	local config = gameModule("GameConfig")
-	if not config then return nil end
-	if optionId == "Survivor" then return config.Roles.Survivor end
-	if optionId == "Monster" then return config.Roles.Monster end
-	if optionId == "Spy" then return config.Roles.Spy end
-	return nil -- "Random": o servidor limpa DevForceRole e sorteia
-end
-
--- O servidor recusa pedidos a menos de 0,15 s um do outro (lastRequest em
--- WaitingRoomManager). Este passo respeita isso em vez de brigar com ele.
-local STEP_DELAY = 0.2
-
-local function firstFreeCharacter(snapshot: any): string?
-	local data = gameModule("CharacterData")
-	if not data or type(snapshot) ~= "table" then return nil end
-	local roster = snapshot.roster or {}
-	for _, entry in data.Characters do
-		-- Jason é o personagem do Monstro: o servidor o entrega sozinho.
-		if entry.Id ~= "Jason" and roster[entry.Id] == nil then return entry.Id end
-	end
-	return nil
-end
-
---------------------------------------------------------------------------------
 -- Estado do menu
 --------------------------------------------------------------------------------
 
@@ -207,66 +147,12 @@ local function onPlay()
 	leaveMenu()
 end
 
-local function onQuickPlay(optionId: string)
-	local role = roleFromOption(optionId)
-	leaveMenu(function()
-		local api = remotes()
-		if not api then return end
-		task.spawn(function()
-			api.WaitingRoom:FireServer("Join")
-			task.wait(STEP_DELAY)
-
-			-- DevRole PRIMEIRO: o Monstro sempre usa o Jason (automático),
-			-- então escolher um sobrevivente antes só reservaria um
-			-- personagem à toa para quem vai jogar de Monstro. "Random" limpa
-			-- a forçagem -- o servidor sorteia, então não sabemos o papel
-			-- aqui, e um sobrevivente é escolhido por segurança.
-			api.WaitingRoom:FireServer("DevRole", role or "Random")
-			task.wait(STEP_DELAY)
-
-			-- Personagem livre automático, exceto quando o papel JÁ é Monstro
-			-- (Jason não passa por SelectCharacter).
-			local config = gameModule("GameConfig")
-			local skipCharacter = config and role == config.Roles.Monster
-			if Config.QuickPlay.AutoPickCharacter and not skipCharacter then
-				local snapshot: any = nil
-				local connection: RBXScriptConnection
-				connection = api.WaitingRoom.OnClientEvent:Connect(function(value)
-					snapshot = value
-				end)
-				api.WaitingRoom:FireServer("Sync")
-				local deadline = os.clock() + Config.QuickPlay.StepTimeout
-				while not snapshot and os.clock() < deadline do task.wait(0.05) end
-				connection:Disconnect()
-				local characterId = firstFreeCharacter(snapshot)
-				if characterId then
-					api.SelectCharacter:FireServer(characterId)
-					task.wait(STEP_DELAY)
-				end
-			end
-
-			if Config.QuickPlay.AutoReady then
-				-- "Ready" ALTERNA no servidor, e trocar papel/personagem
-				-- derruba o pronto -- por isso ele vai por último.
-				api.WaitingRoom:FireServer("Ready")
-			end
-		end)
-	end)
-end
-
-local function onQuit()
-	-- A Roblox não fecha o app por script; o que existe é desconectar.
-	player:Kick("Você saiu pelo menu. Até a próxima.")
-end
-
 --------------------------------------------------------------------------------
 -- Fluxo
 --------------------------------------------------------------------------------
 
 screens = Screens.new(playerGui, sounds, {
 	OnPlay = onPlay,
-	OnQuickPlay = onQuickPlay,
-	OnQuit = onQuit,
 })
 
 -- Tira a tela de carregamento padrão da Roblox: a nossa entra no lugar.
@@ -311,7 +197,7 @@ task.spawn(function()
 		Screens.ShowStart(screens, function()
 			-- Clicou: a cena sai do desfoque e o menu entra.
 			Scene.Focus(scene, 0, 1.1)
-			Screens.ShowMenu(screens, canQuickPlay())
+			Screens.ShowMenu(screens)
 		end)
 	end)
 end)

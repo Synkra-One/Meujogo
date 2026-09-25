@@ -151,7 +151,7 @@ if not Workspace:FindFirstChild("Ilha") then
 			.. "  local ok, result = pcall(function() return require(game.ServerScriptService.Server.Tools.AbyssStationGenerator).Build() end) print('[Abismo]', ok, result)\n"
 			.. "  local Spawner = require(game.ServerScriptService.Server.Tools.ItemSpawner) Spawner.Generate()\n"
 			.. "e então SALVE o lugar (Ctrl+S). Depois disso, é só dar Play -- não precisa gerar de novo.\n"
-			.. "(O novo sistema de fuga por barco será conectado aqui quando for implementado.)"
+			.. "(O barco de fuga, o píer e as boias do limite são montados no boot -- ver docs/Barco.md.)"
 	)
 end
 
@@ -233,8 +233,8 @@ safeInit("GrabService", script.GrabService)
 safeInit("IslandMap", script.IslandMap)
 -- Poder de teleporte do Monstro (fenda -> engolido -> emerge no destino).
 -- Depois de RoundManager (escuta RoundEnded/RoundPrepared) e MonsterCombat
--- (que lê o Attribute TeleportBusy pra bloquear o golpe). Carrega o asset da
--- fenda (InsertService, só server) e publica em ReplicatedStorage.RiftAssets.
+-- (que lê o Attribute TeleportBusy pra bloquear o golpe). As fendas são
+-- procedurais no cliente, sincronizadas pelos beats do servidor.
 safeInit("MonsterTeleport", script.MonsterTeleport)
 safeInit("ShadowRush", script.ShadowRush)
 safeInit("UtilityItemSystem", script.UtilityItemSystem)
@@ -258,6 +258,11 @@ safeInit("RadioSiteSystem", script.RadioSiteSystem)
 -- Fim da linha do radio: a zona de pouso na praia e o helicoptero do
 -- resgate. Fica parado ate RoundManager chamar Begin(). Ver docs/Extracao.md.
 safeInit("ExtractionSystem", script.ExtractionSystem)
+-- Segunda rota de fuga: o barco (montar motor, gasolina, chave, pilotar até
+-- as boias do limite). Depois de DropItemSystem (as peças são itens do chão),
+-- RepairMinigameSystem (montar o motor é reparo de precisão) e SabotageSystem
+-- (a fiação do motor é Sabotavel). Ver docs/Barco.md.
+safeInit("BoatSystem", script.BoatSystem)
 safeInit("SurvivorPowerSystem", script.SurvivorPowerSystem)
 safeInit("ConfrontSystem", script.ConfrontSystem)
 safeInit("WeaponSystem", script.WeaponSystem)
@@ -294,6 +299,7 @@ safeInit("MatchStatsService", script.MatchStatsService)
 safeInit("MatchRewardService", script.MatchRewardService)
 safeInit("MatchResultsService", script.MatchResultsService)
 safeInit("SoundManager", script.SoundManager)
+safeInit("FlyTest", script.FlyTest) -- modo voar de teste (só Studio)
 
 -- Diagnóstico da cena editável do menu inicial: avisa no Output do
 -- SERVIDOR se Workspace.MenuSceneSet (gerado por Tools/MenuSceneGenerator)

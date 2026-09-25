@@ -14,6 +14,7 @@ local generation = 0
 
 local function enableControlsIfInMatch()
 	if ReplicatedStorage:GetAttribute("MatchState") ~= "InMatch"
+		or player:GetAttribute("ExtractionBoarded") == true
 		or player:GetAttribute("GameplayEnabled") ~= true then
 		return
 	end
@@ -49,7 +50,7 @@ local function bindCharacter(character: Model)
 	for _ = 1, 8 do
 		if player.Character ~= character or generation ~= myGeneration then return end
 		local camera = Workspace.CurrentCamera
-		if camera then
+		if camera and player:GetAttribute("ExtractionBoarded") ~= true then
 			camera.CameraType = Enum.CameraType.Custom
 			camera.CameraSubject = humanoid
 		end

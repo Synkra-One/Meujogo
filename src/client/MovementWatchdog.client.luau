@@ -52,8 +52,9 @@ local function graceFor(character: Model, humanoid: Humanoid, hrp: BasePart): nu
 	end
 	-- Teleporte do Monstro: o HRP fica ancorado e é movido por TweenService de
 	-- propósito (server/MonsterTeleport). Não "destravar".
+	-- Modo voar de teste (FlyTest): PlatformStand ligado de propósito.
 	if character:GetAttribute("TeleportBusy") == true or character:GetAttribute("ShadowRushBusy") == true
-		or character:GetAttribute("GrabLocked") == true then
+		or character:GetAttribute("GrabLocked") == true or character:GetAttribute("Voando") == true then
 		return nil
 	end
 	if humanoid.Health <= 0 or humanoid.Sit then

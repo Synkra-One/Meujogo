@@ -126,6 +126,7 @@ local modules = {
 	},
 	ItemRegistry = { Items = { Lanterna = { AssetId = 6715358554 } } },
 	Remotes = { Flashlight = remote }, RoundManager = round,
+	MatchStateService = { IsGameplayEnabled = function() return true end },
 	FlashlightRig = { Prepare = function(tool) return tool:FindFirstChild("Handle"):FindFirstChild("FlashlightOrigin") end },
 	DamageSystem = { Apply = function(target, amount, info)
 		table.insert(damageCalls, { target = target, amount = amount, time = now, source = info.Source })
@@ -180,8 +181,8 @@ local config, rules = loadModule("FlashlightConfig"), loadModule("FlashlightRule
 local function near(actual, expected, message)
 	assert(math.abs(actual - expected) < 0.001, `{message}: got {actual}, expected {expected}`)
 end
-near(rules.Battery(100, true, 30), 50, "Half battery after 30s")
-near(rules.Battery(100, true, 60), 0, "Empty after 60s")
+near(rules.Battery(100, true, 20 * 60), 100, "Continuous light lasts a full match")
+near(rules.Battery(0, true, 20 * 60), 0, "Empty burst reserve stays empty")
 near(rules.Battery(50, false, 999), 50, "Off never drains")
 assert(not rules.ValidDirection(V.new(0/0, 0, -1)))
 assert(not rules.ValidDirection(V.new(math.huge, 0, 0)))
@@ -190,7 +191,7 @@ assert(not rules.ValidDirection("forward"))
 assert(rules.ValidDirection(V.new(0, 0, -1)))
 assert(rules.InCone(V.new(), V.new(0, 0, -1), V.new(0, 0, -20)))
 assert(not rules.InCone(V.new(), V.new(0, 0, -1), V.new(20, 0, -1)))
-assert(not rules.InCone(V.new(), V.new(0, 0, -1), V.new(0, 0, -40)))
+assert(not rules.InCone(V.new(), V.new(0, 0, -1), V.new(0, 0, -50)))
 assert(not rules.InCone(V.new(), V.new(0, 0, -1), V.new(0, 0, 5)))
 local state = rules.NewExposure()
 rules.Step(state, true, 0.9, 1)
@@ -210,7 +211,7 @@ end
 near(rules.Slow(state, true, untilTime - 0.01), 0.008, "Resistance cuts slow by 90%")
 rules.Step(state, true, 0.1, untilTime + 0.01)
 near(state.exposure, 0.1, "Exposure must rebuild after resistance")
-print("PASS: battery duration, cone, finite inputs, gradual exposure, peak and resistance")
+print("PASS: continuous light charge, cone, finite inputs, gradual exposure, peak and resistance")
 
 local function player(name, role)
 	local p = object("Player", name)
@@ -333,10 +334,10 @@ assert(targeting.Source(alice.Character, a) == nil, "Forged distant muzzle rejec
 muzzle.WorldPosition = V.new(0.5, 2, -1)
 
 advance(1, false)
-assert(a:GetAttribute("FlashlightOn") == false and b:GetAttribute("FlashlightOn") == false, "Missing aim heartbeat turns off")
+assert(a:GetAttribute("FlashlightOn") and b:GetAttribute("FlashlightOn"), "Missing aim updates never switch off the light")
 local charge = a:GetAttribute("Battery")
 advance(5, false)
-near(a:GetAttribute("Battery"), charge, "Off battery preserved")
+near(a:GetAttribute("Battery"), charge, "Continuous light preserves burst charge")
 move(a, alice:FindFirstChild("Backpack"))
 toggle(alice, a, true)
 assert(not a:GetAttribute("FlashlightOn"), "Backpack activation denied")
@@ -366,15 +367,13 @@ remote.OnServerEvent:Fire(alice, "Recharge", a, 100)
 near(a:GetAttribute("Battery"), charge, "Client cannot recharge")
 advance(0.2, false); toggle(alice, a, true)
 advance(70, true)
-assert(a:GetAttribute("Battery") == 0 and not a:GetAttribute("FlashlightOn"), "Battery depletion automatically shuts off")
-toggle(alice, a, true)
-assert(not a:GetAttribute("FlashlightOn"), "Empty cannot switch on")
-near(system.Recharge(a, 25), 25, "Server recharge API")
-assert(not a:GetAttribute("FlashlightOn"), "Recharge does not switch on")
+assert(a:GetAttribute("Battery") == charge and a:GetAttribute("FlashlightOn"), "Light stays on without draining")
+toggle(alice, a, false)
+assert(not a:GetAttribute("FlashlightOn"), "Owner's click turns the light off")
 advance(0.2, false); toggle(alice, a, true)
-assert(a:GetAttribute("FlashlightOn"), "Recharged tool works")
+assert(a:GetAttribute("FlashlightOn"), "Owner can turn the light on again")
 assert(system.Recharge(a, -5) == 0 and system.Recharge(a, 0/0) == 0)
-print("PASS: range, forged origins, aim expiry, drop/repick, depletion, locks and recharge")
+print("PASS: range, forged origins, persistent aim, drop/repick, manual toggle and locks")
 
 advance(0.2, true)
 local calls = rayCalls

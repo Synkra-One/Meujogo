@@ -34,10 +34,8 @@
 	afundar+fade funciona em qualquer rig. Se você tiver animações R6
 	próprias, cole os ids em GameConfig...Teleport.TeleportEnter/ExitAnimationId.
 
-	ASSET DA FENDA: AssetRegistry.RiftTeleport.AssetId, carregado UMA vez aqui
-	(InsertService só roda no servidor) e publicado em
-	ReplicatedStorage.RiftAssets.Template pros clientes clonarem. Se falhar,
-	o cliente monta uma fenda primitiva de reserva.
+	VISUAL DA FENDA: procedural no cliente (Modules/RiftVFX), sem carregar
+	modelos externos. O servidor só informa posição, escala e beats.
 
 	Uso (uma vez no boot, DEPOIS de RoundManager.Init()):
 		require(script.MonsterTeleport).Init()
@@ -49,11 +47,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local PowerStatus = require(script.Parent.SurvivorPowerStatus)
 local FlashlightRules = require(ReplicatedStorage.Modules.FlashlightRules)
 local TweenService = game:GetService("TweenService")
-local InsertService = game:GetService("InsertService")
 
 local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
-local AssetRegistry = require(ReplicatedStorage.Modules.AssetRegistry)
 local Elimination = require(script.Parent.Elimination)
 local RoundManager = require(script.Parent.RoundManager)
 local IslandLayout = require(script.Parent.Tools.IslandLayout)
@@ -61,104 +57,6 @@ local IslandLayout = require(script.Parent.Tools.IslandLayout)
 local MonsterTeleport = {}
 
 local CFG = GameConfig.Monster.Teleport
-
---------------------------------------------------------------------------------
--- Asset da fenda (carrega uma vez, publica pros clientes)
---------------------------------------------------------------------------------
-
-local function normalizeModel(container: Instance): Model
-	local children = container:GetChildren()
-	local model: Model
-	if #children == 1 and children[1]:IsA("Model") then
-		model = children[1] :: Model
-	else
-		model = Instance.new("Model")
-		for _, c in children do
-			c.Parent = model
-		end
-	end
-	model.Parent = nil
-	for _, d in model:GetDescendants() do
-		if d:IsA("LuaSourceContainer") then
-			d:Destroy()
-		elseif d:IsA("BasePart") then
-			d.Anchored = true
-			d.CanCollide = false
-			d.CanQuery = false
-			d.CanTouch = false
-			d.CastShadow = false
-		end
-	end
-	if not model.PrimaryPart then
-		model.PrimaryPart = model:FindFirstChildWhichIsA("BasePart", true)
-	end
-	return model
-end
-
-local function publishRiftAsset()
-	local folder = ReplicatedStorage:FindFirstChild("RiftAssets")
-	if folder then
-		folder:Destroy()
-	end
-	folder = Instance.new("Folder")
-	folder.Name = "RiftAssets"
-	folder.Parent = ReplicatedStorage
-
-	local assetId = AssetRegistry.RiftTeleport.AssetId
-	local ok, container = pcall(function()
-		return InsertService:LoadAsset(assetId)
-	end)
-	if not ok or typeof(container) ~= "Instance" then
-		ok, container = pcall(function()
-			local objects = game:GetObjects("rbxassetid://" .. assetId)
-			local holder = Instance.new("Model")
-			for _, obj in objects do
-				obj.Parent = holder
-			end
-			return holder
-		end)
-	end
-	if not ok or typeof(container) ~= "Instance" then
-		warn(string.format(
-			"[MonsterTeleport] Asset da fenda %d não carregou (%s). O cliente vai usar a fenda de reserva.",
-			assetId, tostring(container)
-		))
-		folder:SetAttribute("Loaded", false)
-		return
-	end
-
-	local model = normalizeModel(container :: Instance)
-	pcall(function()
-		(container :: Instance):Destroy() -- sobra vazia depois do normalize
-	end)
-	local _, size = model:GetBoundingBox()
-
-	-- Eixo "face": o MENOR lado é o que deita no chão (a menos que a config force).
-	local faceAxis = CFG.RiftAssetFaceAxis
-	if faceAxis == "auto" then
-		local smallest = math.min(size.X, size.Y, size.Z)
-		faceAxis = if smallest == size.Y then "Y" elseif smallest == size.Z then "Z" else "X"
-	end
-	local naturalWidth: number
-	if faceAxis == "Y" then
-		naturalWidth = math.max(size.X, size.Z)
-	elseif faceAxis == "Z" then
-		naturalWidth = math.max(size.X, size.Y)
-	else
-		naturalWidth = math.max(size.Y, size.Z)
-	end
-
-	model.Name = "Template"
-	model:SetAttribute("FaceAxis", faceAxis)
-	model:SetAttribute("NaturalWidth", naturalWidth)
-	model.Parent = folder
-	folder:SetAttribute("Loaded", true)
-
-	print(string.format(
-		"[MonsterTeleport] Fenda: asset %d carregado -- tamanho (%.1f, %.1f, %.1f), faceAxis=%s, largura natural %.1f.",
-		assetId, size.X, size.Y, size.Z, faceAxis, naturalWidth
-	))
-end
 
 --------------------------------------------------------------------------------
 -- Helpers de mundo
@@ -919,7 +817,6 @@ function MonsterTeleport.Init()
 			abortSession(activeSession, "flash burst")
 		end
 	end)
-	task.spawn(publishRiftAsset)
 
 	Remotes.MonsterTeleport.OnServerEvent:Connect(onTeleportRequest)
 

@@ -10,7 +10,9 @@
 	  fase é interrompida assim que a partida termina por vitória.
 
 	CONDIÇÕES DE VITÓRIA (checadas a cada GameConfig.Round.WinCheckInterval)
-	Sobreviventes: helicóptero do resgate decolou com alguém a bordo.
+	Sobreviventes: helicóptero do resgate decolou com alguém a bordo, OU o
+	                 barco de fuga cruzou o limite do mapa com alguém a bordo
+	                 (BoatSystem.SurvivorsEscaped, no fim da cena de fuga).
 	  Monstro:       nº de Sobreviventes VIVOS <= MonsterWinsAtSurvivorsAlive
 	                 antes do tempo acabar. Espião não conta como Sobrevivente.
 	  Espião:        tempo acabou, nenhuma fuga deu certo, e ele não foi
@@ -60,6 +62,7 @@ local Elimination = require(script.Parent.Elimination)
 local RadioObjective = require(script.Parent.RadioObjective)
 local RadioSiteSystem = require(script.Parent.RadioSiteSystem)
 local ExtractionSystem = require(script.Parent.ExtractionSystem)
+local BoatSystem = require(script.Parent.BoatSystem)
 local RoleAssignment = require(script.Parent.RoleAssignment)
 local CharacterPresentation = require(script.Parent.CharacterPresentation)
 
@@ -142,6 +145,18 @@ local function resolveTimeout()
 		return -- não deveria acontecer: uma fuga já teria encerrado a partida
 	end
 
+	-- O tempo acabou no meio da cena do barco saindo: o barco JÁ cruzou o
+	-- limite, a fuga vale.
+	if BoatSystem.IsEscaping() then
+		local names = {}
+		for _, player in BoatSystem.EscapingPlayers() do
+			table.insert(names, player.Name)
+		end
+		escapeSucceeded = true
+		finishRound(WINNER_SURVIVORS, string.format("Fuga de barco: %s", table.concat(names, ", ")))
+		return
+	end
+
 	if countAlive(GameConfig.Roles.Spy) > 0 then
 		finishRound(GameConfig.Roles.Spy, "Tempo esgotado sem nenhuma fuga, e o Espião sobreviveu")
 	else
@@ -184,6 +199,26 @@ local function onRescueCountdownStarted(duration: number)
 		escapeSucceeded = true
 		finishRound(WINNER_SURVIVORS, "Resgate pelo rádio concluído")
 	end)
+end
+
+local function onBoatEscaped(rescued: { Player })
+	if not roundActive then
+		return
+	end
+
+	if #rescued == 0 then
+		print("[RoundManager] O barco cruzou o limite, mas ninguém válido estava a bordo.")
+		return
+	end
+
+	escapeSucceeded = true
+
+	local names = {}
+	for _, player in rescued do
+		table.insert(names, player.Name)
+	end
+
+	finishRound(WINNER_SURVIVORS, string.format("Fuga de barco: %s", table.concat(names, ", ")))
 end
 
 local function onExtracted(rescued: { Player })
@@ -283,10 +318,15 @@ end
 
 local function prepareRound(players: { Player })
 	RadioObjective.Reset()
-	-- Zera a estacao: sem combustivel, sem fusivel, galoes cheios de novo.
+	-- Zera a estação; RadioPieces repõe os itens de teste a seguir.
 	RadioSiteSystem.Reset()
 	-- Some com a zona de extração e o helicóptero da rodada anterior.
 	ExtractionSystem.Reset()
+	-- Barco de volta ao cais, desmontado, e peças novas (docs/Barco.md).
+	local boatOk, boatErr = pcall(BoatSystem.Reset)
+	if not boatOk then
+		warn("[RoundManager] BoatSystem.Reset falhou; a partida continua sem o barco: " .. tostring(boatErr))
+	end
 	local radioPiecesOk, RadioPieces = pcall(require, script.Parent.RadioPieces)
 	if radioPiecesOk then
 		local pieces = RadioPieces :: { Init: () -> (), Reset: () -> () }
@@ -409,6 +449,9 @@ function RoundManager.StartRound(players: { Player })
 
 	local result = outcome or { winner = WINNER_NOBODY, reason = "Partida encerrada sem resultado definido" }
 	printResult(result)
+	-- Libera passageiros inclusive quando a rodada acaba por tempo/combate.
+	ExtractionSystem.Reset()
+	BoatSystem.EndRound()
 
 	-- Remote pros clientes (esconder HUD etc.) + hook pro servidor
 	-- (LobbyManager devolver todo mundo pro Lobby).
@@ -444,6 +487,7 @@ end
 function RoundManager.Init()
 	RadioObjective.RescueCountdownStarted.Event:Connect(onRescueCountdownStarted)
 	ExtractionSystem.SurvivorsExtracted.Event:Connect(onExtracted)
+	BoatSystem.SurvivorsEscaped.Event:Connect(onBoatEscaped)
 end
 
 return RoundManager

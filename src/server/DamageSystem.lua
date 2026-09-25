@@ -293,7 +293,7 @@ function DamageSystem.IsDamageable(target: unknown): boolean
 	if model:GetAttribute("Eliminado") == true or model:FindFirstChild("Dead") then
 		return false
 	end
-	if model:GetAttribute("Invulneravel") == true then
+	if model:GetAttribute("Invulneravel") == true or model:GetAttribute("ExtractionBoarded") == true then
 		return false
 	end
 	return true

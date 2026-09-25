@@ -78,6 +78,9 @@ local function prepareGameCharacter(character: Model, player: Player, pivot: CFr
 		end
 	end
 	local humanoid = character:FindFirstChildOfClass("Humanoid") :: Humanoid
+	-- TrussPart ativa escalada automaticamente ao toque; o cliente dono do
+	-- personagem também a desativa em ClimbGuard.client.luau.
+	humanoid:SetStateEnabled(Enum.HumanoidStateType.Climbing, false)
 	humanoid.DisplayName = player.DisplayName
 	humanoid.Health = humanoid.MaxHealth
 	if not humanoid:FindFirstChildOfClass("Animator") then Instance.new("Animator").Parent = humanoid end
@@ -109,6 +112,7 @@ local function prepareLobbyAvatar(character: Model, player: Player, pivot: CFram
 		end
 	end
 	local humanoid = character:FindFirstChildOfClass("Humanoid") :: Humanoid
+	humanoid:SetStateEnabled(Enum.HumanoidStateType.Climbing, false)
 	humanoid.DisplayName = player.DisplayName
 	humanoid.Health = humanoid.MaxHealth
 	if not humanoid:FindFirstChildOfClass("Animator") then Instance.new("Animator").Parent = humanoid end

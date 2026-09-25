@@ -66,6 +66,37 @@ local function sanitizeToolPart(part: BasePart)
 	part.Massless = true
 end
 
+local function boatPieceTool(name: string): Tool
+	local tool = Instance.new("Tool")
+	tool.Name = name
+	tool.RequiresHandle = true
+	tool.CanBeDropped = false
+	return tool
+end
+
+-- Detalhe soldado no Handle, posicionado relativo a ele (peças do barco).
+local function addDetail(handle: BasePart, name: string, size: Vector3, offset: CFrame, color: Color3,
+	material: Enum.Material, shape: Enum.PartType?): Part
+	local detail = Instance.new("Part")
+	detail.Name = name
+	if shape then
+		detail.Shape = shape
+	end
+	detail.Size = size
+	detail.Color = color
+	detail.Material = material
+	detail.TopSurface = Enum.SurfaceType.Smooth
+	detail.BottomSurface = Enum.SurfaceType.Smooth
+	detail.CFrame = handle.CFrame * offset
+	sanitizeToolPart(detail)
+	detail.Parent = handle
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = handle
+	weld.Part1 = detail
+	weld.Parent = detail
+	return detail
+end
+
 -- Desmonta um Model carregado (AssetLoader) numa Tool: a maior Part vira
 -- "Handle" (nome que Tool.RequiresHandle exige), as demais são soldadas
 -- nela. Devolve nil se o asset não tiver nenhuma BasePart utilizável.
@@ -183,22 +214,23 @@ end
 -- Taco de Beisebol
 --------------------------------------------------------------------------------
 
--- Grip que segura o taco por uma ponta, com o corpo estendido ao longo do braco
--- (-Z do Handle = direcao dos dedos). O maior eixo do mesh e descoberto pelo
--- tamanho, ja que a orientacao do asset original nao e conhecida.
-local function batGrip(size: Vector3): CFrame
-	local override = BatConfig.GripOverride
-	if override then
-		return override
-	end
-	local sign = BatConfig.HandleEndSign
-	local offset = BatConfig.Length * BatConfig.HandleEndFraction * sign
+-- Identifica o eixo longo do Handle e coloca a mao perto de uma ponta.
+local function alongArmGrip(size: Vector3, length: number, sign: number, fraction: number): CFrame
+	local offset = length * fraction * sign
 	if size.Y >= size.X and size.Y >= size.Z then
 		return CFrame.fromMatrix(Vector3.new(0, offset, 0), Vector3.xAxis, Vector3.zAxis * -sign, Vector3.yAxis * sign)
 	elseif size.X >= size.Z then
 		return CFrame.fromMatrix(Vector3.new(offset, 0, 0), Vector3.zAxis * -sign, Vector3.yAxis, Vector3.xAxis * sign)
 	end
 	return CFrame.fromMatrix(Vector3.new(0, 0, offset), Vector3.xAxis * sign, Vector3.yAxis, Vector3.zAxis * sign)
+end
+
+local function batGrip(size: Vector3): CFrame
+	local override = BatConfig.GripOverride
+	if override then
+		return override
+	end
+	return alongArmGrip(size, BatConfig.Length, BatConfig.HandleEndSign, BatConfig.HandleEndFraction)
 end
 
 -- CreateMeshPartAsync espera (yield) so na primeira chamada; depois clona.
@@ -224,8 +256,8 @@ local function loadBatMesh(): MeshPart?
 	return nil
 end
 
--- Tool exportada do Explorer (ServerStorage.<TemplateName>): mantem o Grip, a
--- textura e a escala originais. Scripts embutidos sao removidos.
+-- Tool exportada do Explorer (ServerStorage.<TemplateName>): mantem o visual
+-- original. O Grip recebe a orientacao do combate; scripts sao removidos.
 local function buildBatFromTemplate(): Tool?
 	local found = ServerStorage:FindFirstChild(BatConfig.TemplateName)
 	if not found then
@@ -288,6 +320,10 @@ local CONSTRUCTORS: { [string]: () -> Tool? } = {
 	TacoBeisebol = function()
 		local tool = buildBatFromTemplate() or buildBatFromMesh() or buildBatFallback()
 		tool.Name = ItemRegistry.Items.TacoBeisebol.DisplayName
+		local handle = tool:FindFirstChild("Handle")
+		if handle and handle:IsA("BasePart") then
+			tool.Grip = batGrip(handle.Size)
+		end
 		return tool
 	end,
 
@@ -313,7 +349,7 @@ local CONSTRUCTORS: { [string]: () -> Tool? } = {
 	end,
 
 	LancaDeBambu = function()
-		return buildAssetTool("LancaDeBambu", {
+		local tool = buildAssetTool("LancaDeBambu", {
 			Length = 4.2,
 			Fallback = function()
 				local tool = Instance.new("Tool")
@@ -324,6 +360,12 @@ local CONSTRUCTORS: { [string]: () -> Tool? } = {
 				return tool
 			end,
 		})
+		-- Mesmo encaixe padrão do Taco, com a mão perto de uma ponta.
+		local handle = tool and tool:FindFirstChild("Handle")
+		if tool and handle and handle:IsA("BasePart") then
+			tool.Grip = alongArmGrip(handle.Size, 4.2, BatConfig.Crowbar.HandleEndSign, BatConfig.Crowbar.HandleEndFraction)
+		end
+		return tool
 	end,
 
 	Sinalizador = function()
@@ -407,14 +449,62 @@ local CONSTRUCTORS: { [string]: () -> Tool? } = {
 	end,
 
 	Gasolina = function()
-		local template = AssetLoader.Load(ItemRegistry.Items.Gasolina.AssetId)
-		if not template then
-			return nil
-		end
+		return buildAssetTool("Gasolina", {
+			Length = 1.8,
+			Fallback = function()
+				local tool = Instance.new("Tool")
+				tool.Name = "Gasolina"
+				tool.RequiresHandle = true
+				local handle = makeHandle(Vector3.new(1.15, 1.6, 0.65), Color3.fromRGB(145, 45, 35), Enum.Material.Metal)
+				handle.Parent = tool
+				return tool
+			end,
+		})
+	end,
 
-		local model = template:Clone()
-		scaleModelToLength(model, 1.8) -- galão portátil; menor que os fixos da Estação de Rádio (2,4)
-		return buildToolFromAssetModel(model, "Gasolina")
+	-- Peças do barco de fuga (BoatItems.lua). Modeladas em Parts: pequenas
+	-- demais pra ler bem, então saem ~1,4x maiores que o objeto real.
+	HeliceBarco = function()
+		local tool = boatPieceTool("Hélice")
+		local handle = makeHandle(Vector3.new(0.55, 0.5, 0.5), Color3.fromRGB(168, 172, 178), Enum.Material.Metal)
+		handle.Shape = Enum.PartType.Cylinder
+		handle.Reflectance = 0.15
+		handle.Parent = tool
+		for i = 0, 2 do
+			addDetail(handle, "Pa", Vector3.new(0.1, 1.05, 0.55), CFrame.Angles(i * math.pi * 2 / 3, 0, 0)
+				* CFrame.new(0, 0.62, 0) * CFrame.Angles(0, math.rad(24), 0), Color3.fromRGB(150, 154, 160), Enum.Material.Metal)
+		end
+		addDetail(handle, "Porca", Vector3.new(0.25, 0.28, 0.28), CFrame.new(0.38, 0, 0), Color3.fromRGB(60, 62, 66), Enum.Material.Metal, Enum.PartType.Cylinder)
+		tool.Grip = CFrame.new(0, -0.3, 0)
+		return tool
+	end,
+
+	VelaIgnicao = function()
+		local tool = boatPieceTool("Vela de Ignição")
+		-- Isolador de cerâmica branco = Handle; sextavado, rosca e terminal.
+		local handle = makeHandle(Vector3.new(0.95, 0.36, 0.36), Color3.fromRGB(238, 236, 230), Enum.Material.SmoothPlastic)
+		handle.Shape = Enum.PartType.Cylinder
+		handle.Parent = tool
+		addDetail(handle, "Sextavado", Vector3.new(0.3, 0.52, 0.52), CFrame.new(0.58, 0, 0), Color3.fromRGB(176, 180, 186), Enum.Material.Metal, Enum.PartType.Cylinder)
+		addDetail(handle, "Rosca", Vector3.new(0.42, 0.28, 0.28), CFrame.new(0.92, 0, 0), Color3.fromRGB(150, 152, 156), Enum.Material.DiamondPlate, Enum.PartType.Cylinder)
+		addDetail(handle, "Eletrodo", Vector3.new(0.12, 0.08, 0.08), CFrame.new(1.18, 0, 0), Color3.fromRGB(120, 110, 96), Enum.Material.Metal)
+		addDetail(handle, "Terminal", Vector3.new(0.24, 0.2, 0.2), CFrame.new(-0.58, 0, 0), Color3.fromRGB(176, 180, 186), Enum.Material.Metal, Enum.PartType.Cylinder)
+		tool.Grip = CFrame.new(0, 0, 0) * CFrame.Angles(0, math.pi / 2, 0)
+		return tool
+	end,
+
+	ChaveBarco = function()
+		local tool = boatPieceTool("Chave do Barco")
+		-- Chave de barco de verdade vem num chaveiro-boia (cai n'água, flutua).
+		local handle = makeHandle(Vector3.new(0.95, 0.42, 0.42), Color3.fromRGB(255, 118, 22), Enum.Material.SmoothPlastic)
+		handle.Shape = Enum.PartType.Cylinder
+		handle.Parent = tool
+		addDetail(handle, "FaixaBoia", Vector3.new(0.18, 0.44, 0.44), CFrame.new(0.2, 0, 0), Color3.fromRGB(240, 240, 236), Enum.Material.SmoothPlastic, Enum.PartType.Cylinder)
+		addDetail(handle, "Argola", Vector3.new(0.05, 0.34, 0.34), CFrame.new(-0.62, 0, 0) * CFrame.Angles(0, math.pi / 2, 0), Color3.fromRGB(190, 192, 196), Enum.Material.Metal, Enum.PartType.Cylinder)
+		addDetail(handle, "Cabeca", Vector3.new(0.34, 0.1, 0.3), CFrame.new(-0.9, 0, 0), Color3.fromRGB(24, 24, 26), Enum.Material.SmoothPlastic)
+		addDetail(handle, "Haste", Vector3.new(0.5, 0.06, 0.13), CFrame.new(-1.3, 0, 0), Color3.fromRGB(196, 198, 202), Enum.Material.Metal)
+		tool.Grip = CFrame.new(0.4, 0, 0) * CFrame.Angles(0, math.pi / 2, 0)
+		return tool
 	end,
 
 	LancaAncestral = function()

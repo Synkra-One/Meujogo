@@ -5,10 +5,8 @@
 	jogador local. Visual simples de propósito (cores/fontes padrão) --
 	o polimento fica pra depois, isso aqui só liga os dados.
 
-	(1) PhaseFrame.PhaseText: fase atual + tempo restante, via
-	    RoundStateChanged (RoundManager). O tempo é recalculado a cada
-	    segundo a partir do phaseEndsAt (os.time()) recebido, não só quando
-	    chega um evento novo.
+	(1) Liga/desliga a ScreenGui com RoundStateChanged/RoundEnded (a fase e o
+	    tempo restante NÃO são mais exibidos).
 	(2) RoleFrame.RoleText: Attribute "Role" do LocalPlayer.
 	(3) SpyCooldownFrame: só visível quando Role == "Espiao". Mostra os
 	    cooldowns de Sabotagem e Habilidade Letal, alimentados pelo novo
@@ -32,7 +30,6 @@ local LocalPlayer = Players.LocalPlayer
 local playerGui = LocalPlayer:WaitForChild("PlayerGui") -- sempre existe, criado pelo engine
 local mainHUD = SafeWait.Child(playerGui, "MainHUD") :: ScreenGui
 
-local phaseText = SafeWait.Child(SafeWait.Child(mainHUD, "PhaseFrame"), "PhaseText") :: TextLabel
 local roleText = SafeWait.Child(SafeWait.Child(mainHUD, "RoleFrame"), "RoleText") :: TextLabel
 local spyCooldownFrame = SafeWait.Child(mainHUD, "SpyCooldownFrame") :: Frame
 local sabotageCooldownText = SafeWait.Child(spyCooldownFrame, "SabotageCooldownText") :: TextLabel
@@ -46,28 +43,15 @@ local function formatDuration(seconds: number): string
 end
 
 --------------------------------------------------------------------------------
--- (1) Fase + tempo restante
+-- (1) Visibilidade da HUD
 --------------------------------------------------------------------------------
 
-local currentPhase = "--"
-local phaseEndsAt = 0
-
-local function refreshPhaseText()
-	local remaining = phaseEndsAt - os.time()
-	phaseText.Text = string.format("Fase: %s | Tempo: %s", currentPhase, formatDuration(remaining))
-end
-
-Remotes.RoundStateChanged.OnClientEvent:Connect(function(phase: string, endsAt: number)
-	currentPhase = phase
-	phaseEndsAt = endsAt
-	refreshPhaseText()
+Remotes.RoundStateChanged.OnClientEvent:Connect(function()
 	mainHUD.Enabled = true
 end)
 
 Remotes.RoundEnded.OnClientEvent:Connect(function()
 	mainHUD.Enabled = false
-	currentPhase = "--"
-	phaseEndsAt = 0
 end)
 
 --------------------------------------------------------------------------------
@@ -127,13 +111,11 @@ end)
 --------------------------------------------------------------------------------
 
 refreshRoleText()
-refreshPhaseText()
 refreshCooldownTexts()
 
 task.spawn(function()
 	while true do
 		task.wait(1)
-		refreshPhaseText()
 		refreshCooldownTexts()
 	end
 end)

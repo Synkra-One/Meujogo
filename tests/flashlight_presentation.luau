@@ -76,7 +76,7 @@ end
 local modules = {}
 local services = { ReplicatedStorage = { Modules = {
 	FlashlightConfig = "FlashlightConfig", FlashlightRules = "FlashlightRules", GameConfig = "GameConfig",
-} }, Lighting = {}, SoundService = {} }
+} }, Lighting = {}, SoundService = {}, ContentProvider = { PreloadAsync = function() end } }
 env.game = { GetService = function(_, name) return assert(services[name], name) end }
 env.require = function(name) return assert(modules[name]) end
 env.script = { Parent = { FlashlightConfig = "FlashlightConfig" } }
@@ -88,6 +88,7 @@ env.Instance = { new = function(class)
 end }
 local now = 100
 env.os = { clock = function() return now end }
+env.task = { spawn = function(fn, ...) fn(...) end, delay = function() end }
 env.workspace = { CurrentCamera = { CFrame = CF.new(0, 4, 8) } }
 function env.workspace:GetServerTimeNow() return now end
 env.RaycastParams = { new = function() return {} end }
@@ -212,10 +213,21 @@ local endWorld = handle.CFrame * endpoint.CFrame
 assert(math.abs((endWorld.Position - origin.WorldPosition).Magnitude - 3) < 0.002, "beam stops at wall")
 handBlocked, now = true, now + 1
 Visuals.Update(tool, true)
-assert(not light.Enabled and not beam.Enabled, "hand behind wall cannot emit light")
+assert(light.Enabled and spill.Enabled and fill.Enabled,
+	"clipped muzzle keeps all light layers active")
+vectorNear((handle.CFrame * emitter.CFrame).Position, head.Position,
+	"clipped visual emitter moves back to the player's side")
+assert(not light.Shadows, "fallback source cannot shadow itself inside the player")
+handBlocked, obstacleDistance, now = false, 0.1, now + 1
+Visuals.Update(tool, true)
+assert(light.Enabled and fill.Enabled and not beam.Enabled,
+	"very close walls keep illumination even when the beam is too short to draw")
+obstacleDistance, now = nil, now + 1
+Visuals.Update(tool, true)
+assert(light.Enabled and light.Shadows, "unobstructed source restores normal shadows")
 Visuals.Update(tool, false)
 assert(not spill.Enabled and not fill.Enabled, "all layers turn off")
-print("PASS: lens/beam alignment, moving aim invalidates occlusion, wall clipping and all lights turn off")
+print("PASS: lens/beam alignment, wall fallback, close-surface light and manual off")
 
 handBlocked, obstacleDistance = false, nil
 tool:SetAttribute("FlashBurstAt", now)

@@ -13,7 +13,7 @@ atravessar; na prática mais, por causa do relevo e do mato.
 | `Tools/IslandGenerator.lua` | Escreve o terreno por chunks a partir do layout; rochas, caverna, floresta, vegetação rasteira, ruínas; chama `PoiGenerator`. |
 | `Tools/AbyssStationGenerator.lua` | Estação Abismo: laboratório subterrâneo na costa oposta à montanha, com entrada em uma pequena caverna, duas escadas curtas, salão de testes e saída seca na costa (ver [EstacaoAbismo.md](EstacaoAbismo.md)). |
 | `Tools/RadioTowerGenerator.lua` | Estação de Rádio: torre, abrigo, gerador, combustível, cerca e estrada (ver [Radio.md](Radio.md)). |
-| `Tools/CaveInterior.lua` | O covil do Monstro dentro da montanha: escava o terreno e monta os três níveis, o sangue e a luz (ver [Caverna.md](Caverna.md)). |
+| `Tools/CaveInterior.lua` | O covil do Monstro dentro da montanha: escava o terreno e monta os três níveis e as zonas de escuridão (ver [Caverna.md](Caverna.md)). |
 | `Tools/Structures.lua` | Peças em `Part` primitiva: cabana, lodge, celeiro, casa de barcos, píer, barco, torre de vigia, farol, fogueira, mesa, lampião, alvo, fardo, secador, canoa, cabana nativa, totem, arbusto, tronco caído. |
 | `Tools/PoiGenerator.lua` | Monta cada POI no site do layout com as peças de `Structures`. |
 | `Tools/HouseGenerator.lua` + `Tools/Houses/` | Casas grandes nas clareiras Acampamento, CabanasA, CabanasB e VilaNativa: lote, terreno, casa (ver [Casas.md](Casas.md)). |
@@ -32,7 +32,7 @@ atravessar; na prática mais, por causa do relevo e do mato.
 | **Farol** | Ponta rochosa elevada na costa, farol de 6 segmentos com lâmpada acesa (range 120), barraco do faroleiro | SpawnPOI/PontoLoot |
 | **VilaNativa** | Clareira com 2 casas grandes, como acima (a vila nativa antiga não é mais gerada) | idem |
 | **Ruinas** | Círculo de pedras + Lança Ancestral | SpawnPOI |
-| **Caverna** | Covil dentro da montanha (Peak 95, Radius 150): túnel em S descendo 9, salão de raio 40 com 56 de pé-direito, poço de sangue, galeria no meio, ponte de tábuas, laje de cima com o ninho, ossuário e despensa. Spawn do Monstro no ninho. Ver [Caverna.md](Caverna.md) | — |
+| **Caverna** | Covil dentro da montanha (Peak 95, Radius 150): túnel em S descendo 9, salão de raio 40 com 56 de pé-direito, poço rochoso, galeria no meio, ponte de tábuas, laje de cima com o ninho, câmara mineral e depósito. Spawn do Monstro no ninho. Ver [Caverna.md](Caverna.md) | — |
 | **Radio** | Estação repetidora cercada (132x112): torre de 105 studs com baliza, abrigo técnico 36x26 com duas portas, gerador, tanque e galões, caixa de fusíveis, holofotes, portão e estrada de manutenção. É o objetivo de socorro — ver [Radio.md](Radio.md) | 2 PontoLoot no abrigo + 1 no depósito |
 | **Estação Abismo** | Caverna escondida na floresta **do lado oposto à montanha do Monstro**, porta industrial e escada curta. Recepção, área técnica, laboratório, arquivo, enfermaria, controle e o salão de testes de 76×76 com o **Frog Generator** (cápsula), celas de contenção e mesas de necropsia; 120 studs de corredor e outra escada até a saída seca na costa. Ver [EstacaoAbismo.md](EstacaoAbismo.md) | PontoLoot em cada sala e dois no salão de testes |
 | **Trilhas** | Loop pelos POIs habitados (ordem angular) + ramais pra Torre, Farol, Ruínas e boca da Caverna; `Ground` rebaixado, `Mud` perto do lago; postes de rua a cada ~120 studs e reforço nas entradas de vilas e torre | — |

@@ -3,10 +3,11 @@
 local Rules = {}
 
 function Rules.Evaluate(fear: number, maxFear: number, distance: number, movement: string?,
-	injury: number, stealth: number, obstructed: boolean, cfg: any): (number, number, number)
-	if fear ~= fear or distance ~= distance or fear <= cfg.MinFear or distance >= cfg.MaxRange
+	injury: number, stealth: number, obstructed: boolean, cfg: any, minFear: number?): (number, number, number)
+	local threshold = minFear or cfg.MinFear
+	if fear ~= fear or distance ~= distance or fear <= threshold or distance >= cfg.MaxRange
 		or distance < 0 then return 0, cfg.MinBPM, 0 end
-	local tension = math.clamp((fear - cfg.MinFear) / (maxFear - cfg.MinFear), 0, 1)
+	local tension = math.clamp((fear - threshold) / (maxFear - threshold), 0, 1)
 	local strength = tension ^ 1.25 * (1 - distance / cfg.MaxRange) ^ cfg.DistanceExponent
 	strength *= stealth * (1 + math.clamp(injury, 0, 1) * cfg.InjuryBoost)
 	if movement == "Sprint" then strength *= cfg.SprintMultiplier

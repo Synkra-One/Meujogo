@@ -53,6 +53,7 @@ local MatchRewardsConfig = require(ReplicatedStorage.Modules.MatchRewardsConfig)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local Types = require(ReplicatedStorage.Modules.MatchStatsTypes)
 
+local BoatSystem = require(script.Parent.BoatSystem)
 local DamageSystem = require(script.Parent.DamageSystem)
 local DropItemSystem = require(script.Parent.DropItemSystem)
 local Elimination = require(script.Parent.Elimination)
@@ -549,6 +550,12 @@ local function connectEscapes()
 		end
 	end)
 
+	BoatSystem.SurvivorsEscaped.Event:Connect(function(rescued: { Player })
+		for _, player in rescued do
+			MatchRewardService.RecordEscape(player, "Barco")
+		end
+	end)
+
 end
 
 -- Categorias de item que valem XP de "achado importante". Material solto e
@@ -557,6 +564,7 @@ local IMPORTANT_ITEM_CATEGORIES: { [string]: boolean } = {
 	Firearm = true,
 	Radio = true,
 	Fuel = true,
+	Boat = true,
 	Rare = true,
 	Light = true,
 }
@@ -630,6 +638,15 @@ local function connectRadioInstall()
 
 	RadioInstallSystem.AllInstalled.Event:Connect(function(player: Player)
 		MatchRewardService.RecordObjectiveCompleted(player, "Radio")
+	end)
+
+	-- Barco de fuga: cada etapa (hélice, vela, gasolina, chave) é uma etapa de
+	-- objetivo; a primeira partida do motor fecha o objetivo "Barco".
+	BoatSystem.StepCompleted.Event:Connect(function(player: Player, stepKey: string)
+		MatchRewardService.RecordObjectiveStep(player, "Barco_" .. stepKey)
+	end)
+	BoatSystem.EngineStarted.Event:Connect(function(player: Player)
+		MatchRewardService.RecordObjectiveCompleted(player, "Barco")
 	end)
 end
 

@@ -211,6 +211,9 @@ modules.ToolFactory = { Create = function(itemId)
 end }
 local picked = Signal()
 modules.DropItemSystem = {
+	NoSpaceMessage = "Sem espaço",
+	FreeSlots = function() return 3 end,
+	HasInventorySpace = function() return true end,
 	PlaceInWorld = function(tool, cframe, parent)
 		tool:SetAttribute("_Dropped", true)
 		tool.Parent = parent or Workspace

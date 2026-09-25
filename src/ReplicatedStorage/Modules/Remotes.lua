@@ -369,6 +369,42 @@ Remotes.LobbyMessage = getRemote("LobbyMessage")
 Remotes.ExtractionChoice = getRemote("ExtractionChoice")
 
 --------------------------------------------------------------------------------
+-- BoatControl
+-- Barco de fuga (server/BoatSystem.lua <-> client/BoatController.client.luau).
+-- O estado do barco (peças, motor, encalhe, piloto) vive em Attributes do
+-- Model do barco, que replicam sozinhos; este remote só carrega o que não é
+-- estado: o pedido do piloto e o início da cena de fuga.
+--
+-- Client -> Server (FireServer):
+--   "Motor"   -- piloto liga/desliga o motor. O servidor confere que quem
+--                mandou é o OCUPANTE do assento do piloto, a montagem, a
+--                chave (na ignição ou no inventário dele), sabotagem e
+--                encalhe. Pedido inválido volta como LobbyMessage com o motivo.
+--
+-- Server -> Client:
+--   "Assento", boat: Model, role: "Piloto" | "Passageiro"  -- só pra quem sentou
+--   "Saiu"                                                  -- levantou do barco
+--   "Fuga", boat: Model, start: CFrame, speed: number, duration: number,
+--           rescued: { number }  -- TODOS os clientes. `start` é o QuadroBarco
+--           no instante em que cruzou o limite; cada cliente anima o barco
+--           seguindo pro mar (o servidor o ancora) e quem está em `rescued`
+--           (UserIds) ganha a câmera de cinema.
+--
+-- A física do barco NÃO passa por aqui: o piloto é dono de rede do conjunto
+-- e o servidor valida a posição (anti-teleporte) a cada tique.
+--------------------------------------------------------------------------------
+Remotes.BoatControl = getRemote("BoatControl")
+
+--------------------------------------------------------------------------------
+-- FlyTest
+-- Modo voar de teste (client/FlyTest.client.luau <-> server/FlyTest.lua).
+-- Client -> Server (FireServer): flying: boolean -- ligou/desligou o voo.
+-- O servidor deixa o personagem Invulneravel enquanto voa (e alguns segundos
+-- depois do pouso). Só responde dentro do Studio e com GameConfig.Testing.Voar.
+--------------------------------------------------------------------------------
+Remotes.FlyTest = getRemote("FlyTest")
+
+--------------------------------------------------------------------------------
 -- DropItem
 -- Disparado por: cliente (HotbarController.client.luau), ao pedir pra largar
 --   uma Tool no chão (tecla G, ou o botão de largar no slot da hotbar).

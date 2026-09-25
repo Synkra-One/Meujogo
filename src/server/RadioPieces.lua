@@ -20,6 +20,7 @@ local DropItemSystem = require(script.Parent.DropItemSystem)
 local RadioObjective = require(script.Parent.RadioObjective)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local InteractionGuard = require(script.Parent.InteractionGuard)
+local ToolFactory = require(ReplicatedStorage.Modules.ToolFactory)
 
 local RadioPieces = {}
 
@@ -422,7 +423,12 @@ local function buildWorldPieces()
 		createPiece(DEFINITIONS[1], folder, generatorAnchor.CFrame * CFrame.new(-4, 2.2, -3))
 		createPiece(DEFINITIONS[2], folder, generatorAnchor.CFrame * CFrame.new(-4, 1.8, 0))
 		createPiece(DEFINITIONS[3], folder, generatorAnchor.CFrame * CFrame.new(-4, 1.9, 3))
-		warn("[RadioPieces] Modo de teste ativo -- Antena, Bateria e Transmissor ao lado do gerador.")
+		local gasoline = ToolFactory.Create("Gasolina")
+		assert(gasoline, "Não foi possível criar a Gasolina de teste")
+		gasoline:SetAttribute(MANAGED_ATTRIBUTE, true)
+		gasoline:SetAttribute("WorldItemId", "Gasolina")
+		DropItemSystem.PlaceInWorld(gasoline, generatorAnchor.CFrame * CFrame.new(-4, 1.9, 6), folder, nil)
+		warn("[RadioPieces] Modo de teste ativo -- três peças e um item Gasolina ao lado do gerador.")
 		return
 	end
 

@@ -66,7 +66,9 @@ end
 local services = { Players = players, RunService = runService, ReplicatedStorage = { Modules = moduleNames }, Workspace = world }
 local sprintIntent = signal()
 local modules = { RoundManager = round, LoadoutData = { GetPerk = function() return nil end },
-	Remotes = { SprintIntent = { OnServerEvent = sprintIntent } } }
+	Remotes = { SprintIntent = { OnServerEvent = sprintIntent } },
+	MatchStateService = { IsGameplayEnabled = function() return active end },
+	DamageSystem = { DamageApplied = { Event = signal() } } }
 local environment = setmetatable({
 	game = { GetService = function(_, name) return assert(services[name], name) end },
 	script = { Parent = moduleNames },
@@ -96,6 +98,10 @@ end
 environment.require = loadModule
 local config = loadModule("GameConfig")
 local cfg = config.Fear
+local function rampAt(seconds)
+	return cfg.ExposureInitialMultiplier + (1 - cfg.ExposureInitialMultiplier)
+		* math.min(seconds, cfg.ExposureRampSeconds) / cfg.ExposureRampSeconds
+end
 local scaling = loadModule("StatScaling")
 local rules = loadModule("FearRules")
 local fear = loadModule("FearSystem")
@@ -164,9 +170,9 @@ near(rules.ProximityRate(math.huge, cfg), 0)
 -- (Compostura 0 + linha de visão + perseguição) enche a barra num piscar.
 local worst = cfg.MaxProximityFearPerSecond * 1.5 * cfg.LineOfSightMultiplier * cfg.ChaseFearMultiplier
 local fastest = cfg.MaxFear / math.min(worst, cfg.MaxFearGainPerSecond)
-assert(fastest >= 10, "0 -> 100 no pior caso leva pelo menos 10 s: " .. string.format("%.1f", fastest))
+assert(fastest >= 18, "0 -> 100 no pior caso leva pelo menos 18 s: " .. string.format("%.1f", fastest))
 local typical = cfg.MaxFear / (cfg.MaxProximityFearPerSecond * cfg.LineOfSightMultiplier)
-assert(typical >= 15 and typical <= 40, "perseguição típica enche em 15..40 s: " .. string.format("%.1f", typical))
+assert(typical >= 25 and typical <= 45, "exposição típica exige tempo: " .. string.format("%.1f", typical))
 -- E DESCE quando a pessoa fica longe da zona de perigo.
 local drain = cfg.MaxFear / cfg.BaseFearRecoveryPerSecond
 assert(drain > fastest and drain <= 45, "descer é mais lento que subir, mas não eterno")
@@ -184,6 +190,13 @@ local a, b = { value = 80, safeFor = 0 }, { value = 80, safeFor = 0 }
 rules.Step(a, far, 1, 1, 9, cfg)
 for _ = 1, 45 do rules.Step(b, far, 1, 1, 0.2, cfg) end
 near(a.value, b.value, "recovery independent of tick size")
+local exposed = { value = 0, safeFor = 0 }
+local firstGain = rules.Step(exposed, closest, 1, 1, 0.2, cfg)
+near(firstGain, cfg.MaxProximityFearPerSecond * rampAt(0.2), "first contact is gentle")
+for _ = 1, 25 do rules.Step(exposed, closest, 1, 1, 0.2, cfg) end
+near(exposed.exposureFor, cfg.ExposureRampSeconds)
+rules.Step(exposed, far, 1, 1, 0.2, cfg)
+near(exposed.exposureFor, 0, "leaving danger resets exposure")
 
 fear.Init(); fear.Init()
 assert(heartbeat:Count() == 1 and players.PlayerAdded:Count() == 1)
@@ -194,8 +207,8 @@ round.RoundPrepared.Event:Fire()
 heartbeat:Fire(0.1)
 near(fear.GetFear(low), 0, "does not calculate every frame")
 heartbeat:Fire(0.1)
-near(fear.GetFear(low), rules.ProximityRate(40, cfg) * 1.5 * 0.2)
-near(fear.GetFear(high), rules.ProximityRate(40, cfg) * 0.55 * 0.2)
+near(fear.GetFear(low), rules.ProximityRate(40, cfg) * 1.5 * rampAt(0.2) * 0.2)
+near(fear.GetFear(high), rules.ProximityRate(40, cfg) * 0.55 * rampAt(0.2) * 0.2)
 for _, p in { spy, monster, lobby } do near(fear.AddFear(p, 10, "Test"), 0) end
 low:SetAttribute("Fear", 99)
 assert(fear.GetFear(low) < 10, "replicated attribute is not source of truth")
@@ -218,7 +231,7 @@ heartbeat:Fire(0.2)
 near(fear.GetFear(low), before, "external source interrupts recovery")
 local monster2 = player("Nearest", config.Roles.Monster, closest, 50)
 heartbeat:Fire(0.2)
-near(fear.GetFear(low), before + rules.ProximityRate(closest, cfg) * 1.5 * 0.2, "nearest monster selected")
+near(fear.GetFear(low), before + rules.ProximityRate(closest, cfg) * 1.5 * rampAt(0.2) * 0.2, "nearest monster selected")
 monster2:SetAttribute("Eliminado", true)
 before = fear.GetFear(low)
 heartbeat:Fire(0.2)
@@ -283,7 +296,7 @@ near(rules.EffectChance(74.99,75,100,0.03,0.12),0)
 near(rules.EffectChance(75,75,100,0.03,0.12),0.03)
 near(rules.EffectChance(100,75,100,0.03,0.12),0.12)
 near(rules.EffectChance(87,75,100,0.03,0.12),0.0732)
-local capped = { value=0,safeFor=0 }
+local capped = { value=0,safeFor=0,exposureFor=cfg.ExposureRampSeconds }
 local gain = rules.Step(capped,closest,1.5*cfg.LineOfSightMultiplier*cfg.ChaseFearMultiplier,1,0.2,cfg)
 near(gain,cfg.MaxFearGainPerSecond)
 
@@ -305,7 +318,7 @@ fear.PanicSoundTriggered.Event:Connect(function(p,pos,radius)
 end)
 heartbeat:Fire(0.2)
 assert(subject:GetAttribute("FearLineOfSight") == true)
-near(fear.GetFear(subject), rules.ProximityRate(40,cfg)*0.55*1.35*0.2)
+near(fear.GetFear(subject), rules.ProximityRate(40,cfg)*0.55*1.35*rampAt(0.2)*0.2)
 local casts = raycasts
 heartbeat:Fire(0.2)
 assert(raycasts==casts, "LOS cache reused between 0.4s checks")
@@ -314,7 +327,7 @@ heartbeat:Fire(0.2)
 assert(subject:GetAttribute("FearLineOfSight") == false)
 before=fear.GetFear(subject)
 heartbeat:Fire(0.2)
-near(fear.GetFear(subject)-before, rules.ProximityRate(40,cfg)*0.55*0.2)
+near(fear.GetFear(subject)-before, rules.ProximityRate(40,cfg)*0.55*rampAt(0.8)*0.2)
 obstacle = { CanCollide=false }
 heartbeat:Fire(0.2)
 assert(subject:GetAttribute("FearLineOfSight"), "noncollidable decorations ignored")
@@ -325,7 +338,7 @@ assert(not subject:GetAttribute("FearChase"), "confirmation prevents one-tick ch
 before=fear.GetFear(subject)
 heartbeat:Fire(0.2)
 assert(subject:GetAttribute("FearChase"))
-near(fear.GetFear(subject)-before, rules.ProximityRate(40,cfg)*0.55*1.35*1.4*0.2)
+near(fear.GetFear(subject)-before, rules.ProximityRate(40,cfg)*0.55*1.35*1.4*rampAt(1.6)*0.2)
 monRoot.AssemblyLinearVelocity=position(25)
 heartbeat:Fire(0.2)
 assert(not subject:GetAttribute("FearChase"), "monster moving away is not chasing")
@@ -476,3 +489,31 @@ assert(root:GetAttribute("CanSprint")==true)
 subject.Character:SetAttribute("PowerInfiniteStamina",nil)
 heartbeat:Fire(0.1); assert(stamina.Get(subject)<100,"normal drain resumes")
 print("PASS survivor integration: cloak detection/external-source gates, stance prevents trips, infinite stamina and normal recovery")
+
+-- Real DamageSystem hook: bounded personal shock and visible witness reactions.
+local witness = player("Witness", config.Roles.Survivor, 18, 50)
+round.RoundPrepared.Event:Fire()
+obstacle = nil
+local damage = modules.DamageSystem.DamageApplied.Event
+damage:Fire(monster, subject, 25, false, "Monster")
+near(fear.GetFear(subject), (cfg.DamageFearBase + 25 * cfg.DamageFearPerHealth)
+	* scaling.FearGainMultiplier(subject), "victim gets bounded shock")
+local witnessedFear = cfg.WitnessDamageFear * scaling.FearGainMultiplier(witness)
+near(fear.GetFear(witness), witnessedFear, "nearby visible witness reacts")
+damage:Fire(monster, subject, 25, false, "Monster")
+near(fear.GetFear(witness), witnessedFear, "witness hit spam throttled")
+obstacle = { CanCollide = true }
+damage:Fire(monster, subject, 25, true, "Monster")
+near(fear.GetFear(witness), witnessedFear, "walls prevent witnessing death")
+obstacle = nil
+damage:Fire(monster, subject, 25, true, "Monster")
+near(fear.GetFear(witness), witnessedFear + cfg.WitnessDeathFear * scaling.FearGainMultiplier(witness),
+	"visible death overrides damage cooldown")
+local beforeWitness = fear.GetFear(witness)
+witness.Character.children.HumanoidRootPart.Position = position(200)
+damage:Fire(monster, subject, 25, true, "Monster")
+near(fear.GetFear(witness), beforeWitness, "distant survivor does not witness")
+active = false
+damage:Fire(monster, subject, 25, true, "Monster")
+near(fear.GetFear(witness), 0, "inactive rounds ignore combat")
+print("PASS fear combat: damage shock, line-of-sight witnessing, death, cooldown, distance and round gating")

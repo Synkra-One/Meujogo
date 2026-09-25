@@ -27,8 +27,8 @@
 
 	  - Mover CameraAnchor/CameraLookAt reposiciona a câmera NA HORA,
 	    mesmo com o Play já rodando (não precisa parar e recomeçar).
-	  - Mover/girar MonsterMarker reposiciona o monstro na hora.
-	  - APAGAR MonsterMarker remove o monstro da cena na hora; recriá-lo
+	  - Mover/girar MonsterMarker reposiciona o Rafael na hora.
+	  - APAGAR MonsterMarker remove o Rafael da cena na hora; recriá-lo
 	    (ou desfazer com Ctrl+Z) traz ele de volta.
 	  - O resto (paredes, luzes, chuva, props) é conteúdo REAL do Workspace,
 	    então mover/pintar/apagar qualquer peça já é instantâneo por conta
@@ -56,6 +56,10 @@ Scene.__index = Scene
 export type Controller = typeof(setmetatable({} :: {
 	folder: Folder,
 	monster: Model?,
+	characterSource: Instance?,
+	characterProfile: any,
+	monsterFloor: number?,
+	destroyed: boolean,
 	monsterBase: CFrame,
 	camera: Camera?,
 	colorCorrection: ColorCorrectionEffect?,
@@ -261,10 +265,8 @@ local function buildWeather(self: Controller)
 end
 
 --------------------------------------------------------------------------------
--- MONSTRO
--- Tenta clonar um modelo real (MenuConfig.Scene.MonsterSources). Se nenhum
--- existir, monta uma silhueta provisória -- assim a cena nunca fica vazia e
--- nenhum ID de asset precisa ser inventado.
+-- RAFAEL
+-- Usa o modelo da seleção; na ausência dele, a mesma aparência R6 do perfil.
 --
 -- spawnMonster/despawnMonster/poseMonster são usados tanto pela versão por
 -- código (chamados uma vez) quanto pela cena editável (chamados de novo toda
@@ -284,21 +286,63 @@ local function findByPath(path: string): Instance?
 	return root
 end
 
-local function buildPlaceholderMonster(parent: Instance): Model
-	-- Silhueta grosseira de propósito: ela existe só para a cena ter uma
-	-- presença ameaçadora enquanto você não pluga o modelo de verdade.
+-- ReplicatedFirst não pode exigir CharacterData no topo. Se os assets
+-- ainda estiverem chegando, a cena atualiza quando a replicação terminar.
+local function characterProfile(): any
+	local modules = ReplicatedStorage:FindFirstChild("Modules")
+	local data = modules and modules:FindFirstChild("CharacterData")
+	if not data or not data:IsA("ModuleScript") then return nil end
+	local ok, result = pcall(require, data)
+	return if ok then result.GetById(CFG.CharacterId) else nil
+end
+
+local function characterSource(profile: any): Instance?
+	local reference = if profile and profile.PreviewModel and profile.PreviewModel ~= ""
+		then profile.PreviewModel else CFG.CharacterId
+	local assets = ReplicatedStorage:FindFirstChild("SelectionAssets")
+	local previews = assets and assets:FindFirstChild("PreviewModels")
+	local legacy = ReplicatedStorage:FindFirstChild("SurvivorPreviewRigs")
+	local candidates = {}
+	local custom = previews and previews:FindFirstChild(reference)
+	local old = legacy and legacy:FindFirstChild(reference)
+	if custom then table.insert(candidates, custom) end
+	if old then table.insert(candidates, old) end
+	for _, path in CFG.MonsterSources do
+		local found = findByPath(path)
+		if found then table.insert(candidates, found) end
+	end
+	for _, found in candidates do
+		if found:IsA("Model") and found.Archivable and found:FindFirstChildWhichIsA("BasePart", true) then
+			return found
+		end
+	end
+	return nil
+end
+
+local function buildPlaceholderMonster(profile: any): Model
+	-- Mesma aparência R6 usada na seleção, inclusive as cores de CharacterData.
+	-- O fallback imediato só dura até esse módulo terminar de replicar.
 	local model = Instance.new("Model")
-	model.Name = "MenuMonsterPlaceholder"
-	model.Parent = parent
-	local skin = Color3.fromRGB(16, 16, 18)
-	local torso = block(model, "Torso", CFrame.new(0, 3.1, 0), Vector3.new(2.2, 2.6, 1.2), skin, Enum.Material.Slate)
-	block(model, "Head", CFrame.new(0, 4.9, 0), Vector3.new(1.2, 1.2, 1.2), skin, Enum.Material.Slate)
-	block(model, "LeftArm", CFrame.new(-1.7, 3.0, 0.1) * CFrame.Angles(0, 0, math.rad(7)),
-		Vector3.new(0.95, 2.9, 0.95), skin, Enum.Material.Slate)
-	block(model, "RightArm", CFrame.new(1.7, 3.0, 0.1) * CFrame.Angles(0, 0, math.rad(-7)),
-		Vector3.new(0.95, 2.9, 0.95), skin, Enum.Material.Slate)
-	block(model, "LeftLeg", CFrame.new(-0.6, 0.9, 0), Vector3.new(1, 2.4, 1), skin, Enum.Material.Slate)
-	block(model, "RightLeg", CFrame.new(0.6, 0.9, 0), Vector3.new(1, 2.4, 1), skin, Enum.Material.Slate)
+	model.Name = "RafaelMonteiroPreview"
+	local skin = if profile then profile.BodyColor else Color3.fromRGB(204, 159, 125)
+	local shirt = if profile then profile.ShirtColor else Color3.fromRGB(35, 111, 146)
+	local pants = if profile then profile.PantsColor else Color3.fromRGB(25, 42, 58)
+	local function limb(name: string, size: Vector3, pos: Vector3, color: Color3, angle: number?): Part
+		return block(model, name, CFrame.new(pos) * CFrame.Angles(0, 0, math.rad(angle or 0)),
+			size, color, Enum.Material.SmoothPlastic)
+	end
+	local torso = limb("Torso", Vector3.new(2, 2, 1), Vector3.new(0, 3.1, 0), shirt)
+	local head = limb("Head", Vector3.new(2, 1, 1), Vector3.new(0, 4.65, 0), skin)
+	local mesh = Instance.new("SpecialMesh")
+	mesh.MeshType, mesh.Scale = Enum.MeshType.Head, Vector3.new(1.25, 1.25, 1.25)
+	mesh.Parent = head
+	local face = Instance.new("Decal")
+	face.Name, face.Texture, face.Face = "face", "rbxasset://textures/face.png", Enum.NormalId.Front
+	face.Parent = head
+	limb("Left Arm", Vector3.new(1, 2, 1), Vector3.new(-1.52, 3.02, 0), skin, -4)
+	limb("Right Arm", Vector3.new(1, 2, 1), Vector3.new(1.52, 3.02, 0), skin, 4)
+	limb("Left Leg", Vector3.new(1, 2, 1), Vector3.new(-0.52, 1.08, 0), pants, -1)
+	limb("Right Leg", Vector3.new(1, 2, 1), Vector3.new(0.52, 1.08, 0), pants, 1)
 	model.PrimaryPart = torso
 	return model
 end
@@ -313,7 +357,7 @@ local function prepareMonster(model: Model)
 			descendant.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
 			descendant.EvaluateStateMachine = false
 			descendant.PlatformStand = true
-		elseif descendant:IsA("Script") or descendant:IsA("LocalScript") then
+		elseif descendant:IsA("LuaSourceContainer") or descendant:IsA("Sound") then
 			descendant:Destroy() -- nenhum script do modelo roda no menu
 		elseif descendant:IsA("ProximityPrompt") or descendant:IsA("ClickDetector") then
 			descendant:Destroy()
@@ -339,7 +383,7 @@ local function poseMonster(self: Controller, base: CFrame)
 	local monster = self.monster
 	if not monster or not monster.PrimaryPart then return end
 	monster:PivotTo(base)
-	local floorTop = if self.monsterAnchor then (self.monsterAnchor :: CFrame).Position.Y else CFG.Origin.Y
+	local floorTop = self.monsterFloor or CFG.Origin.Y
 	base = snapToFloor(monster, base, floorTop)
 	monster:PivotTo(base)
 	self.monsterBase = base
@@ -370,31 +414,24 @@ local function spawnMonster(self: Controller)
 		return
 	end
 
+	local profile = characterProfile()
+	local source = characterSource(profile)
+	self.characterProfile, self.characterSource = profile, source
 	local model: Model? = nil
-	for _, path in CFG.MonsterSources do
-		local found = findByPath(path)
-		if found and found:IsA("Model") then
-			local ok, clone = pcall(function() return found:Clone() end)
-			if ok and clone then
-				model = clone
-				break
-			end
-		end
+	if source then
+		local ok, clone = pcall(function() return source:Clone() end)
+		if ok and clone and clone:IsA("Model") then model = clone end
 	end
-	if model then
-		model.Name = "MenuMonster"
-		model.Parent = self.folder
-		if not model.PrimaryPart then
-			local candidate = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChildWhichIsA("BasePart", true)
-			if candidate and candidate:IsA("BasePart") then model.PrimaryPart = candidate end
-		end
-	else
-		-- SEM MODELO: entra a silhueta provisória. Ponha o caminho do seu
-		-- modelo em MenuConfig.Scene.MonsterSources para substituí-la.
-		model = buildPlaceholderMonster(self.folder)
+	local monster = model or buildPlaceholderMonster(profile)
+	monster.Name = "MenuRafael"
+	monster:SetAttribute("CharacterId", CFG.CharacterId)
+	if not monster.PrimaryPart then
+		local candidate = monster:FindFirstChild("HumanoidRootPart") or monster:FindFirstChildWhichIsA("BasePart", true)
+		if candidate and candidate:IsA("BasePart") then monster.PrimaryPart = candidate end
 	end
-	local monster = model :: Model
+	-- Higieniza antes de colocar no Workspace: scripts do template não rodam.
 	prepareMonster(monster)
+	monster.Parent = self.folder
 	self.monster = monster
 	if not monster.PrimaryPart then return end
 
@@ -435,8 +472,19 @@ end
 -- rodando -- sem precisar parar e recomeçar.
 --------------------------------------------------------------------------------
 
+-- O boneco rosa e as bolinhas são guias do editor, nunca o personagem.
+-- LocalTransparencyModifier preserva cor/posição e continua permitindo Move.
+local function hideEditorMarker(marker: Instance)
+	if marker:IsA("BasePart") then marker.LocalTransparencyModifier = 1 end
+	for _, item in marker:GetDescendants() do
+		if item:IsA("BasePart") then item.LocalTransparencyModifier = 1
+		elseif item:IsA("BillboardGui") or item:IsA("SurfaceGui") then item.Enabled = false end
+	end
+end
+
 local function bindPositionAnchor(self: Controller, anchor: Instance?, setter: (Vector3) -> ())
 	if not (anchor and anchor:IsA("BasePart")) then return end
+	hideEditorMarker(anchor)
 	local part = anchor :: BasePart
 	local function apply()
 		setter(part.Position)
@@ -450,16 +498,30 @@ local function bindMonsterMarker(self: Controller, marker: Instance?)
 		self.monsterMarkerConnection:Disconnect()
 		self.monsterMarkerConnection = nil
 	end
+	if marker then hideEditorMarker(marker) end
+	if marker and marker:IsA("Model") and not marker.PrimaryPart then
+		self.monsterAnchor, self.monsterFloor = nil, nil
+		self.monsterMarkerConnection = marker:GetPropertyChangedSignal("PrimaryPart"):Connect(function()
+			bindMonsterMarker(self, marker)
+			spawnMonster(self)
+		end)
+		return
+	end
 	if marker and marker:IsA("Model") and (marker :: Model).PrimaryPart then
+		hideEditorMarker(marker)
 		local model = marker :: Model
-		self.monsterAnchor = model:GetPivot()
+		local function updateAnchor()
+			self.monsterAnchor = model:GetPivot()
+			local bounds, size = model:GetBoundingBox()
+			self.monsterFloor = bounds.Position.Y - size.Y / 2
+			poseMonster(self, self.monsterAnchor :: CFrame)
+		end
+		updateAnchor()
 		self.monsterMarkerConnection = (model.PrimaryPart :: BasePart):GetPropertyChangedSignal("CFrame")
-			:Connect(function()
-				self.monsterAnchor = model:GetPivot()
-				poseMonster(self, self.monsterAnchor :: CFrame)
-			end)
+			:Connect(updateAnchor)
 	else
 		self.monsterAnchor = nil
+		self.monsterFloor = nil
 	end
 end
 
@@ -480,6 +542,19 @@ local function watchHandBuiltSet(self: Controller, master: Instance)
 			decorate(descendant)
 		end
 	end
+
+	table.insert(self.liveConnections, master.DescendantAdded:Connect(function(item)
+		local marker = master:FindFirstChild("MonsterMarker")
+		if marker and item:IsDescendantOf(marker) then
+			hideEditorMarker(marker)
+			-- PrimaryPart pode chegar depois do Model durante a replicação.
+			task.defer(function()
+				if self.destroyed or not marker.Parent then return end
+				bindMonsterMarker(self, marker)
+				if not self.monster then spawnMonster(self) end
+			end)
+		end
+	end))
 
 	-- E no que for adicionado/removido DEPOIS, ao vivo -- é isto que faz
 	-- criar/apagar MonsterMarker (ou recolocar CameraAnchor) funcionar com
@@ -517,6 +592,7 @@ function Scene.new(): Controller
 
 	local self: Controller = setmetatable({
 		folder = folder, monster = nil, monsterBase = CFrame.new(),
+		characterSource = nil, characterProfile = nil, monsterFloor = nil, destroyed = false,
 		camera = nil, colorCorrection = nil, blur = nil, connection = nil,
 		previousType = nil, previousCFrame = nil, previousFov = nil, previousSubject = nil,
 		elapsed = 0, active = false, animationTrack = nil,
@@ -567,6 +643,20 @@ function Scene.new(): Controller
 		buildWeather(self)
 	end
 	spawnMonster(self)
+	local refreshPending, templateChanged = false, false
+	table.insert(self.liveConnections, ReplicatedStorage.DescendantAdded:Connect(function(item)
+		if self.characterSource and item:IsDescendantOf(self.characterSource) then templateChanged = true end
+		if refreshPending then return end
+		refreshPending = true
+		task.delay(0.15, function()
+			refreshPending = false
+			if self.destroyed then return end
+			local profile = characterProfile()
+			local source = characterSource(profile)
+			if templateChanged or profile ~= self.characterProfile or source ~= self.characterSource then spawnMonster(self) end
+			templateChanged = false
+		end)
+	end))
 	return self
 end
 
@@ -678,6 +768,8 @@ function Scene.Hide(self: Controller)
 end
 
 function Scene.Destroy(self: Controller)
+	if self.destroyed then return end
+	self.destroyed = true
 	Scene.Hide(self)
 	despawnMonster(self)
 	if self.monsterMarkerConnection then

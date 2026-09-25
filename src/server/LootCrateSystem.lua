@@ -51,6 +51,7 @@ local ToolFactory = require(ReplicatedStorage.Modules.ToolFactory)
 
 local IslandLayout = require(script.Parent.Tools.IslandLayout)
 local InteractionGuard = require(script.Parent.InteractionGuard)
+local DropItemSystem = require(script.Parent.DropItemSystem)
 
 local LootCrateSystem = {}
 
@@ -205,11 +206,17 @@ local function onOpenRequest(player: Player, crate: unknown)
 		return
 	end
 
+	local freeSlots = DropItemSystem.FreeSlots(player)
+	if freeSlots <= 0 then
+		Remotes.LobbyMessage:FireClient(player, DropItemSystem.NoSpaceMessage)
+		return
+	end
+
 	markOpened(part)
 	local epoch = generation
 
 	local given: { string } = {}
-	for _ = 1, rollCount(player) do
+	for _ = 1, math.min(rollCount(player), freeSlots) do
 		-- Até 3 tentativas por rolagem se um asset sorteado não puder ser criado.
 		for _ = 1, 3 do
 			local itemId = rollItem(player)

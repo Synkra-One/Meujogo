@@ -74,7 +74,10 @@ local function availablePieceTypes(): { [string]: boolean }
 		end
 	end
 	for _, player in Players:GetPlayers() do
-		if player:GetAttribute("Role") ~= GameConfig.Roles.Survivor then continue end
+		local human = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+		if player:GetAttribute("Role") ~= GameConfig.Roles.Survivor
+			or player:GetAttribute("InRound") ~= true or player:GetAttribute("Eliminado") == true
+			or not human or human.Health <= 0 then continue end
 		local containers: { Instance? } = { player.Character, player:FindFirstChildOfClass("Backpack") }
 		for _, container in containers do
 			if container then

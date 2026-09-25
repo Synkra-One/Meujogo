@@ -163,11 +163,11 @@ local function candidatePoints(zone: string, rng: Random): { Vector3 }
 	return pointsFromPath(path)
 end
 
-local function spawnToolPickup(itemId: string, displayName: string, position: Vector3, parent: Instance)
+local function spawnToolPickup(itemId: string, displayName: string, position: Vector3, parent: Instance): boolean
 	local tool = ToolFactory.Create(itemId)
 	if not tool then
 		warn(string.format("[ItemSpawner] Nao foi possivel criar '%s' para colocar no mapa.", itemId))
-		return
+		return false
 	end
 
 	tool:SetAttribute("WorldItemId", itemId)
@@ -178,6 +178,7 @@ local function spawnToolPickup(itemId: string, displayName: string, position: Ve
 	if prompt and prompt:IsA("ProximityPrompt") then
 		prompt.ObjectText = displayName
 	end
+	return tool:IsDescendantOf(parent)
 end
 
 --------------------------------------------------------------------------------
@@ -321,8 +322,7 @@ function ItemSpawner.Generate(seed: number?)
 						position = Vector3.new(x, (groundY or anchorPoint.Y) + 1, z)
 					end
 
-					if def.Category == "Tool" then
-						spawnToolPickup(itemId, def.DisplayName, position, itens)
+					if def.Category == "Tool" and spawnToolPickup(itemId, def.DisplayName, position, itens) then
 						placed += 1
 					end
 				end

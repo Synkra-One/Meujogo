@@ -32,6 +32,10 @@ tree.Anchored = true
 tree.CFrame = base * CFrame.new(60, 3, 45)
 tree.Parent = forest
 local station = Radio.Build()
+assert(Radio.Validate(station), "generated station failed structural validation")
+for _, part in station:GetDescendants() do
+	assert(part:GetAttribute("GalaoCombustivel") ~= true, "legacy decorative fuel remains")
+end
 assert((station.PrimaryPart.Position - (base * CFrame.new(0, 0.2, 0)).Position).Magnitude < 0.01, "regeneration moved station")
 assert(station.PrimaryPart.Size.X == 128 and station.PrimaryPart.Size.Z == 108)
 assert(station.Abrigo.LajeAbrigo.Size.X == 38 and station.Abrigo.LajeAbrigo.Size.Z == 28)
@@ -60,7 +64,14 @@ local head = Instance.new("Part")
 head.Name = "Head"
 head.Anchored = true
 head.Parent = character
-local player = { Character = character }
+local match = require(Server.MatchStateService)
+match.Set("InMatch")
+local player = {
+	Character = character, Parent = game:GetService("Players"),
+	GetAttribute = function(_, name)
+		return if name == "InRound" or name == "GameplayEnabled" then true else nil
+	end,
+}
 local function stand(localPosition)
 	root.CFrame = base * CFrame.new(localPosition)
 	head.CFrame = root.CFrame * CFrame.new(0, 1.5, 0)
@@ -133,7 +144,9 @@ for _, obj in station:GetDescendants() do
 		assert(keys[key] == false, "duplicate interaction " .. key)
 		keys[key] = true
 		local prompt = assert(obj:FindFirstChildOfClass("ProximityPrompt"), key .. " missing prompt")
-		assert(prompt.RequiresLineOfSight, key .. " sees through walls")
+		-- O corpo do gerador (modelo do Toolbox) oculta o proprio bocal/partida.
+		local generatorPoint = key == "Abastecer" or key == "Partida"
+		assert(prompt.RequiresLineOfSight ~= generatorPoint, key .. " line-of-sight mismatch")
 	end
 end
 for key, found in keys do assert(found, "missing task " .. key) end

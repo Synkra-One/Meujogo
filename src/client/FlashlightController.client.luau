@@ -90,7 +90,6 @@ local function toggle()
 	if reason then warnBlocked(reason); return end
 	if now - lastToggle < Config.ToggleCooldown then return end
 	lastToggle = now
-	if battery() <= 0 then empty:Play(); predicted = false; return end
 	predicted, pendingAt = not predicted, now
 	toggleSequence += 1
 	pose:PlayClick()
@@ -145,12 +144,6 @@ local function equip(tool: Tool)
 	table.insert(toolConnections, tool.Activated:Connect(toggle))
 	table.insert(toolConnections, tool:GetAttributeChangedSignal("FlashlightOn"):Connect(function()
 		if not pendingAt then predicted = tool:GetAttribute("FlashlightOn") == true end
-	end))
-	local previousBattery = battery()
-	table.insert(toolConnections, tool:GetAttributeChangedSignal("Battery"):Connect(function()
-		local value = battery()
-		if previousBattery > 0 and value <= 0 then predicted, pendingAt = false, nil; empty:Play() end
-		previousBattery = value
 	end))
 	-- Tool.Activated already handles mouse/tap/R2. T and Y are additional
 	-- bindings; the touch button is separate and never sends a second toggle.
@@ -302,7 +295,7 @@ RunService:BindToRenderStep("SurvivorFlashlight", Enum.RenderPriority.Camera.Val
 		if pendingAt and now - pendingAt > Config.AimTimeout then
 			pendingAt, predicted = nil, equipped:GetAttribute("FlashlightOn") == true
 		end
-		if not allowed or battery() <= 0 then predicted = false end
+		if not allowed then predicted = false end
 		-- Sample the camera every frame: a cached WORLD point jumps sideways
 		-- when the shoulder camera turns or changes its collision offset.
 		aimParams.FilterDescendantsInstances = { character }

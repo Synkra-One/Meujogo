@@ -6,7 +6,9 @@ local MatchStateService = require(script.Parent.MatchStateService)
 
 local InteractionGuard = {}
 
-function InteractionGuard.CanReach(player: Player, target: BasePart, maxDistance: number): boolean
+-- `ignore`: instancias extras que nao contam como obstaculo (ex.: o corpo do
+-- proprio gerador, cujo bocal/painel ficam encostados ou embutidos nele).
+function InteractionGuard.CanReach(player: Player, target: BasePart, maxDistance: number, ignore: { Instance }?): boolean
 	if not MatchStateService.IsGameplayEnabled(player) then return false end
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -21,6 +23,9 @@ function InteractionGuard.CanReach(player: Player, target: BasePart, maxDistance
 	-- Exclui somente o proprio item, nunca a construcao que o abriga.
 	local tool = target:FindFirstAncestorOfClass("Tool")
 	if tool then table.insert(excluded, tool) end
+	if ignore then
+		for _, instance in ignore do table.insert(excluded, instance) end
+	end
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = excluded

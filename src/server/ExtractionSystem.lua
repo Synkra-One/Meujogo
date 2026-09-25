@@ -23,9 +23,8 @@
 	     throttled, senão o voo ficaria travado.
 	  4. POUSADO: vira sólido (dá pra esbarrar, não dá pra atravessar) e
 	     libera o prompt "Embarcar".
-	  5. A BORDO: quem embarca senta num assento, e a tela dele mostra DUAS
-	     opções -- partir agora ou esperar os colegas. Sair exige o prompt
-	     "Sair"; ninguém é ejetado sozinho.
+	  5. A BORDO: corpo oculto, câmera externa do helicóptero e três opções:
+	     partir agora, esperar os colegas ou sair enquanto está pousado.
 	  6. PARTINDO: sobe reto, vira e acelera pro mar. No fim dispara
 	     SurvivorsExtracted com quem está a bordo e o RoundManager encerra.
 
@@ -62,6 +61,8 @@ local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 local Remotes = require(ReplicatedStorage.Modules.Remotes)
 local AssetLoader = require(ReplicatedStorage.Modules.AssetLoader)
 local Layout = require(script.Parent.Tools.IslandLayout)
+local MatchStateService = require(script.Parent.MatchStateService)
+local Passenger = require(script.Parent.ExtractionPassenger)
 
 local ExtractionSystem = {}
 
@@ -73,7 +74,7 @@ local CFG = GameConfig.Extraction
 
 type State = "Idle" | "Inbound" | "Chegando" | "Pousado" | "Partindo" | "Fim"
 
-type Seat = { seat: number, root: BasePart, wasAnchored: boolean }
+type Seat = Passenger.Passenger & { seat: number }
 
 local state: State = "Idle"
 local zone: Model? = nil
@@ -140,7 +141,12 @@ end
 
 -- Sobrevivente (ou Espião infiltrado) vivo e em pé. O Monstro nunca embarca.
 local function canBoard(player: Player): boolean
-	if player:GetAttribute("Role") == GameConfig.Roles.Monster then
+	if player.Parent ~= Players or player:GetAttribute("InRound") ~= true
+		or player:GetAttribute("InWaitingRoom") == true or MatchStateService.Get() ~= "InMatch" then
+		return false
+	end
+	local role = player:GetAttribute("Role")
+	if role ~= GameConfig.Roles.Survivor and role ~= GameConfig.Roles.Spy then
 		return false
 	end
 	if player:GetAttribute("Eliminado") == true then
@@ -157,9 +163,9 @@ local function distanceToZone(player: Player): number
 	if not root or not root:IsA("BasePart") then
 		return math.huge
 	end
-	-- Só no plano: subir num barranco do lado não deveria tirar ninguém da zona.
-	local flat = Vector3.new(root.Position.X - zoneCenter.X, 0, root.Position.Z - zoneCenter.Z)
-	return flat.Magnitude
+	local model = helicopter
+	local host = model and model.PrimaryPart
+	return if host then (root.Position - host.Position).Magnitude else math.huge
 end
 
 local function tellEveryone(message: string)
@@ -412,6 +418,7 @@ end
 local function buildFallbackHelicopter(parent: Instance): Model
 	local model = Instance.new("Model")
 	model.Name = "Helicoptero"
+	model.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
 	model.Parent = parent
 
 	local origin = CFrame.new()
@@ -456,6 +463,7 @@ local function createHelicopter(parent: Instance): Model
 	if template then
 		local clone = template:Clone()
 		clone.Name = "Helicoptero"
+		clone.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
 		scaleToLength(clone, CFG.ComprimentoModelo)
 		if not clone.PrimaryPart then
 			-- Sem PrimaryPart não dá pra pivotar com precisão: elejo a maior
@@ -710,23 +718,11 @@ local function unboard(player: Player, message: string?)
 		return
 	end
 	boarded[player] = nil
-
-	if info.root.Parent then
-		info.root.Anchored = info.wasAnchored
-		-- Coloca do lado de fora: soltar alguém DENTRO da fuselagem sólida
-		-- deixaria o personagem preso na geometria.
-		local model = helicopter
-		if model then
-			local side = model:GetPivot() * CFrame.new(0, 0, 0)
-			local outside = Vector3.new(side.Position.X, zoneCenter.Y + 4, side.Position.Z)
-				+ (side.RightVector * (CFG.Raio * 0.55))
-			info.root.CFrame = CFrame.new(outside)
-		end
-	end
-
-	Remotes.ExtractionChoice:FireClient(player, "Fechar")
-	if message then
-		Remotes.LobbyMessage:FireClient(player, message)
+	Passenger.Restore(info)
+	player:SetAttribute("ExtractionBoarded", nil)
+	if player.Parent == Players then
+		Remotes.ExtractionChoice:FireClient(player, "Desembarcar")
+		if message then Remotes.LobbyMessage:FireClient(player, message) end
 	end
 	refreshPrompts()
 end
@@ -738,11 +734,13 @@ local function board(player: Player)
 	if not canBoard(player) then
 		return
 	end
-	if distanceToZone(player) > CFG.Raio + 8 then
+	if distanceToZone(player) > 16 then
 		return
 	end
 
 	local character = player.Character
+	if not character or character:GetAttribute("GrabLocked") == true
+		or character:GetAttribute("PowerStunned") == true or character:GetAttribute("FearTripActive") == true then return end
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if not root or not root:IsA("BasePart") then
 		return
@@ -754,12 +752,16 @@ local function board(player: Player)
 		return
 	end
 
-	boarded[player] = { seat = seat, root = root, wasAnchored = root.Anchored }
-	root.Anchored = true
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid then humanoid:UnequipTools() end
+	local info = Passenger.Hide(character, root) :: Seat
+	info.seat = seat
+	boarded[player] = info
+	player:SetAttribute("ExtractionBoarded", true)
 	lockPassengers()
 
-	-- As duas opções: partir agora ou segurar o voo pelos outros.
-	Remotes.ExtractionChoice:FireClient(player, "Abrir")
+	-- A câmera e as escolhas só abrem após confirmar o embarque no servidor.
+	Remotes.ExtractionChoice:FireClient(player, "Embarcar", helicopter)
 	setLabel(string.format("A BORDO: %d", boardedCount()), Color3.fromRGB(140, 255, 150))
 	refreshPrompts()
 	print(string.format("[Extraction] %s embarcou (%d a bordo).", player.Name, boardedCount()))
@@ -767,16 +769,18 @@ end
 
 local beginDeparture: (Player?) -> ()
 
--- Client -> Server: "Partir" | "Esperar". Quem não está a bordo é ignorado.
+-- Client -> Server: "Partir" | "Esperar" | "Sair".
 local function onChoice(player: Player, choice: unknown)
-	if not boarded[player] then
+	local info = boarded[player]
+	if state ~= "Pousado" or not info or not canBoard(player) or player.Character ~= info.character then
 		return
 	end
 	if choice == "Partir" then
 		beginDeparture(player)
 	elseif choice == "Esperar" then
-		Remotes.ExtractionChoice:FireClient(player, "Fechar")
-		Remotes.LobbyMessage:FireClient(player, "Segurando o voo. Use o prompt pra sair, ou espere os outros.")
+		Remotes.ExtractionChoice:FireClient(player, "Esperando")
+	elseif choice == "Sair" then
+		unboard(player, "Você desembarcou.")
 	end
 end
 
@@ -785,7 +789,7 @@ end
 --------------------------------------------------------------------------------
 
 local function clearWorld()
-	for player in boarded do
+	for player in table.clone(boarded) do
 		unboard(player)
 	end
 	table.clear(boarded)
@@ -824,6 +828,7 @@ end
 local function spawnHelicopter()
 	local model = createHelicopter(getIlha())
 	helicopter = model
+	model:SetAttribute("ExtractionHelicopter", true)
 	rotorPiece = findRotor(model)
 	seatOffsets = buildSeatOffsets(model)
 
@@ -842,7 +847,7 @@ local function spawnHelicopter()
 		exitPrompt = newPrompt(host, "SairHelicoptero", "Sair", 0.5)
 		;(boardPrompt :: ProximityPrompt).Triggered:Connect(board)
 		;(exitPrompt :: ProximityPrompt).Triggered:Connect(function(player: Player)
-			unboard(player, "Você desembarcou.")
+			onChoice(player, "Sair")
 		end)
 	end
 
@@ -872,14 +877,17 @@ local function finishDeparture()
 
 	local rescued: { Player } = {}
 	for player, info in boarded do
-		if info.root.Parent then
-			info.root.Anchored = info.wasAnchored
-		end
-		if player.Parent == Players then
+		if canBoard(player) and player.Character == info.character and info.root.Parent then
 			table.insert(rescued, player)
 		end
 	end
-	table.clear(boarded)
+	-- Os corpos ficam ocultos até o reset do resultado, sem queda do céu.
+	if #rescued == 0 then
+		for player in table.clone(boarded) do unboard(player) end
+		state = "Chegando"
+		flightStartedAt = os.clock()
+		return
+	end
 
 	local names = {}
 	for _, player in rescued do
@@ -905,7 +913,7 @@ function beginDeparture(byPlayer: Player?)
 		setSolid(model, false, rotorPiece) -- subindo, não empurra ninguém
 	end
 	for player in boarded do
-		Remotes.ExtractionChoice:FireClient(player, "Fechar")
+		Remotes.ExtractionChoice:FireClient(player, "Partindo")
 	end
 	if boardPrompt then
 		boardPrompt.Enabled = false
@@ -950,6 +958,11 @@ end
 -- Throttled: contagem, avisos e as checagens que não precisam de 60 fps.
 local function step()
 	local now = os.clock()
+	for player, info in table.clone(boarded) do
+		if not canBoard(player) or player.Character ~= info.character or not info.root.Parent then
+			unboard(player)
+		end
+	end
 
 	if state == "Inbound" then
 		local remaining = countdownEndsAt - now
@@ -969,12 +982,6 @@ local function step()
 	end
 
 	if state == "Pousado" then
-		-- Quem morreu ou deixou de ser elegível no assento perde a vaga.
-		for player in boarded do
-			if not canBoard(player) then
-				unboard(player)
-			end
-		end
 		local n = boardedCount()
 		if n > 0 then
 			setLabel(string.format("A BORDO: %d", n), Color3.fromRGB(140, 255, 150))
@@ -1047,8 +1054,13 @@ function ExtractionSystem.Init()
 
 	Remotes.ExtractionChoice.OnServerEvent:Connect(onChoice)
 	Players.PlayerRemoving:Connect(function(player)
-		boarded[player] = nil
+		unboard(player)
 	end)
+	local function watchPlayer(player: Player)
+		player.CharacterRemoving:Connect(function() unboard(player) end)
+	end
+	for _, player in Players:GetPlayers() do watchPlayer(player) end
+	Players.PlayerAdded:Connect(watchPlayer)
 
 	local elapsed = 0
 	RunService.Heartbeat:Connect(function(dt)

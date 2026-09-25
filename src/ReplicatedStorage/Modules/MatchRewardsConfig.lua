@@ -683,7 +683,7 @@ MatchRewardsConfig.Highlights = {
 -- POSIÇÃO: canto SUPERIOR DIREITO. Foi escolhido depois de olhar o que já
 -- ocupa a tela:
 --   topo-esquerda    ObjectivesHUD (barra do rádio)
---   topo-centro      MainHUD.PhaseFrame (fase + tempo)
+--   topo-centro      (livre: a fase + tempo foram removidos)
 --   baixo-esquerda   MainHUD.RoleFrame (papel)
 --   baixo-centro     OTSHUD (munição)
 --   baixo-direita    SurvivalMinimapHUD (minimapa) + StaminaHUD

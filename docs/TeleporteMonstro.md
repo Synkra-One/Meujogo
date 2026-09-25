@@ -75,8 +75,8 @@ Estados no **character** (Attributes, replicam sozinhos): `TeleportState`
 | `src/ReplicatedStorage/Modules/IslandMapData.lua` | Formato + matemática do mapa: paleta, fusão em retângulos, encode/decode e as conversões mundo↔mapa. Compartilhado server/cliente. |
 | `src/server/IslandMap.lua` | Amostra a ilha de `IslandLayout`, aplica hillshading, funde em retângulos e publica em `ReplicatedStorage.IslandMapData`. |
 | `src/ReplicatedStorage/Modules/IslandMapUI.lua` (era `MonsterMapUI.lua`) | Desenha e opera o mapa (relevo, trilhas, POIs, mira, escala, marcador do Monstro/você, itens descobertos). Roda no cliente, em modo `"teleport"` (Monstro) ou `"view"` (Sobrevivente/Espião -- ver [MapaSobrevivente.md](MapaSobrevivente.md)). |
-| `src/server/MonsterTeleport.lua` | Autoridade: valida ativação/destino/cooldown, roda a máquina de estados, faz o teleporte real, limpa tudo. Carrega o asset da fenda (InsertService, só server) e publica em `ReplicatedStorage.RiftAssets.Template`. |
-| `src/ReplicatedStorage/Modules/RiftVFX.lua` | Monta/anima/limpa **uma** fenda (asset + partículas + luz + distorção). Roda no cliente, tudo com TweenService. Fenda de reserva (só `Part`) se o asset não carregar. |
+| `src/server/MonsterTeleport.lua` | Autoridade: valida ativação/destino/cooldown, roda a máquina de estados, faz o teleporte real, limpa tudo. O visual é procedural no cliente; não há carregamento de modelos externos. |
+| `src/ReplicatedStorage/Modules/RiftVFX.lua` | Monta/anima/limpa **uma** fenda violeta 3D: boca escura, borda irregular, espirais, detritos e partículas. TweenService abre/fecha; órbitas locais a 30 Hz. |
 | `src/client/RiftVFXController.client.luau` | Recebe os "beats" de `Remotes.RiftVFX` (só pra quem está perto), chama `RiftVFX`, toca os sons 3D. |
 | `src/client/MonsterTeleportController.client.luau` | Input do Monstro (mira + tecla), desliga o controle de movimento durante a habilidade, câmera cinematográfica, som de charge, aviso de "destino inválido". |
 | `src/ReplicatedStorage/Remotes/MonsterTeleport.model.json`, `RiftVFX.model.json` | RemoteEvents. |
@@ -86,7 +86,7 @@ Estados no **character** (Attributes, replicam sozinhos): `TeleportState`
 | Arquivo | Mudança |
 |---|---|
 | `GameConfig.lua` | `GameConfig.Monster.Teleport` — **todos** os tempos/escala/alcance/cooldown/IDs de animação. |
-| `AssetRegistry.lua` | `AssetRegistry.RiftTeleport` — AssetId da fenda + 6 SoundIds (vazios). |
+| `AssetRegistry.lua` | `AssetRegistry.RiftTeleport.Sounds` — sons opcionais por etapa. |
 | `Remotes.lua` | contratos de `MonsterTeleport` e `RiftVFX`. |
 | `MonsterCombat.lua` | não ataca enquanto `TeleportBusy`. |
 | `MonsterController.client.luau` | não golpeia com o mapa aberto (`MapaAberto`) nem durante o teleporte. |
@@ -107,12 +107,15 @@ Estados no **character** (Attributes, replicam sozinhos): `TeleportState`
   livre próxima quando o ponto exato estiver bloqueado).
 - **Escala**: `RiftScale` (multiplicador extra), `RiftWidthFactor` (a fenda é
   ~`RiftWidthFactor` × a altura REAL do rig, medida em runtime), `SinkDepth`.
-- **Orientação do asset**: `RiftAssetFaceAxis` (`"auto"` mede e deita a menor
-  dimensão no chão — force `"Y"`/`"Z"`/`"X"` se renderizar de lado),
-  `RiftExtraRotationDeg` (ajuste fino em graus), `RiftGroundOffset` (<0 crava
-  no chão), `RiftUpright` (fenda vertical em vez de deitada).
-- **Rede/visual**: `VFXBroadcastRadius` (só clientes a até isso recebem VFX),
-  `RiftLightBrightness` (PointLight sutil; 0 = sem luz), `RiftLightRangeFactor`.
+- **Orientação**: `RiftExtraRotationDeg` (ajuste fino em graus),
+  `RiftGroundOffset = 0.08` (borda acima da superfície),
+  `RiftUpright` (preview vertical; o teleporte continua afundando no chão).
+- **Rede/visual**: `VFXBroadcastRadius` (190 studs),
+  `RiftLightBrightness = 2.2` (iluminação violeta; 0 = sem luz),
+  `RiftLightRangeFactor = 2.2`.
+
+A abertura no destino usa o menor valor entre `RiftOpenDuration` e
+`DestRiftLeadTime`, ficando pronta antes de o monstro emergir.
 
 Cores/taxas de partícula: `RiftVFX.Style` (topo de `Modules/RiftVFX.lua`).
 
@@ -131,16 +134,26 @@ elas tocam por cima do movimento, não substituem nada. **Não invente ids.**
 de fenda tocam em **3D** na posição da fenda (raio ~95 studs): um Sobrevivente
 perto do destino ouve algo surgindo antes do Monstro sair.
 
-### Asset da fenda
+### Direção visual — Fenda do Abismo
 
-`AssetRegistry.RiftTeleport.AssetId = 16376740571`. O servidor carrega uma vez
-no boot e loga no Output o tamanho medido e o `FaceAxis` escolhido:
-```
-[MonsterTeleport] Fenda: asset 16376740571 carregado -- tamanho (X, Y, Z), faceAxis=Y, largura natural W.
-```
-Se não carregar (privado/moderado, ou fora do modo de edição), loga um aviso e
-**o cliente usa a fenda de reserva** (disco preto + aro carmim + rachas) — tudo
-o mais funciona igual. Trocar o visual = trocar o `AssetId`, nada mais.
+O modelo antigo foi substituído por geometria procedural, sem download de
+Toolbox. Uma boca escura arredondada mascara o chão; 24 segmentos curvos de
+plasma formam a borda irregular, com uma coroa de névoa. Três espirais em
+alturas diferentes e dez fragmentos de obsidiana em órbita dão profundidade
+e movimento vistos de lado. As partículas roxas saem de oito pontos da borda.
+
+- Abertura: a boca cresce e os filamentos ganham intensidade.
+- Entrada: rotação inverte de modo contínuo e acelera; partículas são puxadas
+  para baixo e os fragmentos convergem.
+- Saída: rajada de faíscas roxas, expansão dos detritos e pulso de luz local.
+- Fechamento: colapso da geometria, emissão interrompida imediatamente,
+  fumaça e partículas existentes dissipam por até 2,4 s.
+
+Texturas são as de partículas incluídas no Roblox, sem IDs privados. A luz
+é local, sem alterar Lighting ou a câmera de outros sistemas. Cada portal
+usa 13 Parts, 66 Beams, 11 emissores e 10 Trails; órbitas atualizadas a 30 Hz.
+Não há criação de instâncias por frame. Todos os objetos são ancorados,
+sem colisão, toque ou consultas de raycast.
 
 ## Autoridade / rede
 
@@ -167,15 +180,15 @@ o mais funciona igual. Trocar o visual = trocar o `AssetId`, nada mais.
   se: Monstro morre/é eliminado, character removido, partida termina, jogador
   sai, ou `SafetyTimeout` estoura.
 - Cada fenda (cliente) tem tweens, emitters, luz, sons e conexões próprios e se
-  autodestrói depois do rastro; `HardMaxLifetime` (30 s) é a rede de segurança.
+  autodestrói depois do rastro; `HardMaxLifetime` (18 s) é a rede de segurança.
   `RoundEnded` limpa qualquer fenda presa.
-- O asset original nunca é alterado — sempre `:Clone()`.
+- Remover o modelo externamente também desconecta sua animação. Beats atrasados
+  não reativam partículas após Close/Cancel. Destroy é idempotente.
 
 ## Como testar no Studio
 
-1. `rojo serve` / sincronize. Confirme no Output do servidor as duas linhas:
-   `[IslandMap] Mapa pronto ... 100x100 células -> N retângulos, alcance +-918 studs`
-   e `[MonsterTeleport] Fenda: asset ... carregado` (ou o aviso de reserva).
+1. `rojo serve` / sincronize. Confira o mapa carregado e ausência de erros de
+   `RiftVFXController`. O portal não precisa mais de `RiftAssets.Template`.
 2. Entre numa partida como **Monstro** (`GameConfig.Testing.ForceRole = "Monstro"`
    ou o painel de dev, se estiver ligado).
 3. Aperte **Q**: o mapa da ilha abre. Confira que a **forma da ilha bate** com
@@ -183,8 +196,8 @@ o mais funciona igual. Trocar o visual = trocar o `AssetId`, nada mais.
    (você) está onde você realmente está. Passe o mouse — as coordenadas na
    mira são as do mundo; sobre o mar a mira fica vermelha.
 4. **Clique num ponto em terra.** Observe:
-   - o mapa fecha e a fenda abre nos pés (pequena → grande, partículas escuras
-     puxadas pra dentro, luz sutil);
+   - o mapa fecha e a fenda abre nos pés (boca escura, borda violeta, névoa,
+     detritos em órbita e partículas saindo);
    - o Monstro afundando + sumindo (não instantâneo);
    - a fenda do destino aparecendo **antes** de ele sair;
    - o Monstro emergindo **exatamente no ponto clicado**, a fenda fechando
@@ -202,21 +215,24 @@ o mais funciona igual. Trocar o visual = trocar o `AssetId`, nada mais.
 8. **Casos**: clicar no mar / numa parede / num teto baixo → o servidor tenta
    um ponto seguro próximo ou retorna pela direção do salto. Matar/eliminar o Monstro no meio →
    tudo limpa, sem fenda presa, sem Monstro invisível.
-9. Se a fenda renderizar de lado/em pé, ajuste `RiftAssetFaceAxis` /
-   `RiftExtraRotationDeg` / `RiftUpright` no GameConfig.
+9. Olhe de frente, de cima e de lado: espirais e pedras devem ocupar alturas
+   diferentes. Teste também em rampa, junto à vegetação e no modo de baixa qualidade.
 10. Se você regerar a ilha com outra seed, rode
    `require(game.ServerScriptService.Server.IslandMap).Generate()` na Command
    Bar pra o mapa acompanhar (ou só reinicie o servidor).
 
 ## Verificação automática
 
-- `rojo build` e `luau` (sintaxe) em todos os arquivos novos + editados.
-- Smoke test do **mapa**: round-trip mundo↔mapa com **erro 0 stud**, centro e
-  cantos batendo com o mundo, os 9 POIs dentro do enquadramento e em terra
-  firme, distribuição de terreno coerente (mar/praia/vegetação/lago presentes),
-  encode/decode de 10.000 células reconstruindo idêntico, paleta completa.
-- Smoke test da `RiftVFX` (build/open/enter/emerge/close/cancel/destroy, flat e
-  upright) e do `MonsterTeleport` (ativação, sequência completa, teleporte pro
-  destino exato, restaura visível/desancorado, rifts fecham, destino inválido
-  rejeitado, mira-em-si rejeitada, dupla ativação bloqueada, abort no fim de
-  partida) — no scratchpad da sessão.
+Teste isolado no engine real (não carrega nem substitui o mapa do jogo):
+
+```sh
+rojo build tests/RiftVFX.project.json -o /tmp/rift-vfx-validation.rbxlx
+run-in-roblox --place /tmp/rift-vfx-validation.rbxlx --script tests/rift_vfx.studio.luau
+```
+
+O teste valida volume, órbitas, abertura/entrada/saída, beats após fechamento,
+cancel durante abertura, remoção externa, timeout e ausência de erros no Output.
+Não substitui avaliação visual em jogo e playtest multiplayer. A reformulação
+também passa pelo build completo do Rojo e pela compilação de sintaxe dos
+arquivos Luau alterados. A lógica de posição, cooldown e movimentação do rig
+permanece sob autoridade do servidor.

@@ -1,19 +1,18 @@
 --!strict
 --[[
 	BatController
-	Animacao e golpes do Taco de Beisebol (Tool com Attribute "TacoBeisebol").
+	Animacao e golpes do Taco de Beisebol (Attribute "TacoBeisebol") e do Pe de
+	cabra (Attribute "LancaDeBambu"): os dois usam os MESMOS clips de
+	BaseballBatConfig.Animations.
 
-	DUAS ANIMACOES AO MESMO TEMPO: o clip Idle toca em loop na mesma camada
-	Movement do Animate/pacote de movimento. O peso cai enquanto o personagem
-	anda/corre, entao o walk/run continua visivel mesmo se o asset do Taco tiver
-	algum keyframe extra no tronco ou nas pernas. O clip deve preferencialmente
-	conter apenas a camada superior do R6, mas a mistura tambem protege clips
-	publicados com keyframes de corpo inteiro.
+	POSE DE SEGURAR: o clip Idle publicado do Taco toca em loop enquanto a arma
+	está equipada e define toda a postura do personagem.
 
-	GOLPES: clique curto toca Hit (golpe leve); segurar o botao ate
-	BatConfig.HoldThreshold toca Finish (golpe pesado). O remote so pede o INICIO
-	do golpe, com "Light"/"Heavy"; WeaponSystem abre a janela de hitbox no
-	servidor. AttackStart marker e usado quando existir; sem marker ha fallback.
+	GOLPES: no Taco, clique curto toca Hit (golpe leve); segurar o botao ate
+	BatConfig.HoldThreshold toca Finish (golpe pesado). Armas sem perfil Heavy
+	(Pe de cabra) golpeiam com Hit assim que o botao e apertado. O remote so pede
+	o INICIO do golpe, com "Light"/"Heavy"; WeaponSystem abre a janela de hitbox
+	no servidor. AttackStart marker e usado quando existir; sem marker ha fallback.
 ]]
 
 local Players = game:GetService("Players")
@@ -27,7 +26,7 @@ local Remotes = require(ReplicatedStorage.Modules.Remotes)
 
 type Kind = "Hit" | "Finish"
 
-local ITEM_ATTRIBUTE = "TacoBeisebol"
+local ITEM_ATTRIBUTES = { "TacoBeisebol", "LancaDeBambu" }
 -- Mesma lista da FlashlightPose: estados que tomam o controle do corpo.
 local BLOCKING_FLAGS = { "GrabLocked", "ShadowRushBusy", "TeleportBusy", "PowerStunned", "FearTripping" }
 
@@ -93,7 +92,8 @@ local function loadTracks(hum: Humanoid)
 		animator = created
 	end
 	local activeAnimator = animator :: Animator
-	for name, id in BatConfig.Animations do
+	for _, name in { "Idle", "Hit", "Finish" } do
+		local id = BatConfig.Animations[name]
 		local animation = Instance.new("Animation")
 		animation.Name = "Taco" .. name
 		animation.AnimationId = id
@@ -102,10 +102,7 @@ local function loadTracks(hum: Humanoid)
 		end)
 		if ok and loaded then
 			local track = loaded :: AnimationTrack
-			-- Idle precisa compartilhar a prioridade da locomocao. Action aqui
-			-- faria o clip inteiro do Taco ganhar de walk/run, mesmo quando o
-			-- asset tivesse sido publicado com keyframes das pernas.
-			track.Priority = if name == "Idle" then Enum.AnimationPriority.Movement else Enum.AnimationPriority.Action2
+			track.Priority = if name == "Idle" then Enum.AnimationPriority.Action else Enum.AnimationPriority.Action3
 			track.Looped = name == "Idle"
 			tracks[name] = track
 			table.insert(animations, animation)
@@ -130,33 +127,13 @@ local function loadTracks(hum: Humanoid)
 	end)
 end
 
-local function moving(): boolean
-	local hum = humanoid
-	if not hum or hum.Health <= 0 then
-		return false
-	end
-	if hum.MoveDirection.Magnitude > 0.08 then
-		return true
-	end
-	local char = character
-	local root = char and char:FindFirstChild("HumanoidRootPart")
-	if root and root:IsA("BasePart") then
-		return (root.AssemblyLinearVelocity * Vector3.new(1, 0, 1)).Magnitude > 0.65
-	end
-	return false
-end
-
+-- Mantém exatamente o Idle publicado para o taco. Ele controla a postura
+-- enquanto equipado e volta sozinho ao fim do golpe.
 local function ensureIdlePlaying(idle: AnimationTrack)
-	local isMoving = moving()
-	-- Parado, o Idle do Taco assume o corpo inteiro para a pose ficar
-	-- exatamente como foi criada. Em movimento, volta para Movement e mistura
-	-- com walk/run para não bloquear as pernas.
-	idle.Priority = if isMoving then Enum.AnimationPriority.Movement else Enum.AnimationPriority.Action
-	local weight = if isMoving then BatConfig.IdleMovingWeight else 1
+	idle.Priority = Enum.AnimationPriority.Action
+	idle.Looped = true
 	if not idle.IsPlaying then
-		idle:Play(BatConfig.AnimationFadeTime, weight, 1)
-	else
-		idle:AdjustWeight(weight, BatConfig.AnimationFadeTime)
+		idle:Play(BatConfig.AnimationFadeTime, 1, 1)
 	end
 end
 
@@ -244,8 +221,14 @@ local function onActivated()
 	if not tool or inputBlocked() or blocked() then
 		return
 	end
-	local maxImpact = math.max(impactDelay("Hit"), impactDelay("Finish"))
+	local definition = Rules.Definition(tool)
+	local hasHeavy = definition ~= nil and definition.Heavy ~= nil
+	local maxImpact = if hasHeavy then math.max(impactDelay("Hit"), impactDelay("Finish")) else impactDelay("Hit")
 	if os.clock() < math.max(busyUntil, serverReadyAt + BatConfig.CooldownPadding - maxImpact) then
+		return
+	end
+	if not hasHeavy then
+		swing("Hit")
 		return
 	end
 	pressId += 1
@@ -287,7 +270,15 @@ local function setTool(newTool: Tool)
 end
 
 local function isBat(instance: Instance): boolean
-	return instance:IsA("Tool") and instance:GetAttribute(ITEM_ATTRIBUTE) == true
+	if not instance:IsA("Tool") then
+		return false
+	end
+	for _, attribute in ITEM_ATTRIBUTES do
+		if instance:GetAttribute(attribute) == true then
+			return true
+		end
+	end
+	return false
 end
 
 local function watchCharacter(newCharacter: Model)
@@ -313,8 +304,8 @@ local function watchCharacter(newCharacter: Model)
 	end))
 end
 
--- Idle so toca livre; estados que tomam o corpo (agarrado, dano, rastejar...)
--- interrompem o taco por completo e cancelam o golpe agendado.
+-- Estados que tomam o corpo (agarrado, dano, rastejar...) interrompem os golpes
+-- e cancelam o agendado.
 task.spawn(function()
 	while true do
 		task.wait(BatConfig.PollInterval)
@@ -328,12 +319,8 @@ task.spawn(function()
 						track:Stop(BatConfig.AnimationFadeTime)
 					end
 				end
-			elseif not idle.IsPlaying then
-				ensureIdlePlaying(idle)
 			else
-				local isMoving = moving()
-				idle.Priority = if isMoving then Enum.AnimationPriority.Movement else Enum.AnimationPriority.Action
-				idle:AdjustWeight(if isMoving then BatConfig.IdleMovingWeight else 1, BatConfig.AnimationFadeTime)
+				ensureIdlePlaying(idle)
 			end
 		end
 	end

@@ -19,11 +19,17 @@ Sobreviventes mortos, eliminados, fora da rodada, em seleção ou com papel
 diferente são descartados. Não existe `OnServerEvent` neste canal.
 Os pings antigos de passos e pânico continuam com seu contrato original.
 
-Medo precisa ser **maior que 25** e distância **menor que 96 studs** por padrão.
+O sobrevivente começa a ouvir o próprio coração acima de **25** de medo. O monstro só
+percebe seu batimento acima de **55**, a menos de **96 studs** e com visão direta.
+Atrás de uma parede sólida, a revelação exige medo acima de **75** durante **3s
+contínuos** atrás da cobertura; sair do alcance, diminuir o medo, ficar invisível
+ao Fear ou voltar à visão direta reinicia esse tempo. Cada monstro acompanha o
+próprio tempo para cada alvo. Assim o monstro não ganha visão através da parede
+na primeira aproximação.
 Medo normalizado, distância, furtividade, velocidade real e fração de vida perdida
 determinam a intensidade. Um raycast entre raízes, ignorando os dois personagens,
 água e partes sem colisão, aplica atenuação por obstáculo sólido. A presença de
-parede reduz a intensidade; não bloqueia nem remove o pulso através da parede.
+parede reduz a intensidade depois que o tempo de revelação foi cumprido.
 Múltiplas paredes usam a mesma atenuação binária, sem simulação de espessura.
 
 No cliente do monstro há um único registro por sobrevivente: emissor 3D com Attachment/Sound,
@@ -93,15 +99,15 @@ Para fixar medo durante um teste, usar **somente a Command Bar do servidor**:
 local fear = require(game.ServerScriptService.Server.FearSystem)
 local p = game.Players:FindFirstChild("Player2") -- sobrevivente ativo do teste
 fear.ReduceFear(p, 100)
-fear.AddFear(p, 60, "HeartbeatStudioTest")
+fear.AddFear(p, 85, "HeartbeatStudioTest")
 ```
 
 O FearSystem continua atualizando normalmente; repetir para comparar valores.
 
 | Cenário no Studio | Resultado esperado |
 | --- | --- |
-| Medo 10, 26, 60, 100 a 12 studs | Ausente, quase invisível, pulsos curtos, pulsos mais fortes e rápidos |
-| Parede sólida entre ambos | Som atenuado; coração e aura continuam visíveis em pulsos |
+| Medo 10, 26, 60, 100 a 12 studs, sem parede | Ausente para ambos; só o sobrevivente ouve; monstro percebe pulso discreto; pulso mais forte e rápido |
+| Parede sólida entre ambos | Sem detecção até medo >75 por 3s; depois som e brilho atenuados |
 | Alvo à esquerda/direita e câmera girando | Origem sonora acompanha a posição, com fones estéreo |
 | Distância 12, 80, 96 e 110 studs | Atenuação crescente; fade ao atingir/sair do limite |
 | Correr vs. agachar em movimento | Corrida intensifica; agachamento atenua, com mesma furtividade |

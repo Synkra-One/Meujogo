@@ -120,6 +120,7 @@ local moduleNames=setmetatable({}, {__index=function(_,k) return k end})
 local services={Players=players,Workspace=world,RunService={Heartbeat=heartbeat},
 	ReplicatedStorage={Modules=moduleNames},TweenService={},Debris={AddItem=function() end}}
 local modules={ Remotes=remotes,RoundManager=round,
+	MatchStateService={IsGameplayEnabled=function(p) return p.Parent==players and p:GetAttribute("InRound")==true and p:GetAttribute("ExtractionBoarded")~=true end},
 	GameConfig={Roles={Survivor="Sobrevivente",Spy="Espiao",Monster="Monstro"}, RadioObjective={SuccessChance=0.2,RescueCountdownDuration=60},
 		Health={Max=100,MonsterMax=1000,MonsterMinimum=1,CombatAnimationsEnabled=false,
 			HurtIdleAnimationId="",HurtWalkAnimationId="",DeathAnimationId="",
@@ -216,7 +217,7 @@ use(rafael,"1"); use(rafael,0/0); use(rafael,3); assert(ready(rafael,1)==0)
 use(monster,1); use(spy,2); assert(ready(monster,1)==0 and ready(spy,2)==0)
 active=false; use(rafael,1); assert(ready(rafael,1)==0); active=true
 rafael:SetAttribute("CharacterSelectOpen",true); use(rafael,1); assert(ready(rafael,1)==0); rafael:SetAttribute("CharacterSelectOpen",false)
-rafael:SetAttribute("Amarrado",true); use(rafael,1); assert(ready(rafael,1)==0); rafael:SetAttribute("Amarrado",false)
+rc:SetAttribute("GrabLocked",true); use(rafael,1); assert(ready(rafael,1)==0); rc:SetAttribute("GrabLocked",false)
 rh.Health=0; use(rafael,1); assert(ready(rafael,1)==0); rh.Health=100
 use(rafael,1); local q=ready(rafael,1); assert(q==now+90 and rc:GetAttribute("PowerSpeedMultiplier")==2)
 assert(rc:GetAttribute("PowerInfiniteStamina")==true)

@@ -15,23 +15,25 @@ Somente sobreviventes vivos com `InRound = true`, numa rodada ativa e após fech
 
 ## Balanceamento
 
-Valores iniciais em `GameConfig.Fear`: teto 100, zona de perigo de 160 studs, ganho base máximo 3,5/s até 20 studs, recuperação base 3,5/s após 4 segundos seguros, atualização a cada 0,2s. A distância é 3D entre HumanoidRootParts. Usa o monstro vivo mais próximo, sem somar vários monstros. Paredes bloqueiam o bônus de visão; o ganho base por proximidade permanece.
+Valores atuais em `GameConfig.Fear`: teto 100, zona de perigo de 160 studs, ganho base máximo 2,3/s até 20 studs, recuperação base 3,5/s após 4 segundos seguros, atualização a cada 0,2s. O ganho por proximidade começa em 20% e sobe gradualmente durante 5 segundos de exposição contínua; sair da zona reinicia essa rampa. A distância é 3D entre HumanoidRootParts. Usa o monstro vivo mais próximo, sem somar vários monstros. Paredes bloqueiam o bônus de visão; o ganho base por proximidade permanece.
 
 **O Fear é uma barra que sobe com o tempo, nunca um estouro.** Ver o monstro não enche a barra: encher exige ficar perto por vários segundos. `MaxFearDistance` é a fronteira dos dois regimes -- dentro dela a barra sobe, fora dela (passado o atraso) ela desce.
 
-A curva é `t = clamp((160 - distância) / (160 - 20), 0, 1)`, `x = t ^ ProximityCurveExponent`, ganho base `3,5 * x² * (3 - 2x)`. O expoente inicial é 1,4. A curva não tem degraus e sua inclinação chega suavemente a zero nos limites.
+A curva é `t = clamp((160 - distância) / (160 - 20), 0, 1)`, `x = t ^ ProximityCurveExponent`, ganho base `2,3 * x² * (3 - 2x)`. O expoente é 1,4. A curva não tem degraus e sua inclinação chega suavemente a zero nos limites. A tabela abaixo mostra taxas após os 5s iniciais da rampa, com Compostura média.
 
-| Distância | base/s | com visão | perseguido | 0 → 100 perseguido |
-| --- | ---: | ---: | ---: | ---: |
-| 160+ | 0 | 0 | 0 | nunca (recupera) |
-| 120 | 0,278 | 0,376 | 0,526 | ~190s |
-| 100 | 0,780 | 1,053 | 1,474 | ~68s |
-| 80 | 1,524 | 2,057 | 2,880 | ~35s |
-| 60 | 2,389 | 3,226 | 4,516 | ~22s |
-| 40 | 3,156 | 4,260 | 5,964 | ~17s |
-| 20 ou menos | 3,500 | 4,725 | 6,615 | ~15s |
+| Distância | base/s | com visão | perseguido |
+| --- | ---: | ---: | ---: |
+| 160+ | 0 | 0 | 0 |
+| 120 | 0,183 | 0,247 | 0,346 |
+| 100 | 0,513 | 0,693 | 0,970 |
+| 80 | 1,001 | 1,351 | 1,892 |
+| 60 | 1,570 | 2,120 | 2,968 |
+| 40 | 2,074 | 2,800 | 3,920 |
+| 20 ou menos | 2,300 | 3,105 | 4,347 |
 
-Referências de ritmo com Compostura média: parado a 20 studs com linha de visão, 0 → 100 leva **~21s**; sendo perseguido colado, **~15s**; no pior caso possível (Compostura 0 + visão + perseguição, limitado por `MaxFearGainPerSecond`), **~12,5s**. Longe da zona de perigo, 100 → 0 leva **~29s**. Descer é de propósito mais lento que subir sob perseguição -- correr em círculos não apaga a tensão.
+Referências de ritmo sem dano: parado a 20 studs com linha de visão e Compostura média, 0 → 100 leva **mais de 32s**; perseguido colado, aproximadamente **26s**; no pior caso de Compostura baixa, mais de **18s**. O teto por segundo é 5,5. Longe da zona de perigo, 100 → 0 leva **~29s** com Compostura média. Dano e testemunho podem acrescentar choques moderados, mas não transformam a primeira aproximação em pânico máximo.
+
+O servidor escuta `DamageSystem.DamageApplied`, somente após dano real. Um sobrevivente ferido ganha `min(12, 2 + dano × 0,16)` pontos antes da Compostura. Outro sobrevivente a até 72 studs, com visão direta do ferimento, ganha 6 pontos; se presenciar a morte, 18. Ferimentos pequenos (<5) não assustam testemunhas e ferimentos repetidos do mesmo alvo respeitam 5s de intervalo. Uma morte visível supera esse intervalo. Paredes, jogadores fora da rodada, mortos e Espiões não recebem medo por testemunho. O evento não altera o dano em si.
 
 **Histórico:** o alcance era 300 studs com ganho base de 10/s e expoente 2. Isso somava duas queixas: colado no monstro a barra enchia em ~5s (parecia ir direto ao máximo), e como *quase a ilha inteira* contava como zona de perigo, era possível acumular medo lentamente sem nunca recuperar.
 
@@ -125,7 +127,7 @@ Todos os campos abaixo foram adicionados à configuração existente, sem outro 
 | --- | --- |
 | LOS | Raycast a cada 0,4s, multiplicador 1,35 |
 | Chase | Até 80 studs; ambos a pelo menos 2 studs/s; confirmação de 0,6s; multiplicador 1,4 |
-| Ganho final | `base × Compostura × LOS × Chase`, limitado a 8 Fear/s |
+| Ganho final | `base × rampa de exposição × Compostura × LOS × Chase`, limitado a 5,5 Fear/s |
 | Estados (valor real, inclusive frações) | Calm <25; Nervous ≥25; Scared ≥50; Panicked ≥75; ExtremePanic ≥90 |
 | Regeneração de stamina | 100% até Fear 25; ~90,4% em 50; ~72,8% em 75; 50% em 100 |
 | Tropeço | Fear ≥75; teste a cada 3s correndo no chão; chance 3–12%; cooldown 8s |

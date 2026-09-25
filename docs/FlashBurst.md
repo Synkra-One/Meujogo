@@ -7,13 +7,12 @@ outro RemoteEvent, outro loop servidor ou outro sistema de velocidade.
 ## Uso e comportamento
 
 - PC: **V**. Controle: **L2**. Mobile: botao **Clarao**.
-- Funciona equipada, com a luz normal ligada ou desligada. Nao altera esse
-  estado, exceto ao esgotar a bateria, quando a luz normal apaga.
+- Funciona equipada, com a luz normal ligada ou desligada. Esgotar a reserva
+  impede novos claroes, mas nao apaga a iluminacao normal.
 - Custa **25 pontos percentuais** da bateria e exige **8 segundos** entre usos.
   Trocar de lanterna ou passar a mesma Tool a outro jogador nao burla o cooldown.
-- Sem monstro vivo da rodada a ate 32 studs da lente: recusa sem custo.
-  Com monstro no alcance, errar a mira ou atingir uma parede consome a carga e
-  mostra **SEM ACERTO**. Um alvo imune tambem nao recebe efeitos.
+- Um disparo valido consome carga mesmo sem monstro por perto. Errar a mira ou
+  atingir uma parede mostra **SEM ACERTO**. Um alvo imune nao recebe efeitos.
 - Acerto: **2s parado**, **2,5s sem poderes/ataque**, **4s de ofuscamento e
   zumbido decrescentes**. O clarão nao adiciona dano: o dano gradual normal
   da lanterna e a fraqueza existente a luz continuam com suas regras.
@@ -149,11 +148,11 @@ audio e animacoes em dois clientes reais.
    cancelamento e retorno correto de movimento, visibilidade e controle.
 4. Apertar V varias vezes durante os 8s; nao deve gastar novamente. Trocar de
    slot/lanterna e repetir. Esgotar com quatro disparos (com luz normal apagada)
-   e confirmar BATERIA INSUFICIENTE. Com luz ligada, conferir tambem o consumo
-   continuo normal e desligamento quando a carga chega a zero.
+   e confirmar BATERIA INSUFICIENTE. Com luz ligada, conferir que os quatro
+   disparos nao a apagam e que ela continua disponivel em 0% de carga.
 5. Com monstro perto, mirar ao lado e disparar: SEM ACERTO com consumo. Colocar
    uma parede solida entre os dois: mesmo resultado, sem stun/branco. Levar o
-   monstro para mais de 32 studs: recusa sem consumo. Mirar no sobrevivente
+   monstro para mais de 32 studs: SEM ACERTO com consumo. Mirar no sobrevivente
    nunca deve aplicar stun ou ofuscamento nele.
 6. Desequipar, morrer, entrar em lobby ou ficar sob Apagao/GrabLocked/etc.:
    nenhum disparo deve ser aceito. Morrer/trocar personagem/sair durante o

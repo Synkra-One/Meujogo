@@ -9,7 +9,7 @@
 	  1. Carregamento  -- rápido (MenuConfig.Loading), com dicas girando
 	  2. Clique para começar -- logo + texto pulsando
 	  3. Menu principal -- coluna de botões à ESQUERDA, cena livre à direita
-	  4. Painéis -- submenus "Em breve" e o acesso rápido, todos com VOLTAR
+	  4. Painéis -- submenus "Em breve" e créditos, todos com VOLTAR
 
 	ANTI-CLIQUE-DUPLO: `busy` é levantado no início de toda transição e só cai
 	quando ela termina. Nenhum handler roda com ele levantado -- vale para
@@ -30,8 +30,6 @@ Screens.__index = Screens
 
 export type Handlers = {
 	OnPlay: () -> (),
-	OnQuickPlay: (string) -> (),
-	OnQuit: () -> (),
 }
 
 export type Controller = typeof(setmetatable({} :: {
@@ -45,6 +43,11 @@ export type Controller = typeof(setmetatable({} :: {
 	scrim: Frame,
 	backdrop: ImageLabel?,
 	column: Frame,
+	content: Frame,
+	footer: Frame,
+	modalShade: Frame,
+	returnFocus: GuiObject?,
+	viewportConnection: RBXScriptConnection?,
 	root: Frame,
 	scale: UIScale,
 	loadingScale: UIScale,
@@ -79,6 +82,7 @@ local function attachScale(self: Controller, parent: GuiObject): UIScale
 	scale.Scale = Theme.Scale(Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize
 		or Vector2.new(1280, 720))
 	scale.Parent = parent
+	parent.Size = UDim2.fromScale(1 / scale.Scale, 1 / scale.Scale)
 	return scale
 end
 
@@ -96,6 +100,8 @@ function Screens.new(playerGui: Instance, sounds: Sounds.Controller, handlers: H
 		buttons = {}, panels = {}, connections = {},
 		scrim = nil :: any, backdrop = nil, column = nil :: any, root = root,
 		scale = nil :: any, loadingScale = nil :: any,
+		content = nil :: any, footer = nil :: any, modalShade = nil :: any,
+		returnFocus = nil, viewportConnection = nil,
 		busy = false, openPanel = nil, destroyed = false, pulse = nil,
 	}, Screens)
 
@@ -120,45 +126,61 @@ function Screens.new(playerGui: Instance, sounds: Sounds.Controller, handlers: H
 
 	Theme.Vignette(root, Z.Vignette)
 
+	local wash = Theme.Frame(root, "LeftWash", Z.Vignette)
+	wash.BackgroundColor3, wash.BackgroundTransparency = Config.Palette.Background, 0.08
+	wash.Size = UDim2.fromScale(0.76, 1)
+	Theme.Gradient(wash, 0, NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.48, 0.2),
+		NumberSequenceKeypoint.new(1, 1),
+	}))
+
 	local content = Theme.Frame(root, "Content", Z.Content)
+	self.content = content
 	self.scale = attachScale(self, content)
-
-	-- COLUNA À ESQUERDA: a cena (e o monstro) fica livre à direita, então os
-	-- botões nunca cobrem o que importa.
-	local column = Instance.new("Frame")
-	column.Name, column.ZIndex = "Column", Z.Content
-	column.AnchorPoint = Vector2.new(0, 0.5)
-	column.Position = UDim2.fromScale(0.07, 0.54)
-	column.Size = UDim2.fromScale(0.3, 0.62)
-	column.BackgroundTransparency, column.BorderSizePixel = 1, 0
-	column.Parent = content
-	self.column = column
-
+	self.column = Theme.Frame(content, "Column", Z.Content)
 	local layout = Instance.new("UIListLayout")
 	layout.FillDirection = Enum.FillDirection.Vertical
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Padding = UDim.new(0, 8)
-	layout.Parent = column
+	layout.Parent = self.column
 
 	local logo = Theme.Logo(content, Z.Content)
-	logo.Position = UDim2.fromScale(0.07, 0.2)
-
-	local version = Theme.Label(content, "Version", Config.Brand.Version, 13, Config.Fonts.Body,
+	logo.AnchorPoint = Vector2.zero
+	local section = Theme.Label(content, "Section", "MENU PRINCIPAL", 10, Config.Fonts.Button,
 		Config.Palette.TextDim, Z.Content)
-	version.AnchorPoint = Vector2.new(0, 1)
-	version.Position = UDim2.fromScale(0.07, 0.95)
-	version.Size = UDim2.fromScale(0.3, 0.03)
+	section.Size = UDim2.fromOffset(200, 18)
 
-	-- Reescala quando a janela muda (girar o celular, redimensionar o Studio).
-	table.insert(self.connections, Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
-		Screens.Rescale(self)
-	end))
-	local camera = Workspace.CurrentCamera
-	if camera then
-		table.insert(self.connections, camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+	self.footer = Theme.Frame(content, "Footer", Z.Content)
+	self.footer.Visible = false
+	local version = Theme.Label(self.footer, "Version", Config.Brand.Version, 11, Config.Fonts.Body,
+		Config.Palette.TextDim, Z.Content)
+	version.Size = UDim2.new(0.5, 0, 1, 0)
+
+	local character = Theme.Frame(content, "CharacterCaption", Z.Content)
+	local rule = Theme.Frame(character, "Rule", Z.Content)
+	rule.Size = UDim2.fromOffset(28, 2)
+	rule.BackgroundColor3, rule.BackgroundTransparency = Config.Palette.Accent, 0
+	local name = Theme.Label(character, "Name", Config.Scene.CharacterName, 15, Config.Fonts.Button,
+		Config.Palette.Text, Z.Content)
+	name.Position, name.Size = UDim2.fromOffset(0, 14), UDim2.fromOffset(250, 24)
+	local role = Theme.Label(character, "Role", Config.Scene.CharacterSubtitle, 10, Config.Fonts.Body,
+		Config.Palette.TextDim, Z.Content)
+	role.Position, role.Size = UDim2.fromOffset(0, 40), UDim2.fromOffset(250, 20)
+
+	local shade = Theme.Frame(content, "ModalShade", Z.Panel - 1)
+	shade.BackgroundColor3, shade.BackgroundTransparency = Config.Palette.Background, 0.2
+	shade.Active, shade.Visible = true, false
+	self.modalShade = shade
+
+	local function bindViewport()
+		if self.viewportConnection then self.viewportConnection:Disconnect() end
+		local camera = Workspace.CurrentCamera
+		self.viewportConnection = if camera then camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
 			Screens.Rescale(self)
-		end))
+		end) else nil
+		Screens.Rescale(self)
 	end
+	table.insert(self.connections, Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(bindViewport))
+	bindViewport()
 	return self
 end
 
@@ -166,15 +188,37 @@ function Screens.Rescale(self: Controller)
 	if self.destroyed then return end
 	local camera = Workspace.CurrentCamera
 	local viewport = if camera then camera.ViewportSize else Vector2.new(1280, 720)
-	local factor = Theme.Scale(viewport)
-	if self.scale then self.scale.Scale = factor end
-	if self.loadingScale then self.loadingScale.Scale = factor end
-	-- Retrato (celular em pé): a coluna ocupa mais largura, senão o texto
-	-- fica espremido.
-	if self.column then
-		local portrait = viewport.Y > viewport.X
-		self.column.Size = UDim2.fromScale(if portrait then 0.55 else 0.3, if portrait then 0.5 else 0.62)
-		self.column.Position = UDim2.fromScale(if portrait then 0.08 else 0.07, if portrait then 0.62 else 0.54)
+	local layout = Theme.Layout(viewport)
+	for _, scale in { self.scale, self.loadingScale } do
+		if scale then
+			scale.Scale = layout.factor
+			local canvas = scale.Parent :: GuiObject
+			canvas.Size = UDim2.fromScale(1 / layout.factor, 1 / layout.factor)
+		end
+	end
+	self.column.Position = UDim2.fromOffset(layout.margin, layout.columnTop)
+	self.column.Size = UDim2.fromOffset(layout.columnWidth, 400)
+	local list = self.column:FindFirstChildOfClass("UIListLayout")
+	if list then list.Padding = UDim.new(0, layout.gap) end
+	for _, child in self.column:GetChildren() do
+		if child:IsA("Frame") then
+			child.Size = UDim2.new(1, 0, 0, if child.Name == "PlayHolder" then layout.primaryHeight else layout.buttonHeight)
+		end
+	end
+	local logo = self.content:FindFirstChild("Logo") :: GuiObject
+	logo.Position = UDim2.fromOffset(layout.margin, layout.logoTop)
+	logo.Size = UDim2.fromOffset(if layout.portrait then layout.columnWidth else math.min(layout.width * 0.56, 620), 110)
+	local section = self.content:FindFirstChild("Section") :: GuiObject
+	section.Position = UDim2.fromOffset(layout.margin + 2, layout.columnTop - 28)
+	self.footer.AnchorPoint = Vector2.new(0, 1)
+	self.footer.Position = UDim2.new(0, layout.margin, 1, -layout.footerBottom)
+	self.footer.Size = UDim2.new(1, -layout.margin * 2, 0, 44)
+	local caption = self.content:FindFirstChild("CharacterCaption") :: GuiObject
+	caption.Visible = not layout.portrait
+	caption.Position = UDim2.new(0.69, 0, 1, -160)
+	caption.Size = UDim2.fromOffset(250, 60)
+	for _, panel in self.panels do
+		panel.Size = UDim2.fromOffset(math.min(620, layout.width - layout.margin * 2), math.min(400, layout.height - 100))
 	end
 end
 
@@ -290,6 +334,7 @@ function Screens.ShowStart(self: Controller, onStart: () -> ())
 	prompt.Position = UDim2.fromScale(0.5, 0.82)
 	prompt.Size = UDim2.fromScale(0.8, 0.06)
 	prompt.TextXAlignment = Enum.TextXAlignment.Center
+	prompt.TextWrapped = true
 	prompt.TextTransparency = 1
 	if content and content:IsA("GuiObject") then
 		-- Entra debaixo do mesmo UIScale das outras telas.
@@ -298,6 +343,7 @@ function Screens.ShowStart(self: Controller, onStart: () -> ())
 
 	-- A coluna de botões ainda não existe nesta tela: só logo + texto.
 	self.column.Visible = false
+	(self.content:FindFirstChild("Section") :: GuiObject).Visible = false
 	self.gui.Enabled = true
 	self.root.BackgroundTransparency = 1
 
@@ -385,6 +431,7 @@ local function addBackButton(self: Controller, panel: Frame)
 	local back = Theme.Button(holder, "Back", "VOLTAR", Z.Panel + 2, { compact = false })
 	back.Instance.Size = UDim2.fromScale(1, 1)
 	back.Instance.MouseEnter:Connect(function() Sounds.Hover(self.sounds) end)
+	back.Instance.SelectionGained:Connect(function() Sounds.Hover(self.sounds) end)
 	back.Instance.Activated:Connect(function()
 		if self.busy then return end
 		Sounds.Play(self.sounds, "Back")
@@ -401,8 +448,9 @@ local function buildPanel(self: Controller, id: string, title: string, build: (F
 	local content = self.gui:FindFirstChild("Content", true)
 	if content and content:IsA("GuiObject") then panel.Parent = content end
 	build(body)
-	addBackButton(self, panel)
+	self.buttons["Back" .. id] = addBackButton(self, panel)
 	self.panels[id] = panel
+	Screens.Rescale(self)
 	return panel
 end
 
@@ -410,20 +458,24 @@ function Screens.OpenPanel(self: Controller, id: string, title: string, build: (
 	if self.busy or self.openPanel then return end
 	self.busy = true
 	self.openPanel = id
+	self.returnFocus = GuiService.SelectedObject
+	self.modalShade.Visible = true
+	for key, button in self.buttons do
+		if not string.match(key, "^Back") then button.SetEnabled(false) end
+	end
 	local panel = buildPanel(self, id, title, build)
 	panel.Visible = true
 	panel.BackgroundTransparency = 1
 	panel.Position = UDim2.fromScale(0.5, 0.54)
 	local info = Theme.Info(Config.Motion.PanelSlide)
 	Theme.Tween(panel, info, { BackgroundTransparency = 0.06, Position = UDim2.fromScale(0.5, 0.5) })
-	-- A coluna recua enquanto o painel está aberto, em vez de sumir: o
-	-- jogador continua entendendo onde está.
-	Theme.Tween(self.column, info, { Position = UDim2.fromScale(0.02, self.column.Position.Y.Scale) })
+
 	task.delay(Config.Motion.PanelSlide + Config.Motion.InputLockPadding, function()
+		if self.destroyed then return end
 		self.busy = false
 		-- Foco de controle/teclado vai para o VOLTAR do painel aberto.
 		local back = panel:FindFirstChild("Back", true)
-		if back and back:IsA("GuiObject") and (Theme.IsConsole() or GuiService.SelectedObject) then
+		if back and back:IsA("GuiObject") and (Theme.IsConsole() or self.returnFocus) then
 			GuiService.SelectedObject = back
 		end
 	end)
@@ -431,7 +483,7 @@ end
 
 function Screens.ClosePanel(self: Controller)
 	local id = self.openPanel
-	if not id then return end
+	if not id or self.busy then return end
 	local panel = self.panels[id]
 	self.busy = true
 	self.openPanel = nil
@@ -440,139 +492,82 @@ function Screens.ClosePanel(self: Controller)
 		Theme.Tween(panel, info, { BackgroundTransparency = 1, Position = UDim2.fromScale(0.5, 0.54) },
 			function() panel.Visible = false end)
 	end
-	local portrait = self.column.Size.X.Scale > 0.4
-	Theme.Tween(self.column, info,
-		{ Position = UDim2.fromScale(if portrait then 0.08 else 0.07, self.column.Position.Y.Scale) })
 	task.delay(Config.Motion.PanelSlide + Config.Motion.InputLockPadding, function()
+		if self.destroyed then return end
+		self.modalShade.Visible = false
+		for key, button in self.buttons do
+			if not string.match(key, "^Back") then button.SetEnabled(true) end
+		end
+		GuiService.SelectedObject = self.returnFocus
+		self.returnFocus = nil
 		self.busy = false
 	end)
 end
 
---[[
-	ShowMenu(canQuickPlay)
-	Monta a coluna de botões e faz a entrada. canQuickPlay vem do servidor
-	(GameConfig.Testing) -- o botão de acesso rápido só existe para quem tem
-	permissão, e mesmo assim quem valida de verdade é o servidor.
-]]
-function Screens.ShowMenu(self: Controller, canQuickPlay: boolean)
-	self.column.Visible = true
-	self.gui.Enabled = true
+function Screens.ShowMenu(self: Controller)
+	if self.buttons.Play then return end
+	self.column.Visible, self.footer.Visible, self.gui.Enabled = true, true, true
+	(self.content:FindFirstChild("Section") :: GuiObject).Visible = true
 
-	local order = 0
-	local function addButton(id: string, label: string, options: any, onClick: () -> ())
-		order += 1
-		local holder = Instance.new("Frame")
-		holder.Name, holder.LayoutOrder = id .. "Holder", order
-		holder.Size = UDim2.new(1, 0, 0, if options and options.compact then 34 else 44)
-		holder.BackgroundTransparency, holder.BorderSizePixel = 1, 0
-		holder.Parent = self.column
-
-		local button = Theme.Button(holder, id, label, Z.Content + 1, options)
-		button.Instance.MouseEnter:Connect(function() Sounds.Hover(self.sounds) end)
+	local navigation: { TextButton } = {}
+	local function bindButton(button: Theme.Button, onClick: () -> (), sound: string)
+		button.Instance.MouseEnter:Connect(function()
+			if not self.busy and not self.openPanel then Sounds.Hover(self.sounds) end
+		end)
+		button.Instance.SelectionGained:Connect(function()
+			if not self.busy then Sounds.Hover(self.sounds) end
+		end)
 		button.Instance.Activated:Connect(function()
-			if self.busy then return end
-			Sounds.Play(self.sounds, "Click")
+			if self.busy or self.openPanel then return end
+			Sounds.Play(self.sounds, sound)
 			Theme.Press(button.Instance)
 			onClick()
 		end)
-		self.buttons[id] = button
-		-- Entrada escalonada: cada botão desliza um pouquinho depois do outro.
-		holder.Position = UDim2.new(-0.25, 0, 0, 0)
-		button.Instance.BackgroundTransparency = 1
-		task.delay(0.04 * order, function()
+		table.insert(navigation, button.Instance)
+	end
+
+	for order, entry in Config.MainButtons do
+		local holder = Theme.Frame(self.column, entry.id .. "Holder", Z.Content)
+		holder.LayoutOrder = order
+		local button = Theme.Button(holder, entry.id, entry.label, Z.Content + 1, {
+			primary = entry.primary, subtitle = entry.subtitle,
+			index = if entry.primary then nil else order - 1,
+		})
+		self.buttons[entry.id] = button
+		bindButton(button, function()
+			if entry.id == "Play" then self.handlers.OnPlay(); return end
+			Screens.OpenPanel(self, entry.id, entry.label, function(body)
+				panelMessage(self, body, "EM BREVE", entry.blurb)
+			end)
+		end, if entry.primary then "Enter" else "Click")
+		-- O UIListLayout controla o holder. Animamos o filho, que está livre.
+		button.Instance.Position = UDim2.fromOffset(-24, 0)
+		button.Instance.Visible = false
+		task.delay(0.055 * (order - 1), function()
 			if self.destroyed then return end
-			Theme.Tween(holder, Theme.Info(Config.Motion.PanelSlide), { Position = UDim2.new(0, 0, 0, 0) })
-			Theme.Tween(button.Instance, Theme.Info(Config.Motion.PanelSlide), { BackgroundTransparency = 0.35 })
-		end)
-		return button
-	end
-
-	-- ACESSO RÁPIDO primeiro: é o que você vai usar toda hora testando.
-	if canQuickPlay and Config.QuickPlay.Enabled then
-		addButton("QuickPlay", Config.QuickPlay.Label, { primary = true }, function()
-			Screens.OpenPanel(self, "QuickPlay", Config.QuickPlay.Label, function(body)
-				local hint = Theme.Label(body, "Hint", Config.QuickPlay.Hint, 14, Config.Fonts.Body,
-					Config.Palette.TextDim, Z.Panel + 2)
-				hint.Position, hint.Size = UDim2.fromScale(0, 0), UDim2.fromScale(1, 0.12)
-				hint.TextXAlignment = Enum.TextXAlignment.Center
-				hint.TextWrapped = true
-
-				local list = Instance.new("Frame")
-				list.Name, list.ZIndex = "Roles", Z.Panel + 2
-				list.Position, list.Size = UDim2.fromScale(0.12, 0.18), UDim2.fromScale(0.76, 0.62)
-				list.BackgroundTransparency, list.BorderSizePixel = 1, 0
-				list.Parent = body
-
-				local layout = Instance.new("UIListLayout")
-				layout.Padding = UDim.new(0, 8)
-				layout.SortOrder = Enum.SortOrder.LayoutOrder
-				layout.Parent = list
-
-				for index, option in Config.QuickPlay.Options do
-					local holder = Instance.new("Frame")
-					holder.LayoutOrder = index
-					holder.Size = UDim2.new(1, 0, 0, 40)
-					holder.BackgroundTransparency, holder.BorderSizePixel = 1, 0
-					holder.Parent = list
-					local button = Theme.Button(holder, option.id, option.label, Z.Panel + 3,
-						{ primary = option.id == "Monster" })
-					button.Instance.MouseEnter:Connect(function() Sounds.Hover(self.sounds) end)
-					button.Instance.Activated:Connect(function()
-						if self.busy then return end
-						Sounds.Play(self.sounds, "Click")
-						Theme.Press(button.Instance)
-						self.handlers.OnQuickPlay(option.id)
-					end)
-				end
-			end)
+			button.Instance.Visible = true
+			Theme.Tween(button.Instance, Theme.Info(Config.Motion.PanelSlide), { Position = UDim2.fromOffset(0, 0) })
 		end)
 	end
 
-	for _, entry in Config.MainButtons do
-		if entry.quit and not Config.ShowQuitButton then continue end
-		local id = entry.id :: string
-		if id == "Play" then
-			addButton(id, entry.label :: string, { primary = true }, function()
-				self.handlers.OnPlay()
-			end)
-		elseif entry.quit then
-			addButton(id, entry.label :: string, { danger = true, compact = true }, function()
-				Screens.OpenPanel(self, "Quit", "SAIR", function(body)
-					panelMessage(self, body, "SAIR DO SERVIDOR?",
-						"A Roblox não fecha o aplicativo por script. Isto desconecta você desta partida.")
-					local holder = Instance.new("Frame")
-					holder.AnchorPoint = Vector2.new(0.5, 1)
-					holder.Position, holder.Size = UDim2.fromScale(0.5, 1), UDim2.new(0.6, 0, 0, 40)
-					holder.BackgroundTransparency, holder.BorderSizePixel = 1, 0
-					holder.Parent = body
-					local confirm = Theme.Button(holder, "Confirm", "CONFIRMAR", Z.Panel + 3, { danger = true })
-					confirm.Instance.MouseEnter:Connect(function() Sounds.Hover(self.sounds) end)
-					confirm.Instance.Activated:Connect(function()
-						if self.busy then return end
-						Sounds.Play(self.sounds, "Click")
-						self.handlers.OnQuit()
-					end)
-				end)
-			end)
-		else
-			addButton(id, entry.label :: string, nil, function()
-				Screens.OpenPanel(self, id, entry.label :: string, function(body)
-					panelMessage(self, body, "EM BREVE", entry.blurb)
-				end)
-			end)
-		end
-	end
+	local credits = Theme.Button(self.footer, "Credits", Config.Credits.label, Z.Content + 1, { compact = true })
+	credits.Instance.AnchorPoint = Vector2.new(1, 1)
+	credits.Instance.Position, credits.Instance.Size = UDim2.fromScale(1, 1), UDim2.fromOffset(154, 44)
+	self.buttons.Credits = credits
+	bindButton(credits, function()
+		Screens.OpenPanel(self, "Credits", Config.Credits.label, function(body)
+			panelMessage(self, body, "EM BREVE", Config.Credits.blurb)
+		end)
+	end, "Click")
 
-	-- Console/controle: manda o foco para o primeiro botão, senão o jogador
-	-- fica sem cursor e sem seleção.
-	if Theme.IsConsole() then
-		local first = self.column:FindFirstChildWhichIsA("Frame")
-		local button = first and first:FindFirstChildWhichIsA("TextButton")
-		if button then GuiService.SelectedObject = button end
+	for index, button in navigation do
+		button.NextSelectionUp = navigation[if index == 1 then #navigation else index - 1]
+		button.NextSelectionDown = navigation[if index == #navigation then 1 else index + 1]
 	end
-	-- Escape/B fecham o painel aberto, como em qualquer menu de console.
+	Screens.Rescale(self)
+	if Theme.IsConsole() then GuiService.SelectedObject = self.buttons.Play.Instance end
 	table.insert(self.connections, UserInputService.InputBegan:Connect(function(input, gameProcessed)
-		if gameProcessed or not self.openPanel then return end
+		if gameProcessed or self.busy or not self.openPanel then return end
 		if input.KeyCode == Enum.KeyCode.Escape or input.KeyCode == Enum.KeyCode.ButtonB then
 			Sounds.Play(self.sounds, "Back")
 			Screens.ClosePanel(self)
@@ -632,6 +627,7 @@ end
 function Screens.Destroy(self: Controller)
 	if self.destroyed then return end
 	self.destroyed = true
+	if self.viewportConnection then self.viewportConnection:Disconnect(); self.viewportConnection = nil end
 	if self.pulse then self.pulse:Disconnect(); self.pulse = nil end
 	for _, connection in self.connections do connection:Disconnect() end
 	table.clear(self.connections)

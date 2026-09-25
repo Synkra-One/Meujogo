@@ -94,13 +94,8 @@ AssetRegistry.ArmaRara_Item = {
 --------------------------------------------------------------------------------
 -- FENDA DO TELEPORTE DO MONSTRO
 --------------------------------------------------------------------------------
--- server/MonsterTeleport.lua carrega o AssetId UMA vez no boot (InsertService,
--- só server) e publica o Model normalizado em ReplicatedStorage.RiftAssets.
--- Se o asset não carregar, entra uma fenda primitiva de reserva -- o sistema
--- funciona igual. Trocar o visual = trocar o AssetId aqui, nada mais.
+-- O portal é procedural em Modules/RiftVFX.lua; só os sons usam assets.
 AssetRegistry.RiftTeleport = {
-	AssetId = 16376740571,
-
 	-- Sons por etapa. VAZIO ("") = etapa não toca nada (o sistema funciona sem).
 	-- Abertura/fechamento tocam em 3D na posição da fenda (um Sobrevivente perto
 	-- do destino ouve "algo surgindo"). Cole os rbxassetid quando tiver os sons.
@@ -180,6 +175,27 @@ AssetRegistry.Sounds = {
 		-- horizonte. Alcance grande de propósito: ouvir o helicóptero
 		-- chegando é metade da tensão da corrida final.
 		Helicoptero = "rbxassetid://99103708154004",
+	},
+
+	-- client/BoatEffects.lua: o barco de fuga. VAZIO ("") = não toca; o
+	-- barco funciona igual. Os rbxassetid são da ProSoundEffects (parceira
+	-- oficial do Roblox, domínio público -- tocam em qualquer experiência);
+	-- a batida usa um som nativo (rbxasset://).
+	Barco = {
+		-- Loop do motor. O pitch e o volume seguem a rotação (RPM) calculada
+		-- pela física, então UM loop parado basta. "Fishing Boat 1 (SFX)".
+		Motor = "rbxassetid://9112780932",
+		-- Motor de arranque pegando (toca junto dos 1,3s de partida).
+		-- "1965 Jaguar E-Type Car Cold Starts 2 (SFX)".
+		Partida = "rbxassetid://9112952113",
+		-- Motor apagando (encalhe, sabotagem, desligar). "Motor Wind-Down 7 (SFX)".
+		Morreu = "rbxassetid://9116985197",
+		-- Casco cortando a água (loop, sobe com a velocidade).
+		-- "Bow Wash Slow Trolling Speed 1 (SFX)".
+		Agua = "rbxassetid://9112750448",
+		Batida = "rbxasset://sounds/impact_water.mp3",
+		-- Casco arrastando no raso/areia (loop). "Boat Slide 1 (SFX)".
+		Raspando = "rbxassetid://9113467572",
 	},
 }
 

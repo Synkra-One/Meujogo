@@ -10,7 +10,8 @@ return table.freeze({
 		"GrabLocked", "ShadowRushBusy", "TeleportBusy", "PowerStunned", "AbyssBlackout",
 	}),
 	BatteryMax = 100,
-	BatteryDrainRate = 100 / 60,
+	-- Luz continua ligada durante a partida; a carga alimenta apenas o clarão.
+	BatteryDrainRate = 0,
 	FlashBurstCost = 25,
 	FlashBurstKey = "V",
 	FlashBurstGamepadKey = "ButtonL2",
@@ -73,7 +74,7 @@ return table.freeze({
 		Burst = "", -- optional published R6 clip; procedural recoil works without it
 	}),
 	LowBatteryThreshold = 18,
-	LowBatteryFlicker = 0.28,
+	LowBatteryFlicker = 0,
 	ExposureRate = 1,
 	ExposureDecayRate = 1.5,
 	EffectStartExposure = 1,

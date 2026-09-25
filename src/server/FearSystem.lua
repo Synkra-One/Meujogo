@@ -11,6 +11,7 @@ local StatScaling = require(ReplicatedStorage.Modules.StatScaling)
 local RoundManager = require(script.Parent.RoundManager)
 local Elimination = require(script.Parent.Elimination)
 local Rules = require(script.Parent.FearRules)
+local DamageSystem = require(script.Parent.DamageSystem)
 local CFG = GameConfig.Fear
 
 local FearSystem = {}
@@ -28,6 +29,7 @@ type State = Rules.State & {
 type Watch = { playerConnections: { RBXScriptConnection }, characterConnections: { RBXScriptConnection } }
 local states: { [Player]: State } = {}
 local watches: { [Player]: Watch } = {}
+local witnessAt: { [Player]: { [Player]: number } } = {}
 local initialized = false
 local now = 0
 local rng = Random.new()
@@ -68,6 +70,7 @@ local function reset(player: Player)
 	local state = states[player]
 	if state then endTrip(state) end
 	states[player] = nil
+	witnessAt[player] = nil
 	setIfChanged(player, "FearLineOfSight", false)
 	setIfChanged(player, "FearChase", false)
 	publish(player, 0)
@@ -93,7 +96,7 @@ end
 local function getState(player: Player): State
 	local state = states[player]
 	if not state then
-		state = { value = 0, safeFor = 0, los = false, losElapsed = 0, target = nil,
+		state = { value = 0, safeFor = 0, exposureFor = 0, los = false, losElapsed = 0, target = nil,
 			chase = false, chaseFor = 0, tripCheck = 0, tripUntil = 0, tripCooldownUntil = 0,
 			trip = nil, panicCheck = 0, panicCooldownUntil = 0 }
 		states[player] = state
@@ -187,6 +190,45 @@ end
 local function sightPosition(root: BasePart): Vector3
 	local head = root.Parent and root.Parent:FindFirstChild("Head")
 	return if head and head:IsA("BasePart") then head.Position else root.Position
+end
+
+local function witnessed(witness: Player, victim: Player, victimRoot: BasePart): boolean
+	local root = survivorRoot(witness)
+	if not root or witness == victim or (root.Position - victimRoot.Position).Magnitude > CFG.WitnessRange then
+		return false
+	end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { root.Parent :: Instance, victimRoot.Parent :: Instance }
+	params.RespectCanCollide, params.IgnoreWater = true, true
+	local origin = sightPosition(root)
+	return Workspace:Raycast(origin, sightPosition(victimRoot) - origin, params) == nil
+end
+
+local function onDamage(_attacker: Player?, victim: Player?, applied: number, died: boolean, _cause: string?)
+	if not RoundManager.IsRoundActive() or not victim or victim:GetAttribute("Role") ~= GameConfig.Roles.Survivor
+		or victim:GetAttribute("InRound") ~= true or victim:GetAttribute("CharacterSelectOpen") == true
+		or type(applied) ~= "number" or applied <= 0 then return end
+	local character = victim.Character
+	local victimRoot = character and character:FindFirstChild("HumanoidRootPart")
+	if not victimRoot or not victimRoot:IsA("BasePart") then return end
+	if not died and survivorRoot(victim) then
+		local shock = math.min(CFG.DamageFearMax, CFG.DamageFearBase + applied * CFG.DamageFearPerHealth)
+		FearSystem.AddFear(victim, shock * StatScaling.FearGainMultiplier(victim), "Damage")
+	end
+	if not died and applied < CFG.WitnessMinDamage then return end
+	for _, witness in Players:GetPlayers() do
+		if witnessed(witness, victim, victimRoot) then
+			local history = witnessAt[witness]
+			if not history then history = {}; witnessAt[witness] = history end
+			if died or not history[victim] or now - history[victim] >= CFG.WitnessCooldown then
+				history[victim] = now
+				local shock = if died then CFG.WitnessDeathFear else CFG.WitnessDamageFear
+				FearSystem.AddFear(witness, shock * StatScaling.FearGainMultiplier(witness),
+					if died then "WitnessDeath" else "WitnessDamage")
+			end
+		end
+	end
 end
 
 local function updateThreat(state: State, root: BasePart, target: BasePart?, distance: number, dt: number)
@@ -347,6 +389,9 @@ function FearSystem.Init()
 		"Fear: intervalos/curva inválidos")
 	assert(CFG.LineOfSightUpdateInterval >= CFG.FearUpdateInterval and CFG.MaxFearGainPerSecond > 0,
 		"Fear: intervalo LOS/teto de ganho inválido")
+	assert(CFG.ExposureRampSeconds > 0 and CFG.ExposureInitialMultiplier >= 0
+		and CFG.ExposureInitialMultiplier <= 1 and CFG.WitnessRange > 0 and CFG.WitnessCooldown >= 0,
+		"Fear: exposição/testemunhas inválidas")
 	assert(CFG.StaminaPenaltyStartFear < CFG.MaxFear and CFG.MinStaminaRegenMultiplier > 0
 		and CFG.MinStaminaRegenMultiplier <= 1 and CFG.StaminaRegenCurveExponent >= 1,
 		"Fear: curva de stamina inválida")
@@ -366,6 +411,7 @@ function FearSystem.Init()
 	Players.PlayerAdded:Connect(watchPlayer)
 	Players.PlayerRemoving:Connect(function(player)
 		reset(player)
+		for _, history in witnessAt do history[player] = nil end
 		local watch = watches[player]
 		if watch then
 			disconnect(watch.playerConnections)
@@ -377,6 +423,7 @@ function FearSystem.Init()
 	for _, player in Players:GetPlayers() do watchPlayer(player) end
 	RoundManager.RoundPrepared.Event:Connect(resetAll)
 	RoundManager.RoundEnded.Event:Connect(resetAll)
+	DamageSystem.DamageApplied.Event:Connect(onDamage)
 	local elapsed, debugElapsed = 0, 0
 	-- ÚNICA conexão de atualização; integra o tempo real acumulado.
 	RunService.Heartbeat:Connect(function(dt)

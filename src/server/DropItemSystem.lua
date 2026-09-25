@@ -97,6 +97,12 @@ function DropItemSystem.HasInventorySpace(player: Player): boolean
 	return inventoryToolCount(player) < INVENTORY_SLOT_COUNT
 end
 
+function DropItemSystem.FreeSlots(player: Player): number
+	return math.max(0, INVENTORY_SLOT_COUNT - inventoryToolCount(player))
+end
+
+DropItemSystem.NoSpaceMessage = "Sem espaço na mochila! Máximo de 3 itens."
+
 local function getHandle(tool: Tool): BasePart?
 	local handle = tool:FindFirstChild("Handle")
 	if handle and handle:IsA("BasePart") then
@@ -178,8 +184,12 @@ local function attachPickupPrompt(tool: Tool)
 			or not InteractionGuard.CanReach(player, handle, PICKUP_DISTANCE + 2) then
 			return
 		end
-        if tool:GetAttribute("PecaRadio") == true
-            and (player:GetAttribute("Role") ~= GameConfig.Roles.Survivor or not DropItemSystem.HasInventorySpace(player)) then
+        if (tool:GetAttribute("PecaRadio") == true or tool:GetAttribute("PecaBarco") == true)
+            and player:GetAttribute("Role") ~= GameConfig.Roles.Survivor then
+            return
+        end
+        if not DropItemSystem.HasInventorySpace(player) then
+            Remotes.LobbyMessage:FireClient(player, DropItemSystem.NoSpaceMessage)
             return
         end
         if tool:GetAttribute("LobbyTestWeapon") == true then

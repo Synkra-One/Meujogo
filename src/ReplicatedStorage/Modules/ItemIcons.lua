@@ -55,6 +55,10 @@ ItemIcons.Map = {
 	Antena = "",
 	Bateria = "",
 	Transmissor = "",
+	-- Peças do barco de fuga (BoatItems.lua).
+	HeliceBarco = "",
+	VelaIgnicao = "",
+	ChaveBarco = "",
 
 	-- Armas de fogo (chave = nome da Tool em WeaponAssets/Tools).
 	-- >>> COLE AQUI O ID DO PNG DA PISTOLA <<< (ver cabeçalho pra como subir)

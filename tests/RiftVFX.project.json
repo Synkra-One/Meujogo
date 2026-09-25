@@ -1,0 +1,33 @@
+{
+  "name": "RiftVFXValidation",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "RiftVFX": { "$path": "../src/ReplicatedStorage/Modules/RiftVFX.lua" }
+    },
+    "Workspace": {
+      "Ground": {
+        "$className": "Part",
+        "$properties": {
+          "Anchored": true,
+          "Size": [120, 2, 120],
+          "Position": [0, -1, 0],
+          "Color": [0.17, 0.18, 0.2],
+          "Material": "Slate"
+        }
+      }
+    },
+    "Lighting": {
+      "$properties": {
+        "ClockTime": 20,
+        "Brightness": 1.5,
+        "Ambient": [0.13, 0.13, 0.18],
+        "OutdoorAmbient": [0.2, 0.2, 0.25]
+      },
+      "Bloom": {
+        "$className": "BloomEffect",
+        "$properties": { "Intensity": 0.22, "Size": 24, "Threshold": 1.1 }
+      }
+    }
+  }
+}
